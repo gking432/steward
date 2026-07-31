@@ -27,6 +27,9 @@ test("build contains Steward's decision briefing", async () => {
   assert.match(css, /\.mobile-bottom-nav/);
   assert.match(app, /ios-account-preview/);
   assert.match(app, /ios-connect-action/);
+  assert.match(app, /function MobileOverview/);
+  assert.match(app, /SAFE TO SPEND/);
+  assert.match(css, /\.mobile-home-view/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(layout, /manifest\.webmanifest/);
   assert.doesNotMatch(`${layout}\n${app}\n${page}`, /createDemoState|demo-data/);

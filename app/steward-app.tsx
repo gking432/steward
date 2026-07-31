@@ -869,15 +869,28 @@ export function StewardApp({
     switch (view) {
       case "home":
         return (
-          <HomeView
-            state={state}
-            tradeoffs={tradeoffs}
-            totalSavings={totalSavings}
-            cardDebt={cardDebt}
-            recommendations={activeRecommendations}
-            go={go}
-            act={actOnRecommendation}
-          />
+          <>
+            <div className="desktop-home-view">
+              <HomeView
+                state={state}
+                tradeoffs={tradeoffs}
+                totalSavings={totalSavings}
+                cardDebt={cardDebt}
+                recommendations={activeRecommendations}
+                go={go}
+                act={actOnRecommendation}
+              />
+            </div>
+            <div className="mobile-home-view">
+              <MobileOverview
+                state={state}
+                tradeoffs={tradeoffs}
+                recommendations={activeRecommendations}
+                go={go}
+                syncState={bankStatus === "syncing" ? "Syncing" : "Up to date"}
+              />
+            </div>
+          </>
         );
       case "plan":
         return (
@@ -1310,6 +1323,112 @@ function SectionHeader({
       </div>
       {action}
     </div>
+  );
+}
+
+function MobileOverview({
+  state,
+  tradeoffs,
+  recommendations,
+  go,
+  syncState,
+}: {
+  state: StewardState;
+  tradeoffs: ReturnType<typeof calculateTradeoffs>;
+  recommendations: Recommendation[];
+  go: (view: NavView) => void;
+  syncState: string;
+}) {
+  const today = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(new Date());
+  const nextBill = state.bills
+    .filter((bill) => !bill.paid)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+  const nextAction = recommendations[0];
+  const riskTone =
+    tradeoffs.risk === "Low"
+      ? "good"
+      : tradeoffs.risk === "Moderate"
+        ? "watch"
+        : "alert";
+
+  return (
+    <section className="mobile-overview" aria-label="Today overview">
+      <header className="mobile-overview-heading">
+        <div>
+          <span>Today</span>
+          <small>{today}</small>
+        </div>
+        <p><i className={syncState === "Syncing" ? "is-syncing" : ""} /> {syncState}</p>
+      </header>
+
+      <button className="mobile-safe-card" onClick={() => go("plan")}>
+        <span className="mobile-card-label">SAFE TO SPEND</span>
+        <strong>{money(tradeoffs.safeToSpend)}</strong>
+        <p>
+          after {money(tradeoffs.billsBeforePayday)} for bills and your
+          {" "}{money(state.profile.minimumBuffer)} buffer
+        </p>
+        <span className={`mobile-risk ${riskTone}`}>
+          <ShieldCheck size={13} /> {tradeoffs.risk} risk
+        </span>
+        <ArrowRight size={18} aria-hidden="true" />
+      </button>
+
+      <div className="mobile-overview-stats">
+        <button onClick={() => go("accounts")}>
+          <span className="mobile-stat-icon cash"><WalletCards size={17} /></span>
+          <small>Available now</small>
+          <strong>{money(tradeoffs.liquidCash)}</strong>
+        </button>
+        <button onClick={() => go("plan")}>
+          <span className="mobile-stat-icon calendar"><CalendarClock size={17} /></span>
+          <small>{nextBill ? "Next bill" : "Bills"}</small>
+          <strong>
+            {nextBill ? money(nextBill.amount) : "None due"}
+          </strong>
+          {nextBill && <em>{nextBill.name}</em>}
+        </button>
+      </div>
+
+      <button
+        className="mobile-next-action"
+        onClick={() => go(nextAction ? "advisor" : "transactions")}
+      >
+        <span className={`mobile-action-icon ${nextAction?.type ?? "clear"}`}>
+          {nextAction ? <Sparkles size={19} /> : <CheckCircle2 size={19} />}
+        </span>
+        <span>
+          <small>UP NEXT</small>
+          <strong>
+            {nextAction?.title ?? "Nothing needs your attention"}
+          </strong>
+          <em>
+            {nextAction?.description ??
+              "Your connected accounts are up to date."}
+          </em>
+        </span>
+        <ArrowRight size={18} aria-hidden="true" />
+      </button>
+
+      <nav className="mobile-overview-shortcuts" aria-label="Today shortcuts">
+        <button onClick={() => go("transactions")}>
+          <WalletCards size={19} />
+          <span>Activity</span>
+        </button>
+        <button onClick={() => go("plan")}>
+          <ListChecks size={19} />
+          <span>Plan</span>
+        </button>
+        <button onClick={() => go("advisor")}>
+          <Sparkles size={19} />
+          <span>Ask</span>
+        </button>
+      </nav>
+    </section>
   );
 }
 
