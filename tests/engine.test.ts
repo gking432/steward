@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   categoryForPlaid,
   mergePlaidFinancialData,
+  suggestBudgets,
 } from "../lib/financial-import";
 import { createEmptyState } from "../lib/initial-state";
 import {
@@ -172,4 +173,97 @@ test("Plaid categories and incremental changes become real Steward activity", ()
   assert.equal(state.transactions.length, 1);
   assert.equal(state.transactions[0].source, "plaid");
   assert.equal(state.budgets[0].category, "Groceries");
+});
+
+test("merchant rules fill gaps and remember a user's correction", () => {
+  const state = createEmptyState();
+  state.transactions = [
+    {
+      id: "manual-cafe",
+      accountId: "checking",
+      merchant: "Neighborhood Cafe",
+      description: "Coffee",
+      amount: 5,
+      date: "2026-07-20",
+      category: "Hobbies",
+      categorySource: "manual",
+      type: "expense",
+    },
+  ];
+  const synced = mergePlaidFinancialData(state, {
+    added: [
+      {
+        transaction_id: "cafe-2",
+        account_id: "checking",
+        name: "Neighborhood Cafe",
+        amount: 12,
+        date: "2026-07-30",
+      },
+      {
+        transaction_id: "grocery-1",
+        account_id: "checking",
+        name: "Whole Foods Market",
+        amount: 30,
+        date: "2026-07-30",
+      },
+    ],
+    modified: [],
+    removed: [],
+  });
+  assert.equal(
+    synced.transactions.find((transaction) => transaction.id === "plaid-tx-cafe-2")?.category,
+    "Hobbies",
+  );
+  assert.equal(
+    synced.transactions.find((transaction) => transaction.id === "plaid-tx-cafe-2")?.categorySource,
+    "learned",
+  );
+  assert.equal(
+    synced.transactions.find((transaction) => transaction.id === "plaid-tx-grocery-1")?.category,
+    "Groceries",
+  );
+});
+
+test("budget suggestions protect recurring bills and keep manual budgets", () => {
+  const state = createEmptyState();
+  state.profile.takeHomePay = 2_000;
+  state.profile.payFrequency = "Monthly";
+  state.bills = [
+    {
+      id: "rent",
+      name: "Rent",
+      amount: 900,
+      dueDate: "2026-08-01",
+      frequency: "monthly",
+      autopay: true,
+      essential: true,
+      accountId: "checking",
+    },
+  ];
+  state.budgets = [
+    {
+      id: "manual-hobbies",
+      category: "Hobbies",
+      planned: 125,
+      actual: 0,
+      cadence: "Monthly",
+      essential: false,
+      source: "manual",
+    },
+  ];
+  state.transactions = [
+    {
+      id: "groceries",
+      accountId: "checking",
+      merchant: "Market",
+      description: "Groceries",
+      amount: 300,
+      date: "2026-07-30",
+      category: "Groceries",
+      type: "expense",
+    },
+  ];
+  const budgets = suggestBudgets(state, state.transactions, state.bills, new Date("2026-07-31T12:00:00"));
+  assert.equal(budgets.find((budget) => budget.category === "Hobbies")?.planned, 125);
+  assert.equal(budgets.find((budget) => budget.category === "Groceries")?.source, "suggested");
 });

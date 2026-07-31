@@ -56,6 +56,7 @@ import {
   paycheckAllocation,
   spendingByCategory,
 } from "../lib/engine";
+import { suggestBudgets } from "../lib/financial-import";
 import type {
   Account,
   AccountType,
@@ -66,6 +67,7 @@ import type {
   Recommendation,
   StewardState,
   Transaction,
+  Budget,
   WishlistItem,
 } from "../lib/steward-types";
 
@@ -1823,8 +1825,45 @@ function PlanView({
   const [tab, setTab] = useState<"paycheck" | "budget" | "goals" | "bills">(
     "paycheck",
   );
+  const [customCategory, setCustomCategory] = useState("Hobbies");
+  const [customAmount, setCustomAmount] = useState(0);
   const setPlan = (field: keyof StewardState["paycheckPlan"], value: number) =>
     update("paycheckPlan", { ...state.paycheckPlan, [field]: value });
+  const setBudget = (id: string, planned: number) =>
+    update(
+      "budgets",
+      state.budgets.map((budget) =>
+        budget.id === id
+          ? { ...budget, planned: Math.max(0, planned), source: "manual" }
+          : budget,
+      ),
+    );
+  const addBudget = () => {
+    const category = customCategory.trim();
+    if (!category) return;
+    const existing = state.budgets.find((budget) => budget.category === category);
+    if (existing) {
+      setBudget(existing.id, customAmount);
+      return;
+    }
+    const budget: Budget = {
+      id: `manual-budget-${category.toLowerCase().replaceAll(" ", "-")}`,
+      category,
+      planned: Math.max(0, customAmount),
+      actual: 0,
+      cadence: "Monthly",
+      essential: [
+        "Housing",
+        "Utilities",
+        "Groceries",
+        "Transportation",
+        "Healthcare",
+        "Debt payments",
+      ].includes(category),
+      source: "manual",
+    };
+    update("budgets", [...state.budgets, budget]);
+  };
   return (
     <div className="page">
       <SectionHeader
@@ -2021,30 +2060,83 @@ function PlanView({
         <section className="stack-card">
           <div className="card-heading">
             <div>
-              <span className="eyebrow">Supporting guardrails</span>
+              <span className="eyebrow">Suggested from your real picture</span>
               <h2>Budget health</h2>
+              <p>
+                Suggestions reserve recurring bills, use your pay cadence and
+                recent spending, and leave room for hobbies you have added.
+                Any amount you change becomes your budget.
+              </p>
             </div>
-            <Pill tone={state.budgets.some((item) => item.actual > item.planned) ? "amber" : "green"}>
-              {state.budgets.length
-                ? state.budgets.some((item) => item.actual > item.planned)
-                  ? "Review needed"
-                  : "Within recent averages"
-                : "Waiting for activity"}
-            </Pill>
+            <div className="button-row">
+              <Pill tone={state.budgets.some((item) => item.actual > item.planned) ? "amber" : "green"}>
+                {state.budgets.length
+                  ? state.budgets.some((item) => item.actual > item.planned)
+                    ? "Review needed"
+                    : "Within recent averages"
+                  : "Waiting for activity"}
+              </Pill>
+              <button
+                className="secondary-button"
+                onClick={() => update("budgets", suggestBudgets(state))}
+              >
+                <Sparkles size={15} /> Refresh suggestion
+              </button>
+            </div>
+          </div>
+          <div className="transaction-tools budget-tools">
+            <select
+              value={customCategory}
+              onChange={(event) => setCustomCategory(event.target.value)}
+              aria-label="Budget category"
+            >
+              {categories
+                .filter((category) => !["Transfers", "Uncategorized"].includes(category))
+                .map((category) => (
+                  <option key={category}>{category}</option>
+                ))}
+            </select>
+            <label className="money-input">
+              <span>$</span>
+              <input
+                type="number"
+                min={0}
+                value={customAmount}
+                onChange={(event) => setCustomAmount(Number(event.target.value))}
+                aria-label="Monthly budget amount"
+              />
+            </label>
+            <button className="secondary-button" onClick={addBudget}>
+              <Plus size={15} /> Add custom budget
+            </button>
           </div>
           <div className="budget-grid">
             {state.budgets.map((budget) => {
-              const percent = (budget.actual / budget.planned) * 100;
+              const percent = budget.planned ? (budget.actual / budget.planned) * 100 : 0;
               return (
                 <article className="budget-card" key={budget.id}>
                   <div>
                     <span>{budget.category}</span>
-                    <Pill tone={percent > 90 ? "amber" : "neutral"}>
-                      {budget.essential ? "Essential" : "Flexible"}
+                    <Pill tone={budget.source === "manual" ? "green" : percent > 90 ? "amber" : "neutral"}>
+                      {budget.source === "manual"
+                        ? "Your budget"
+                        : budget.essential
+                          ? "Essential"
+                          : "Suggested"}
                     </Pill>
                   </div>
                   <strong>{money(budget.planned - budget.actual)}</strong>
-                  <small>available of {money(budget.planned)}</small>
+                  <label className="money-input compact-input">
+                    <span>$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={budget.planned}
+                      onChange={(event) => setBudget(budget.id, Number(event.target.value))}
+                      aria-label={`Monthly budget for ${budget.category}`}
+                    />
+                  </label>
+                  <small>monthly budget · {money(budget.actual)} spent</small>
                   <Progress
                     value={percent}
                     tone={percent > 90 ? "amber" : "green"}
@@ -2054,6 +2146,13 @@ function PlanView({
               );
             })}
           </div>
+          {!state.budgets.length && (
+            <EmptyState
+              icon={Sparkles}
+              title="Your suggestion will appear here"
+              body="Connect a bank or add a custom category to start building an editable budget."
+            />
+          )}
         </section>
       )}
 
@@ -2199,6 +2298,7 @@ function TransactionsView({
           ? {
               ...transaction,
               category,
+              categorySource: "manual",
               needsReview: false,
               confidence: 1,
               note:
@@ -2215,7 +2315,13 @@ function TransactionsView({
       "transactions",
       state.transactions.map((transaction) =>
         selected.includes(transaction.id)
-          ? { ...transaction, category, needsReview: false, confidence: 1 }
+          ? {
+              ...transaction,
+              category,
+              categorySource: "manual",
+              needsReview: false,
+              confidence: 1,
+            }
           : transaction,
       ),
     );
@@ -3729,6 +3835,7 @@ function EntityModal({
     }
     if (modal === "transaction") {
       const merchant = String(data.get("merchant"));
+      const chosenCategory = String(data.get("category"));
       const transaction: Transaction = {
         id: uid("transaction"),
         accountId: String(data.get("accountId")),
@@ -3737,10 +3844,11 @@ function EntityModal({
         amount: Number(data.get("amount")),
         date: String(data.get("date")),
         category:
-          String(data.get("category")) ||
+          chosenCategory ||
           deterministicCategory(merchant, String(data.get("description"))),
         type: data.get("type") as Transaction["type"],
         confidence: 1,
+        categorySource: chosenCategory ? "manual" : "rule",
       };
       setState((current) => ({
         ...current,

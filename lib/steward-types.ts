@@ -53,6 +53,7 @@ export type Transaction = {
   tags?: string[];
   note?: string;
   confidence?: number;
+  categorySource?: "plaid" | "rule" | "learned" | "manual";
   needsReview?: boolean;
   split?: { category: string; amount: number }[];
 };
@@ -149,6 +150,7 @@ export type Budget = {
   actual: number;
   cadence: "Monthly" | "Biweekly";
   essential: boolean;
+  source?: "suggested" | "manual";
 };
 
 export type Memory = {

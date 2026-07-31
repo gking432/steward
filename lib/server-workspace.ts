@@ -77,6 +77,20 @@ export async function loadWorkspace(
     : createEmptyState(name, email);
 }
 
+/**
+ * The first private preview saved a version-one, fully seeded workspace for
+ * every visitor. Reset only that exact legacy signature; never clear a real
+ * workspace or anything created by the current empty-first-run experience.
+ */
+export function isLegacyDemoWorkspace(state: StewardState) {
+  const demoAccountIds = new Set(["checking-1", "savings-1", "card-1", "invest-1"]);
+  return (
+    state.version === 1 &&
+    state.accounts.some((account) => demoAccountIds.has(account.id)) &&
+    state.transactions.some((transaction) => /^t\d+$/.test(transaction.id))
+  );
+}
+
 export async function saveWorkspace(email: string, state: StewardState) {
   await env.DB.prepare(
     `INSERT INTO steward_snapshots (user_id, state_json, updated_at)

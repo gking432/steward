@@ -7,6 +7,7 @@ import type {
   StewardState,
   Transaction,
 } from "./steward-types";
+import { deterministicCategory } from "./engine";
 
 export type PlaidAccount = {
   account_id: string;
@@ -126,11 +127,61 @@ export function categoryForPlaid(transaction: PlaidTransaction) {
   if (primary === "TRANSFER_IN" || primary === "TRANSFER_OUT") return "Transfers";
   if (primary === "BANK_FEES") return "Fees";
   if (primary.includes("GOVERNMENT")) return "Taxes";
-  return "Uncategorized";
+  return deterministicCategory(
+    transaction.merchant_name ?? transaction.name,
+    transaction.original_description ?? "",
+  );
 }
 
-function mapTransaction(transaction: PlaidTransaction): Transaction {
+function categorySourceFor(transaction: PlaidTransaction) {
+  const primary =
+    transaction.personal_finance_category?.primary?.toUpperCase() ?? "";
+  const plaidPrimaryCategories = new Set([
+    "INCOME",
+    "RENT_AND_UTILITIES",
+    "FOOD_AND_DRINK",
+    "TRANSPORTATION",
+    "MEDICAL",
+    "GENERAL_MERCHANDISE",
+    "ENTERTAINMENT",
+    "TRAVEL",
+    "PERSONAL_CARE",
+    "LOAN_PAYMENTS",
+    "TRANSFER_IN",
+    "TRANSFER_OUT",
+    "BANK_FEES",
+  ]);
+  return primary.includes("GOVERNMENT") || plaidPrimaryCategories.has(primary)
+    ? "plaid"
+    : "rule";
+}
+
+function merchantKey(merchant: string) {
+  return merchant.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function rememberedCategories(transactions: Transaction[]) {
+  const learned = new Map<string, string>();
+  for (const transaction of [...transactions].sort((a, b) => b.date.localeCompare(a.date))) {
+    if (
+      transaction.categorySource === "manual" &&
+      transaction.category !== "Uncategorized"
+    ) {
+      learned.set(merchantKey(transaction.merchant), transaction.category);
+    }
+  }
+  return learned;
+}
+
+function mapTransaction(
+  transaction: PlaidTransaction,
+  learned: Map<string, string>,
+): Transaction {
   const category = categoryForPlaid(transaction);
+  const remembered = learned.get(
+    merchantKey(transaction.merchant_name ?? transaction.name),
+  );
+  const resolvedCategory = remembered ?? category;
   const transfer = category === "Transfers";
   return {
     id: `plaid-tx-${transaction.transaction_id}`,
@@ -145,16 +196,18 @@ function mapTransaction(transaction: PlaidTransaction): Transaction {
       "Transaction",
     amount: Math.abs(transaction.amount),
     date: transaction.date,
-    category,
+    category: resolvedCategory,
     type: transfer ? "transfer" : transaction.amount < 0 ? "income" : "expense",
     pending: transaction.pending ?? false,
-    confidence:
-      transaction.personal_finance_category?.confidence_level === "VERY_HIGH"
+    confidence: remembered
+      ? 1
+      : transaction.personal_finance_category?.confidence_level === "VERY_HIGH"
         ? 0.99
         : transaction.personal_finance_category?.confidence_level === "HIGH"
           ? 0.9
           : 0.75,
-    needsReview: category === "Uncategorized",
+    categorySource: remembered ? "learned" : categorySourceFor(transaction),
+    needsReview: resolvedCategory === "Uncategorized",
   };
 }
 
@@ -199,7 +252,26 @@ function recurringBills(streams: PlaidRecurringStream[] | undefined): Bill[] {
     });
 }
 
-function deriveBudgets(transactions: Transaction[], today: Date): Budget[] {
+function monthlyAmount(amount: number, frequency: Bill["frequency"]) {
+  if (frequency === "weekly") return (amount * 52) / 12;
+  if (frequency === "biweekly") return (amount * 26) / 12;
+  if (frequency === "annual") return amount / 12;
+  return amount;
+}
+
+function monthlyIncome(state: StewardState) {
+  const amount = state.profile.takeHomePay;
+  if (state.profile.payFrequency === "Weekly") return (amount * 52) / 12;
+  if (state.profile.payFrequency === "Biweekly") return (amount * 26) / 12;
+  return amount;
+}
+
+export function suggestBudgets(
+  state: StewardState,
+  transactions = state.transactions,
+  bills = state.bills,
+  today = new Date(),
+): Budget[] {
   const ninetyDaysAgo = new Date(today);
   ninetyDaysAgo.setDate(today.getDate() - 90);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -223,22 +295,61 @@ function deriveBudgets(transactions: Transaction[], today: Date): Budget[] {
     if (date >= monthStart) current.actual += transaction.amount;
     totals.set(transaction.category, current);
   }
-  return [...totals.entries()]
-    .map(([category, total]) => ({
+  const essentials = new Set([
+    "Housing",
+    "Utilities",
+    "Groceries",
+    "Transportation",
+    "Healthcare",
+    "Debt payments",
+  ]);
+  const income = monthlyIncome(state);
+  const recurringBills = bills
+    .filter((bill) => !bill.paid)
+    .reduce((sum, bill) => sum + monthlyAmount(bill.amount, bill.frequency), 0);
+  const hasHobbyPriority =
+    state.projects.some((project) => project.category === "Hobby") ||
+    state.wishlist.some((item) => item.category === "Hobbies");
+  if (hasHobbyPriority && income > recurringBills && !totals.has("Hobbies")) {
+    totals.set("Hobbies", { planned: 0, actual: 0 });
+  }
+
+  const suggested = [...totals.entries()].map(([category, total]) => ({
       id: `derived-budget-${category.toLowerCase().replaceAll(" ", "-")}`,
       category,
       planned: Math.round(total.planned),
       actual: Math.round(total.actual * 100) / 100,
       cadence: "Monthly" as const,
-      essential: [
-        "Housing",
-        "Utilities",
-        "Groceries",
-        "Transportation",
-        "Healthcare",
-        "Debt payments",
-      ].includes(category),
-    }))
+      essential: essentials.has(category),
+      source: "suggested" as const,
+    }));
+
+  // Bills are reserved before flexible categories. When income is known, cap
+  // suggested discretionary spending to what remains after bills and recent
+  // essential spending. A stated hobby gets a modest visible lane even before
+  // enough history has accumulated.
+  if (income > 0) {
+    const essentialSpending = suggested
+      .filter((budget) => budget.essential)
+      .reduce((sum, budget) => sum + budget.planned, 0);
+    const flexible = suggested.filter((budget) => !budget.essential);
+    const allowance = Math.max(0, income - recurringBills - essentialSpending);
+    const flexibleTotal = flexible.reduce((sum, budget) => sum + budget.planned, 0);
+    if (flexibleTotal > allowance && flexibleTotal > 0) {
+      for (const budget of flexible) {
+        budget.planned = Math.floor((budget.planned / flexibleTotal) * allowance);
+      }
+    }
+    const hobbies = suggested.find((budget) => budget.category === "Hobbies");
+    if (hobbies && hobbies.planned === 0) {
+      const unused = Math.max(0, allowance - flexible.reduce((sum, budget) => sum + budget.planned, 0));
+      hobbies.planned = Math.round(Math.min(100, unused * 0.1));
+    }
+  }
+
+  const manual = state.budgets.filter((budget) => budget.source === "manual");
+  const manualCategories = new Set(manual.map((budget) => budget.category));
+  return [...manual, ...suggested.filter((budget) => !manualCategories.has(budget.category))]
     .sort((a, b) => b.actual - a.actual);
 }
 
@@ -353,7 +464,10 @@ export function mergePlaidFinancialData(
   const removed = new Set(
     changes.removed.map((transaction) => transaction.transaction_id),
   );
-  const incoming = [...changes.added, ...changes.modified].map(mapTransaction);
+  const learned = rememberedCategories(state.transactions);
+  const incoming = [...changes.added, ...changes.modified].map((transaction) =>
+    mapTransaction(transaction, learned),
+  );
   const incomingIds = new Set(
     incoming.map((transaction) => transaction.plaidTransactionId),
   );
@@ -408,7 +522,7 @@ export function mergePlaidFinancialData(
       date: nextPayday,
       expected: payAmount,
     },
-    budgets: deriveBudgets(transactions, today),
+    budgets: suggestBudgets({ ...state, transactions, bills }, transactions, bills, today),
   };
   const review = deriveReview(transactions, today);
   return {

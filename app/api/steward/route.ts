@@ -4,6 +4,7 @@ import { createEmptyState } from "../../../lib/initial-state";
 import {
   auditWorkspace,
   currentUser,
+  isLegacyDemoWorkspace,
   loadWorkspace,
   prepareWorkspace,
   saveWorkspace,
@@ -35,8 +36,14 @@ export async function GET() {
   try {
     await prepareWorkspace();
     const user = await currentUser();
-    const state = await loadWorkspace(user.email, user.name);
+    const savedState = await loadWorkspace(user.email, user.name);
+    const state = isLegacyDemoWorkspace(savedState)
+      ? createEmptyState(user.name, user.email)
+      : savedState;
     await saveWorkspace(user.email, state);
+    if (state !== savedState) {
+      await auditWorkspace(user.email, "legacy_demo_workspace_cleared");
+    }
     await auditWorkspace(user.email, "workspace_loaded");
     return Response.json({
       state,
