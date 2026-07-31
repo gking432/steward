@@ -45,6 +45,7 @@ test("includes every primary navigation destination", async () => {
   for (const label of [
     "Today",
     "Plan",
+    "Debt",
     "Transactions",
     "Projects",
     "Wishlist",

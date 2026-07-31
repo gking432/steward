@@ -10,6 +10,24 @@ const requestSchema = z.object({
     billsBeforePayday: z.number().finite(),
     minimumBuffer: z.number().finite(),
     nextPayday: z.string(),
+    debt: z.object({
+      totalBalance: z.number().finite().nonnegative(),
+      minimumPayments: z.number().finite().nonnegative(),
+      extraPerMonth: z.number().finite().nonnegative(),
+      target: z.string(),
+      estimatedMonths: z.number().int().positive().nullable(),
+      estimatedInterest: z.number().finite().nonnegative().nullable(),
+      missingTerms: z.array(z.string()).max(20),
+    }),
+    budgets: z
+      .array(
+        z.object({
+          category: z.string(),
+          planned: z.number().finite().nonnegative(),
+          actual: z.number().finite().nonnegative(),
+        }),
+      )
+      .max(20),
     goals: z
       .array(
         z.object({

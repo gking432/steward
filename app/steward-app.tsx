@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   ArrowUpRight,
+  AlertTriangle,
   Bell,
   BookOpen,
   BriefcaseBusiness,
@@ -50,6 +51,7 @@ import {
 import { createEmptyState } from "../lib/initial-state";
 import {
   calculateTradeoffs,
+  debtPayoffPlan,
   daysUntil,
   deterministicCategory,
   money,
@@ -78,6 +80,7 @@ const navItems: {
 }[] = [
   { id: "home", label: "Today", icon: Home },
   { id: "plan", label: "Plan", icon: ListChecks },
+  { id: "debt", label: "Debt", icon: CreditCard },
   { id: "transactions", label: "Transactions", icon: WalletCards },
   { id: "projects", label: "Projects", icon: BriefcaseBusiness },
   { id: "wishlist", label: "Wishlist", icon: ShoppingBag },
@@ -557,6 +560,7 @@ export function StewardApp({
 
   const tradeoffs = useMemo(() => calculateTradeoffs(state), [state]);
   const allocation = useMemo(() => paycheckAllocation(state), [state]);
+  const debtPlan = useMemo(() => debtPayoffPlan(state), [state]);
   const categorySpending = useMemo(
     () => spendingByCategory(state.transactions),
     [state.transactions],
@@ -648,6 +652,28 @@ export function StewardApp({
           "The math is deterministic. You can adjust every allocation in Plan.",
       };
     }
+    if (/debt|credit card|card|loan|payoff|avalanche/.test(lower)) {
+      if (!debtPlan.debts.length) {
+        return {
+          text: "I don’t see any tracked debt yet. Add a credit card or loan with its balance, APR, and minimum payment to create a payoff projection.",
+          detail: "A projection needs the current balance, annual rate, and minimum payment for each debt.",
+        };
+      }
+      if (debtPlan.missingTerms.length) {
+        return {
+          text: `I can see ${money(debtPlan.totalBalance)} in tracked debt, but I need the APR and minimum payment for ${debtPlan.missingTerms.map((debt) => debt.name).join(", ")} before I can estimate a payoff date.`,
+          detail: "Enter those terms in the account record. This is educational planning information, not financial advice.",
+        };
+      }
+      return {
+        text: debtPlan.estimatedMonths
+          ? `A common payoff framework is to cover every ${money(debtPlan.minimumPayments)} monthly minimum, then put your planned ${money(debtPlan.extraPerMonth)} extra toward ${debtPlan.target?.name ?? "the highest-rate balance"}. At the current terms, that projects a payoff in about ${debtPlan.estimatedMonths} months.`
+          : "The current payment plan is not enough to produce a reliable payoff projection. Check the account terms and consider increasing the planned debt payment.",
+        detail: debtPlan.estimatedInterest
+          ? `Estimated interest under this educational projection: ${money(debtPlan.estimatedInterest)}. Rates, minimums, fees, and issuer terms can change.`
+          : "This estimate intentionally stops rather than guessing when the available terms are incomplete.",
+      };
+    }
     if (/why|low|changed/.test(lower)) {
       return {
         text: `Your current safe-to-spend calculation starts with ${money(tradeoffs.liquidCash)}, then protects ${money(tradeoffs.billsBeforePayday)} in upcoming bills and your ${money(state.profile.minimumBuffer)} cash buffer.`,
@@ -688,6 +714,20 @@ export function StewardApp({
             billsBeforePayday: tradeoffs.billsBeforePayday,
             minimumBuffer: state.profile.minimumBuffer,
             nextPayday: state.profile.nextPayday,
+            debt: {
+              totalBalance: debtPlan.totalBalance,
+              minimumPayments: debtPlan.minimumPayments,
+              extraPerMonth: debtPlan.extraPerMonth,
+              target: debtPlan.target?.name ?? "",
+              estimatedMonths: debtPlan.estimatedMonths,
+              estimatedInterest: debtPlan.estimatedInterest,
+              missingTerms: debtPlan.missingTerms.map((debt) => debt.name),
+            },
+            budgets: state.budgets.slice(0, 20).map((budget) => ({
+              category: budget.category,
+              planned: budget.planned,
+              actual: budget.actual,
+            })),
             goals: state.goals.map((goal) => ({
               name: goal.name,
               target: goal.target,
@@ -900,6 +940,19 @@ export function StewardApp({
             state={state}
             allocation={allocation}
             update={update}
+            openModal={setModal}
+          />
+        );
+      case "debt":
+        return (
+          <DebtView
+            state={state}
+            plan={debtPlan}
+            update={update}
+            ask={(prompt) => {
+              go("advisor");
+              void sendAdvisor(prompt);
+            }}
             openModal={setModal}
           />
         );
@@ -2795,6 +2848,7 @@ function AdvisorView({
   const suggestions = [
     "What should I do with my next paycheck?",
     "Can I afford the premium golf net?",
+    "How should I prioritize my debt payoff?",
     "What bills are coming up?",
     "Why is my checking balance lower?",
   ];
@@ -2812,6 +2866,14 @@ function AdvisorView({
       />
       <section className="advisor-layout">
         <div className="advisor-chat">
+          <div className="advisor-disclaimer">
+            <AlertTriangle size={15} />
+            <span>
+              Steward can make mistakes. Its responses are educational planning
+              information—not financial, tax, legal, or investment advice. Use
+              your judgment and verify important decisions.
+            </span>
+          </div>
           <div className="chat-thread" aria-live="polite">
             {chat.map((message) => (
               <div
@@ -2859,7 +2921,7 @@ function AdvisorView({
               }}
             />
             <div>
-              <span>Deterministic math · explainable advice</span>
+              <span>Verified math · AI explanation when enabled</span>
               <button className="primary-button" type="submit">
                 Send <ArrowUpRight size={16} />
               </button>
@@ -2898,6 +2960,9 @@ function AdvisorView({
               <li>
                 <Check size={14} /> Recent spending
               </li>
+              <li>
+                <Check size={14} /> Debt terms and payoff plan
+              </li>
             </ul>
             <p>
               Steward never invents missing financial data. Estimates and
@@ -2906,6 +2971,156 @@ function AdvisorView({
           </div>
         </aside>
       </section>
+    </div>
+  );
+}
+
+function DebtView({
+  state,
+  plan,
+  update,
+  ask,
+  openModal,
+}: {
+  state: StewardState;
+  plan: ReturnType<typeof debtPayoffPlan>;
+  update: <K extends keyof StewardState>(key: K, value: StewardState[K]) => void;
+  ask: (prompt: string) => void;
+  openModal: (modal: ModalName) => void;
+}) {
+  const setExtra = (amount: number) =>
+    update("paycheckPlan", {
+      ...state.paycheckPlan,
+      debt: Math.max(0, amount),
+    });
+  return (
+    <div className="page debt-page">
+      <SectionHeader
+        eyebrow="A clear way forward"
+        title="Debt payoff"
+        description="Track every balance, see what the current plan could mean, and ask Steward to explain the tradeoffs."
+        action={
+          <button className="primary-button" onClick={() => openModal("account")}>
+            <Plus size={16} /> Add debt account
+          </button>
+        }
+      />
+      <section className="debt-education-note">
+        <AlertTriangle size={17} />
+        <p>
+          Estimates are educational, not financial advice. Rates, minimums,
+          fees, and lender terms can change—confirm them with your statement.
+        </p>
+      </section>
+      {!plan.debts.length ? (
+        <EmptyState
+          icon={CreditCard}
+          title="No debt is tracked yet"
+          body="Add a credit card or loan with its balance, APR, and minimum payment to get a payoff projection."
+          action={
+            <button className="primary-button" onClick={() => openModal("account")}>
+              Add a debt account <ArrowRight size={15} />
+            </button>
+          }
+        />
+      ) : (
+        <>
+          <section className="debt-summary-grid">
+            <article className="stack-card debt-summary-card">
+              <span>Total tracked debt</span>
+              <strong>{money(plan.totalBalance)}</strong>
+              <small>{plan.debts.length} active {plan.debts.length === 1 ? "account" : "accounts"}</small>
+            </article>
+            <article className="stack-card debt-summary-card">
+              <span>Recorded monthly minimums</span>
+              <strong>{money(plan.minimumPayments)}</strong>
+              <small>Keep these covered before extra payoff</small>
+            </article>
+            <article className="stack-card debt-summary-card">
+              <span>Estimated payoff</span>
+              <strong>{plan.estimatedMonths ? `${plan.estimatedMonths} mo.` : "Needs terms"}</strong>
+              <small>
+                {plan.estimatedInterest
+                  ? `${money(plan.estimatedInterest)} estimated interest`
+                  : "Add an APR and minimum for each account"}
+              </small>
+            </article>
+          </section>
+          <section className="debt-layout">
+            <div className="stack-card debt-plan-card">
+              <div className="card-heading">
+                <div>
+                  <span className="eyebrow">Educational payoff plan</span>
+                  <h2>Make your extra payment count</h2>
+                </div>
+                <Pill tone="green">Highest APR first</Pill>
+              </div>
+              <p className="debt-plan-copy">
+                A common approach is to pay each recorded minimum, then direct
+                the extra amount toward the highest-rate balance. Steward rolls
+                that payment forward when a balance is paid off.
+              </p>
+              <div className="debt-extra-row">
+                <div>
+                  <strong>Extra payment each paycheck</strong>
+                  <small>Included in your existing paycheck plan</small>
+                </div>
+                <label className="money-input">
+                  <span>$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={state.paycheckPlan.debt}
+                    onChange={(event) => setExtra(Number(event.target.value))}
+                    aria-label="Extra debt payment each paycheck"
+                  />
+                </label>
+              </div>
+              {plan.target && (
+                <div className="debt-target">
+                  <Sparkles size={17} />
+                  <p>
+                    <strong>Current focus: {plan.target.name}</strong>
+                    {plan.target.hasInterestRate
+                      ? ` It has the highest recorded APR at ${plan.target.apr.toFixed(2)}%.`
+                      : " Add its APR to make this projection more useful."}
+                  </p>
+                </div>
+              )}
+              <button
+                className="secondary-button"
+                onClick={() => ask("How should I prioritize my debt payoff, and what would that mean for my budget and goals?")}
+              >
+                <Sparkles size={15} /> Ask Steward to explain this plan
+              </button>
+            </div>
+            <div className="stack-card debt-accounts-card">
+              <span className="eyebrow">Tracked accounts</span>
+              <h2>Debt details</h2>
+              <div className="debt-account-list">
+                {plan.debts.map((debt) => (
+                  <div key={debt.id}>
+                    <span>
+                      <strong>{debt.name}</strong>
+                      <small>
+                        {debt.hasInterestRate ? `${debt.apr.toFixed(2)}% APR` : "APR needed"}
+                        {" · "}
+                        {debt.minimum > 0 ? `${money(debt.minimum)} minimum` : "minimum needed"}
+                      </small>
+                    </span>
+                    <b>{money(debt.balance)}</b>
+                  </div>
+                ))}
+              </div>
+              {plan.missingTerms.length > 0 && (
+                <p className="debt-missing">
+                  Add the APR and minimum payment for {plan.missingTerms.map((debt) => debt.name).join(", ")} to unlock the projection.
+                </p>
+              )}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -3823,7 +4038,17 @@ function EntityModal({
         creditLimit:
           type === "Credit card" ? Number(data.get("creditLimit")) : undefined,
         interestRate:
-          type === "Credit card" ? Number(data.get("interestRate")) : undefined,
+          ["Credit card", "Loan"].includes(type)
+            ? Number(data.get("interestRate")) || undefined
+            : undefined,
+        minimumPayment:
+          ["Credit card", "Loan"].includes(type)
+            ? Number(data.get("minimumPayment")) || undefined
+            : undefined,
+        dueDate:
+          ["Credit card", "Loan"].includes(type)
+            ? String(data.get("dueDate")) || undefined
+            : undefined,
         source: "manual",
         status: "manual",
         lastSynced: "Just now",
@@ -3988,6 +4213,12 @@ function EntityModal({
               </Field>
               <Field label="Interest rate (if applicable)">
                 <input name="interestRate" type="number" step="0.01" />
+              </Field>
+              <Field label="Minimum payment (if applicable)">
+                <input name="minimumPayment" type="number" step="0.01" />
+              </Field>
+              <Field label="Payment due date (if applicable)">
+                <input name="dueDate" type="date" />
               </Field>
             </div>
           </>

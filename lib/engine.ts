@@ -119,6 +119,87 @@ export function paycheckAllocation(state: StewardState) {
   };
 }
 
+export function debtPayoffPlan(state: StewardState) {
+  const debts = state.accounts
+    .filter(
+      (account) =>
+        ["Credit card", "Loan"].includes(account.type) && account.balance > 0,
+    )
+    .map((account) => ({
+      id: account.id,
+      name: account.name,
+      balance: account.balance,
+      apr: account.interestRate ?? 0,
+      hasInterestRate: account.interestRate !== undefined,
+      minimum: account.minimumPayment ?? 0,
+      dueDate: account.dueDate,
+    }))
+    .sort((a, b) => b.apr - a.apr || a.balance - b.balance);
+  const paychecksPerMonth =
+    state.profile.payFrequency === "Weekly"
+      ? 52 / 12
+      : state.profile.payFrequency === "Biweekly"
+        ? 26 / 12
+        : 1;
+  const extraPerMonth = Math.max(0, state.paycheckPlan.debt * paychecksPerMonth);
+  const minimumPayments = debts.reduce((sum, debt) => sum + debt.minimum, 0);
+  const totalBalance = debts.reduce((sum, debt) => sum + debt.balance, 0);
+  const missingTerms = debts.filter(
+    (debt) => debt.minimum <= 0 || !debt.hasInterestRate,
+  );
+
+  if (!debts.length || missingTerms.length) {
+    return {
+      debts,
+      totalBalance,
+      minimumPayments,
+      extraPerMonth,
+      target: debts[0],
+      estimatedMonths: null,
+      estimatedInterest: null,
+      missingTerms,
+    };
+  }
+
+  // Educational avalanche projection: cover each recorded minimum, then send
+  // the remaining planned payment to the highest APR balance. It is an estimate
+  // only—issuers can change rates, minimums, and fees.
+  const balances = debts.map((debt) => ({ ...debt }));
+  const totalMonthlyPayment = minimumPayments + extraPerMonth;
+  let interestPaid = 0;
+  let months = 0;
+  while (balances.some((debt) => debt.balance > 0.01) && months < 600) {
+    months += 1;
+    for (const debt of balances) {
+      if (debt.balance > 0) {
+        const interest = debt.balance * (debt.apr / 100 / 12);
+        debt.balance += interest;
+        interestPaid += interest;
+      }
+    }
+    let available = totalMonthlyPayment;
+    for (const debt of balances) {
+      const payment = Math.min(debt.balance, debt.minimum);
+      debt.balance -= payment;
+      available -= payment;
+    }
+    const target = balances.find((debt) => debt.balance > 0.01);
+    if (!target || available <= 0) continue;
+    target.balance -= Math.min(target.balance, available);
+  }
+  const paidOff = balances.every((debt) => debt.balance <= 0.01);
+  return {
+    debts,
+    totalBalance,
+    minimumPayments,
+    extraPerMonth,
+    target: debts[0],
+    estimatedMonths: paidOff ? months : null,
+    estimatedInterest: paidOff ? interestPaid : null,
+    missingTerms,
+  };
+}
+
 export function splitIsValid(
   transactionAmount: number,
   splits: { amount: number }[],

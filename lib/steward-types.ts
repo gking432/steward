@@ -10,6 +10,7 @@ export type AccountType =
 export type NavView =
   | "home"
   | "plan"
+  | "debt"
   | "transactions"
   | "projects"
   | "wishlist"

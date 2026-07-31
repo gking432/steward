@@ -2215,6 +2215,178 @@ input[type="checkbox"] {
   box-shadow: var(--shadow);
 }
 
+.advisor-disclaimer,
+.debt-education-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, var(--line));
+  background: var(--amber-soft);
+  color: color-mix(in srgb, var(--amber) 78%, var(--text));
+  font-size: 8px;
+  line-height: 1.55;
+}
+
+.advisor-disclaimer {
+  margin: 15px 20px 0;
+  border-radius: 9px;
+  padding: 9px 11px;
+}
+
+.advisor-disclaimer svg,
+.debt-education-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.debt-education-note {
+  max-width: 760px;
+  border-radius: 10px;
+  margin: -4px 0 15px;
+  padding: 10px 12px;
+}
+
+.debt-education-note p {
+  margin: 0;
+}
+
+.debt-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.debt-summary-card {
+  min-height: 130px;
+  padding: 20px;
+}
+
+.debt-summary-card > span,
+.debt-summary-card small {
+  display: block;
+  color: var(--text-faint);
+  font-size: 9px;
+}
+
+.debt-summary-card strong {
+  display: block;
+  margin: 11px 0 5px;
+  font-size: 25px;
+  letter-spacing: -0.05em;
+}
+
+.debt-layout {
+  display: grid;
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.debt-plan-card,
+.debt-accounts-card {
+  padding: 21px;
+}
+
+.debt-plan-copy {
+  max-width: 620px;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.debt-extra-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding: 15px 0;
+}
+
+.debt-extra-row strong,
+.debt-extra-row small {
+  display: block;
+}
+
+.debt-extra-row strong {
+  font-size: 10px;
+}
+
+.debt-extra-row small,
+.debt-target p,
+.debt-missing {
+  color: var(--text-soft);
+  font-size: 8px;
+}
+
+.debt-target {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border-radius: 10px;
+  background: var(--green-soft);
+  color: var(--green);
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.debt-target p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.debt-target strong {
+  display: block;
+  color: var(--green);
+  margin-bottom: 2px;
+}
+
+.debt-accounts-card h2 {
+  margin: 3px 0 13px;
+  font-size: 15px;
+}
+
+.debt-account-list {
+  display: grid;
+}
+
+.debt-account-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 13px 0;
+}
+
+.debt-account-list strong,
+.debt-account-list small {
+  display: block;
+}
+
+.debt-account-list strong {
+  font-size: 10px;
+}
+
+.debt-account-list small {
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+
+.debt-account-list b {
+  font-size: 12px;
+}
+
+.debt-missing {
+  border-top: 1px solid var(--line);
+  margin: 4px 0 0;
+  padding-top: 12px;
+  line-height: 1.55;
+}
+
 .chat-thread {
   display: flex;
   flex: 1;
@@ -3125,6 +3297,7 @@ input[type="checkbox"] {
   .decision-hero,
   .content-grid,
   .allocation-layout,
+  .debt-layout,
   .advisor-layout,
   .settings-layout {
     grid-template-columns: 1fr;
@@ -3220,6 +3393,7 @@ input[type="checkbox"] {
   }
 
   .metric-grid,
+  .debt-summary-grid,
   .bottom-grid,
   .projects-grid,
   .wishlist-grid,
@@ -3289,6 +3463,16 @@ input[type="checkbox"] {
 
   .advisor-composer {
     margin: 0 10px 10px;
+  }
+
+  .advisor-disclaimer {
+    margin: 10px 10px 0;
+  }
+
+  .debt-summary-card,
+  .debt-plan-card,
+  .debt-accounts-card {
+    padding: 17px;
   }
 
   .review-metrics {

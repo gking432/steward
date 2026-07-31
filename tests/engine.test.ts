@@ -8,6 +8,7 @@ import {
 import { createEmptyState } from "../lib/initial-state";
 import {
   calculateTradeoffs,
+  debtPayoffPlan,
   deterministicCategory,
   paycheckAllocation,
   splitIsValid,
@@ -84,6 +85,47 @@ test("paycheck allocation reconciles editable allocations", () => {
   const result = paycheckAllocation(state);
   assert.equal(result.remaining, result.income - result.assigned);
   assert.ok(result.percentAssigned > 0);
+});
+
+test("debt payoff plan uses minimums plus the planned extra on highest APR first", () => {
+  const state = createEmptyState();
+  state.profile.payFrequency = "Monthly";
+  state.paycheckPlan.debt = 100;
+  state.accounts = [
+    {
+      id: "high-apr",
+      name: "High APR card",
+      institution: "Issuer",
+      type: "Credit card",
+      balance: 1_000,
+      available: 0,
+      interestRate: 25,
+      minimumPayment: 50,
+      source: "manual",
+      status: "manual",
+      lastSynced: "Just now",
+    },
+    {
+      id: "loan",
+      name: "Personal loan",
+      institution: "Bank",
+      type: "Loan",
+      balance: 500,
+      available: 0,
+      interestRate: 12,
+      minimumPayment: 25,
+      source: "manual",
+      status: "manual",
+      lastSynced: "Just now",
+    },
+  ];
+  const plan = debtPayoffPlan(state);
+  assert.equal(plan.totalBalance, 1_500);
+  assert.equal(plan.minimumPayments, 75);
+  assert.equal(plan.target?.name, "High APR card");
+  assert.ok(plan.estimatedMonths && plan.estimatedMonths > 0);
+  assert.ok(plan.estimatedInterest && plan.estimatedInterest > 0);
+  assert.equal(plan.missingTerms.length, 0);
 });
 
 test("deterministic merchant rules run before AI categorization", () => {
