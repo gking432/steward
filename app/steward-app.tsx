@@ -47,6 +47,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createEmptyState } from "../lib/initial-state";
 import {
@@ -400,6 +401,18 @@ function BankConnectGate({
   );
 }
 
+function useMobileViewport() {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const mediaQuery = window.matchMedia("(max-width: 680px)");
+      mediaQuery.addEventListener("change", onStoreChange);
+      return () => mediaQuery.removeEventListener("change", onStoreChange);
+    },
+    () => window.matchMedia("(max-width: 680px)").matches,
+    () => false,
+  );
+}
+
 export function StewardApp({
   initialState,
 }: {
@@ -411,6 +424,9 @@ export function StewardApp({
   const [mobileMore, setMobileMore] = useState(false);
   const [modal, setModal] = useState<ModalName>(null);
   const [loading, setLoading] = useState(true);
+  // Temporary mobile-only preview so the unfinished bank connection does not
+  // prevent product review. Desktop keeps its existing connection gate.
+  const mobileAppPreview = useMobileViewport();
   const [saveState, setSaveState] = useState<
     "saved" | "saving" | "offline"
   >("saving");
@@ -944,7 +960,11 @@ export function StewardApp({
     }
   };
 
-  if (loading || state.accounts.filter((account) => !account.archived).length === 0) {
+  if (
+    loading ||
+    (!mobileAppPreview &&
+      state.accounts.filter((account) => !account.archived).length === 0)
+  ) {
     return (
       <BankConnectGate
         name={state.profile.name}
@@ -1329,9 +1349,6 @@ function MobileOverview({
     month: "short",
     day: "numeric",
   }).format(new Date());
-  const hour = new Date().getHours();
-  const greeting =
-    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const nextBill = state.bills
     .filter((bill) => !bill.paid)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
@@ -1347,17 +1364,18 @@ function MobileOverview({
     <section className="mobile-overview" aria-label="Today overview">
       <header className="mobile-overview-heading">
         <div>
-          <span>{greeting}, {state.profile.name.split(" ")[0]}.</span>
+          <span>Today</span>
           <small>{today}</small>
         </div>
         <p><i className={syncState === "Syncing" ? "is-syncing" : ""} /> {syncState}</p>
       </header>
 
       <button className="mobile-safe-card" onClick={() => go("plan")}>
-        <span className="mobile-card-label">AVAILABLE TO ENJOY</span>
+        <span className="mobile-card-label">SAFE TO SPEND</span>
         <strong>{money(tradeoffs.safeToSpend)}</strong>
         <p>
-          Bills are covered. Your {money(state.profile.minimumBuffer)} cushion stays protected.
+          after {money(tradeoffs.billsBeforePayday)} for bills and your
+          {" "}{money(state.profile.minimumBuffer)} buffer
         </p>
         <span className={`mobile-risk ${riskTone}`}>
           <ShieldCheck size={13} /> {tradeoffs.risk} risk
@@ -1389,7 +1407,7 @@ function MobileOverview({
           {nextAction ? <Sparkles size={19} /> : <CheckCircle2 size={19} />}
         </span>
         <span>
-          <small>TODAY’S FOCUS</small>
+          <small>UP NEXT</small>
           <strong>
             {nextAction?.title ?? "Nothing needs your attention"}
           </strong>
