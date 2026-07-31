@@ -17,13 +17,16 @@ test("build contains Steward's decision briefing", async () => {
 
   assert.match(layout, /Steward — Your financial operating system/);
   assert.match(layout, /og\.png/);
-  assert.match(app, /Good afternoon/);
+  assert.match(app, /Your live financial briefing/);
   assert.match(app, /Your next best move/);
   assert.match(app, /Safe to spend today/);
   assert.match(app, /Today’s decisions/);
   assert.match(app, /Upcoming obligations/);
   assert.match(page, /<StewardApp initialState=\{initialState\}/);
   assert.match(css, /\.decision-hero/);
+  assert.match(css, /\.mobile-bottom-nav/);
+  assert.match(layout, /manifest\.webmanifest/);
+  assert.doesNotMatch(`${layout}\n${app}\n${page}`, /createDemoState|demo-data/);
   assert.doesNotMatch(
     `${layout}\n${app}\n${page}`,
     /codex-preview|react-loading-skeleton/i,

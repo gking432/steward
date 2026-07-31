@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
   Bell,
@@ -14,7 +13,6 @@ import {
   CircleDollarSign,
   CreditCard,
   Download,
-  ExternalLink,
   Eye,
   FileText,
   Flag,
@@ -49,7 +47,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { createDemoState } from "../lib/demo-data";
+import { createEmptyState } from "../lib/initial-state";
 import {
   calculateTradeoffs,
   daysUntil,
@@ -133,7 +131,9 @@ declare global {
         token: string;
         onSuccess: (
           publicToken: string,
-          metadata: { institution?: { institution_id?: string } },
+          metadata: {
+            institution?: { institution_id?: string; name?: string };
+          },
         ) => void;
         onExit?: () => void;
       }): { open(): void };
@@ -266,6 +266,85 @@ function Field({
   );
 }
 
+function BankConnectGate({
+  name,
+  status,
+  error,
+  connect,
+  loading,
+}: {
+  name: string;
+  status: "idle" | "opening" | "importing" | "syncing";
+  error: string;
+  connect: () => void;
+  loading?: boolean;
+}) {
+  const busy = loading || status !== "idle";
+  const label = loading
+    ? "Opening your workspace…"
+    : status === "opening"
+      ? "Opening secure connection…"
+      : status === "importing"
+        ? "Saving your accounts…"
+        : status === "syncing"
+          ? "Importing transactions…"
+          : "Connect your bank";
+  return (
+    <main className="connect-gate">
+      <div className="connect-brand">
+        <div className="brand-mark" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <strong>Steward</strong>
+      </div>
+      <section className="connect-card">
+        <span className="connect-lock">
+          <Landmark size={25} />
+        </span>
+        <span className="eyebrow">Your money, without the setup work</span>
+        <h1>
+          {loading
+            ? "Getting Steward ready"
+            : `Connect once, ${name.split(" ")[0] || "then"} let Steward organize the rest.`}
+        </h1>
+        <p>
+          Link your bank securely to import real balances and transactions.
+          Steward starts empty—there is no sample data to delete.
+        </p>
+        <button
+          className="primary-button connect-button"
+          onClick={connect}
+          disabled={busy}
+        >
+          {busy ? <RefreshCw className="spin" size={18} /> : <Landmark size={18} />}
+          {label}
+        </button>
+        {error && (
+          <div className="connect-error" role="alert">
+            <HelpCircle size={17} />
+            <span>{error}</span>
+          </div>
+        )}
+        <div className="connect-trust">
+          <span>
+            <ShieldCheck size={17} />
+            Bank credentials are handled by Plaid, never Steward.
+          </span>
+          <span>
+            <Eye size={17} />
+            Read-only access. Steward cannot move money.
+          </span>
+        </div>
+      </section>
+      <small className="connect-foot">
+        Private by default · Disconnect and delete your data at any time
+      </small>
+    </main>
+  );
+}
+
 export function StewardApp({
   initialState,
 }: {
@@ -274,11 +353,16 @@ export function StewardApp({
   const [state, setState] = useState(initialState);
   const [view, setView] = useState<NavView>("home");
   const [mobileNav, setMobileNav] = useState(false);
+  const [mobileMore, setMobileMore] = useState(false);
   const [modal, setModal] = useState<ModalName>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<
-    "saved" | "saving" | "offline" | "demo"
-  >("demo");
+    "saved" | "saving" | "offline"
+  >("saving");
+  const [bankStatus, setBankStatus] = useState<
+    "idle" | "opening" | "importing" | "syncing"
+  >("idle");
+  const [bankError, setBankError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -287,9 +371,9 @@ export function StewardApp({
     {
       id: "welcome",
       role: "advisor",
-      text: "Good afternoon. Your immediate obligations are covered, and there is one smart project purchase available.",
+      text: "Ask me about your cash, bills, spending, or next payday.",
       detail:
-        "I use your balances, bills, goals, and protected buffer. I’ll label estimates and assumptions.",
+        "I use only the financial data you connect or enter, and I label estimates and assumptions.",
     },
   ]);
   const [transactionFilter, setTransactionFilter] = useState("All");
@@ -297,6 +381,12 @@ export function StewardApp({
   const [onboardingStep, setOnboardingStep] = useState(0);
   const loadedRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/steward")
@@ -421,10 +511,12 @@ export function StewardApp({
       };
     }
     if (/dining|restaurant|food/.test(lower)) {
+      const planned =
+        state.budgets.find((budget) => budget.category === "Dining")?.planned ??
+        0;
       return {
-        text: `You’ve spent ${money(categorySpending.Dining ?? 0)} on dining in the last 30 days against a ${money(state.budgets.find((budget) => budget.category === "Dining")?.planned ?? 0)} monthly plan.`,
-        detail:
-          "That is still within plan, but keeping the next week near $50 preserves room for your apartment project.",
+        text: `You’ve spent ${money(categorySpending.Dining ?? 0)} on dining in the last 30 days${planned ? ` against a ${money(planned)} recent monthly average` : ""}.`,
+        detail: "This uses connected, categorized transactions only.",
       };
     }
     if (/paycheck|allocate|next pay/.test(lower)) {
@@ -436,15 +528,19 @@ export function StewardApp({
     }
     if (/why|low|changed/.test(lower)) {
       return {
-        text: `Rent and the card payment explain most of the recent cash movement. Even after those, your savings rose and card debt fell—your overall position improved.`,
+        text: `Your current safe-to-spend calculation starts with ${money(tradeoffs.liquidCash)}, then protects ${money(tradeoffs.billsBeforePayday)} in upcoming bills and your ${money(state.profile.minimumBuffer)} cash buffer.`,
         detail:
-          "I’m comparing recorded income, spending, savings, and debt; pending activity can still change the result.",
+          "Connected balances and recorded obligations drive this result; pending activity can still change it.",
       };
     }
+    const firstRecommendation = activeRecommendations[0];
     return {
-      text: `Your highest-priority action is to add ${money(activeRecommendations[0]?.impact ?? state.paycheckPlan.debt)} to the travel card plan while preserving your checking buffer.`,
+      text: firstRecommendation
+        ? `${firstRecommendation.title}. ${firstRecommendation.description}`
+        : "Your connected data does not show an urgent action right now.",
       detail:
-        "This recommendation balances the card’s interest rate, bills due before payday, and your emergency-fund goal.",
+        firstRecommendation?.reason ??
+        "Steward will update this when balances or transactions change.",
     };
   };
 
@@ -514,16 +610,18 @@ export function StewardApp({
   };
 
   const connectPlaid = async () => {
+    setBankError("");
+    setBankStatus("opening");
     try {
       const tokenResponse = await fetch("/api/plaid/link-token", {
         method: "POST",
       });
       const tokenPayload = await tokenResponse.json();
       if (!tokenResponse.ok || !tokenPayload.linkToken) {
-        window.alert(
-          tokenPayload.error ??
-            "Bank connections are not available. Add a manual account instead.",
+        setBankError(
+          tokenPayload.error ?? "Bank connections are not available right now.",
         );
+        setBankStatus("idle");
         return;
       }
       if (!window.Plaid) {
@@ -548,37 +646,59 @@ export function StewardApp({
       window.Plaid?.create({
         token: tokenPayload.linkToken,
         onSuccess: async (publicToken, metadata) => {
+          setBankStatus("importing");
           const response = await fetch("/api/plaid/exchange", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               publicToken,
               institutionId: metadata.institution?.institution_id,
+              institutionName: metadata.institution?.name,
             }),
           });
           const payload = await response.json();
           if (!response.ok) {
-            window.alert(payload.error ?? "The connection could not be saved.");
+            setBankError(payload.error ?? "The connection could not be saved.");
+            setBankStatus("idle");
             return;
           }
-          setState((current) => ({
-            ...current,
-            accounts: [
-              ...current.accounts.filter(
-                (account) =>
-                  !payload.accounts.some(
-                    (connected: Account) => connected.id === account.id,
-                  ),
-              ),
-              ...payload.accounts,
-            ],
-          }));
+          if (payload.state) setState(payload.state);
+          setBankStatus("syncing");
+          const syncResponse = await fetch("/api/plaid/sync", {
+            method: "POST",
+          });
+          const syncPayload = await syncResponse.json();
+          if (syncPayload.state) setState(syncPayload.state);
+          if (!syncResponse.ok) {
+            setBankError(
+              syncPayload.error ??
+                "Your accounts connected, but transaction history is still pending.",
+            );
+          }
+          setBankStatus("idle");
         },
+        onExit: () => setBankStatus("idle"),
       }).open();
     } catch {
-      window.alert(
-        "Steward could not open the secure bank connection. Manual accounts remain available.",
+      setBankError("Steward could not open the secure bank connection.");
+      setBankStatus("idle");
+    }
+  };
+
+  const syncBank = async () => {
+    setBankError("");
+    setBankStatus("syncing");
+    try {
+      const response = await fetch("/api/plaid/sync", { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Sync failed.");
+      if (payload.state) setState(payload.state);
+    } catch (error) {
+      setBankError(
+        error instanceof Error ? error.message : "Bank sync failed.",
       );
+    } finally {
+      setBankStatus("idle");
     }
   };
 
@@ -688,9 +808,10 @@ export function StewardApp({
         return (
           <AccountsView
             state={state}
-            update={update}
             openModal={setModal}
             connectPlaid={connectPlaid}
+            syncBank={syncBank}
+            syncing={bankStatus === "syncing"}
           />
         );
       case "settings":
@@ -705,8 +826,62 @@ export function StewardApp({
     }
   };
 
+  if (loading || state.accounts.filter((account) => !account.archived).length === 0) {
+    return (
+      <BankConnectGate
+        name={state.profile.name}
+        status={bankStatus}
+        error={bankError}
+        connect={connectPlaid}
+        loading={loading}
+      />
+    );
+  }
+
+  const mobilePrimary: {
+    id: NavView | "more";
+    label: string;
+    icon: typeof Home;
+  }[] = [
+    { id: "home", label: "Today", icon: Home },
+    { id: "plan", label: "Plan", icon: ListChecks },
+    { id: "transactions", label: "Activity", icon: WalletCards },
+    { id: "projects", label: "Projects", icon: BriefcaseBusiness },
+    { id: "more", label: "More", icon: MoreHorizontal },
+  ];
+
   return (
     <div className="app-shell">
+      <header className="mobile-header">
+        <button className="mobile-brand" onClick={() => go("home")}>
+          <div className="brand-mark" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <strong>Steward</strong>
+        </button>
+        <div>
+          <button
+            className="icon-button"
+            onClick={() => void syncBank()}
+            aria-label="Sync bank data"
+            disabled={bankStatus === "syncing"}
+          >
+            <RefreshCw
+              className={bankStatus === "syncing" ? "spin" : ""}
+              size={19}
+            />
+          </button>
+          <button
+            className="avatar"
+            onClick={() => go("settings")}
+            aria-label="Open profile"
+          >
+            {state.profile.name.slice(0, 1)}
+          </button>
+        </div>
+      </header>
       <aside className={cx("sidebar", mobileNav && "open")}>
         <div className="brand">
           <div className="brand-mark">
@@ -748,7 +923,7 @@ export function StewardApp({
             </button>
           ))}
         </nav>
-        <div className="sidebar-insight">
+        {state.goals[0] && <div className="sidebar-insight">
           <div className="sidebar-insight-head">
             <span>Emergency fund</span>
             <strong>
@@ -762,7 +937,7 @@ export function StewardApp({
             value={(state.goals[0]?.current / state.goals[0]?.target) * 100}
           />
           <p>{money(state.goals[0]?.target - state.goals[0]?.current)} to go</p>
-        </div>
+        </div>}
         <button className="profile-chip" onClick={() => go("settings")}>
           <span>{state.profile.name.slice(0, 1).toUpperCase()}</span>
           <div>
@@ -900,6 +1075,84 @@ export function StewardApp({
         </main>
       </div>
 
+      {bankError && (
+        <div className="sync-banner" role="status">
+          <HelpCircle size={16} />
+          <span>{bankError}</span>
+          <button onClick={() => setBankError("")} aria-label="Dismiss">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
+        {mobilePrimary.map((item) => (
+          <button
+            key={item.id}
+            className={cx(
+              item.id === "more"
+                ? mobileMore
+                : view === item.id && !mobileMore
+                  ? "active"
+                  : "",
+            )}
+            onClick={() => {
+              if (item.id === "more") {
+                setMobileMore((open) => !open);
+              } else {
+                setMobileMore(false);
+                go(item.id);
+              }
+            }}
+          >
+            <item.icon size={20} />
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {mobileMore && (
+        <>
+          <button
+            className="mobile-more-scrim"
+            onClick={() => setMobileMore(false)}
+            aria-label="Close more menu"
+          />
+          <section className="mobile-more-sheet">
+            <div>
+              <span className="eyebrow">More</span>
+              <button
+                className="icon-button"
+                onClick={() => setMobileMore(false)}
+                aria-label="Close more menu"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {navItems
+              .filter(
+                (item) =>
+                  !["home", "plan", "transactions", "projects"].includes(
+                    item.id,
+                  ),
+              )
+              .map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setMobileMore(false);
+                    go(item.id);
+                  }}
+                >
+                  <span><item.icon size={20} /></span>
+                  <strong>{item.label}</strong>
+                  <ArrowRight size={17} />
+                </button>
+              ))}
+          </section>
+        </>
+      )}
+
       {modal && (
         <EntityModal
           modal={modal}
@@ -965,12 +1218,20 @@ function HomeView({
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     .slice(0, 4);
   const firstName = state.profile.name.split(" ")[0];
+  const primaryRecommendation = recommendations[0];
+  const currentHour = new Date().getHours();
+  const greeting =
+    currentHour < 12
+      ? "Good morning"
+      : currentHour < 18
+        ? "Good afternoon"
+        : "Good evening";
   return (
     <div className="page">
       <SectionHeader
-        eyebrow="Thursday briefing"
-        title={`Good afternoon, ${firstName}.`}
-        description="Your essentials are covered. Here’s the clearest move from here."
+        eyebrow="Your live financial briefing"
+        title={`${greeting}, ${firstName}.`}
+        description="Built from the accounts and activity you connected."
         action={
           <button className="secondary-button" onClick={() => go("advisor")}>
             <Sparkles size={16} /> Ask Steward
@@ -980,26 +1241,28 @@ function HomeView({
 
       <section className="decision-hero">
         <div className="decision-copy">
-          <Pill tone="green">
-            <ShieldCheck size={13} /> Low risk
+          <Pill tone={tradeoffs.risk === "Low" ? "green" : "amber"}>
+            <ShieldCheck size={13} /> {tradeoffs.risk} risk
           </Pill>
           <span className="eyebrow">Your next best move</span>
-          <h2>
-            Put <em>{money(recommendations[0]?.impact ?? 415)}</em> toward the
-            travel card.
-          </h2>
+          <h2>{primaryRecommendation?.title ?? "Your accounts are up to date."}</h2>
           <p>
-            Bills through payday are reserved, your savings contribution stays
-            intact, and your preferred checking buffer remains protected.
+            {primaryRecommendation?.description ??
+              "Steward will surface a clear next action as connected activity changes."}
           </p>
           <div className="hero-actions">
             <button
               className="primary-button"
-              onClick={() =>
-                recommendations[0] && act(recommendations[0], "completed")
-              }
+              onClick={() => {
+                if (primaryRecommendation) {
+                  act(primaryRecommendation, "completed");
+                } else {
+                  go("transactions");
+                }
+              }}
             >
-              Add to my plan <ArrowRight size={16} />
+              {primaryRecommendation?.action ?? "Review activity"}{" "}
+              <ArrowRight size={16} />
             </button>
             <button className="text-button" onClick={() => go("advisor")}>
               Why this amount? <HelpCircle size={15} />
@@ -1045,9 +1308,7 @@ function HomeView({
           </div>
           <span>Available cash</span>
           <strong>{money(tradeoffs.liquidCash)}</strong>
-          <small className="positive">
-            <ArrowUpRight size={13} /> $289 more than last payday
-          </small>
+          <small>Across connected checking accounts</small>
         </article>
         <article className="metric-card">
           <div className="metric-icon blue">
@@ -1055,9 +1316,7 @@ function HomeView({
           </div>
           <span>Total savings</span>
           <strong>{money(totalSavings)}</strong>
-          <small className="positive">
-            <ArrowUpRight size={13} /> $350 this cycle
-          </small>
+          <small>Across connected savings accounts</small>
         </article>
         <article className="metric-card">
           <div className="metric-icon amber">
@@ -1065,17 +1324,23 @@ function HomeView({
           </div>
           <span>Credit-card debt</span>
           <strong>{money(cardDebt)}</strong>
-          <small className="positive">
-            <ArrowDownRight size={13} /> $450 this month
-          </small>
+          <small>Current connected card balances</small>
         </article>
         <article className="metric-card">
           <div className="metric-icon violet">
             <CalendarClock size={18} />
           </div>
           <span>Next payday</span>
-          <strong>{daysUntil(state.profile.nextPayday)} days</strong>
-          <small>{money(state.profile.takeHomePay)} expected</small>
+          <strong>
+            {state.profile.nextPayday
+              ? `${daysUntil(state.profile.nextPayday)} days`
+              : "Not detected"}
+          </strong>
+          <small>
+            {state.profile.takeHomePay
+              ? `${money(state.profile.takeHomePay)} expected`
+              : "Add or detect recurring income"}
+          </small>
         </article>
       </section>
 
@@ -1144,7 +1409,7 @@ function HomeView({
             </div>
             <button onClick={() => go("plan")}>View all</button>
           </div>
-          {upcoming.map((bill) => (
+          {upcoming.length ? upcoming.map((bill) => (
             <div className="bill-row" key={bill.id}>
               <div className="date-tile">
                 <strong>
@@ -1163,14 +1428,20 @@ function HomeView({
               </div>
               <b>{money(bill.amount)}</b>
             </div>
-          ))}
-          <div className="reserved-note">
+          )) : (
+            <EmptyState
+              icon={CalendarClock}
+              title="No recurring bills detected yet"
+              body="Plaid may still be building transaction history, or recurring insights may not be enabled for this connection."
+            />
+          )}
+          {upcoming.length > 0 && <div className="reserved-note">
             <ShieldCheck size={17} />
             <p>
               <strong>{money(tradeoffs.billsBeforePayday)} is reserved.</strong>
               These bills are already excluded from safe-to-spend.
             </p>
-          </div>
+          </div>}
         </div>
       </section>
 
@@ -1208,6 +1479,13 @@ function HomeView({
               </div>
             </button>
           ))}
+          {!state.projects.length && (
+            <EmptyState
+              icon={BriefcaseBusiness}
+              title="No projects yet"
+              body="Add a real goal or purchase you want Steward to plan around."
+            />
+          )}
         </div>
         <div className="stack-card">
           <div className="card-heading">
@@ -1239,16 +1517,25 @@ function HomeView({
                 </div>
               </div>
             ))}
+          {!state.wishlist.some(
+            (item) => item.status === "Recommended now",
+          ) && (
+            <EmptyState
+              icon={ShoppingBag}
+              title="Nothing marked safe to buy"
+              body="Add an item to compare it with your connected cash and obligations."
+            />
+          )}
         </div>
         <div className="stack-card">
           <div className="card-heading">
             <div>
               <span className="eyebrow">Primary goal</span>
-              <h2>Emergency fund</h2>
+              <h2>{state.goals[0]?.name ?? "Your first goal"}</h2>
             </div>
             <button onClick={() => go("plan")}>Details</button>
           </div>
-          <div className="goal-feature">
+          {state.goals[0] ? <div className="goal-feature">
             <div className="goal-ring">
               <strong>
                 {Math.round(
@@ -1263,14 +1550,20 @@ function HomeView({
                 <small>of {money(state.goals[0].target)}</small>
               </strong>
               <p>
-                At your current pace, you’ll reach the target two weeks early.
+                Steward will track this against your connected balances and plan.
               </p>
               <span>
                 Next contribution{" "}
                 <b>{money(state.goals[0].recommendedContribution)}</b>
               </span>
             </div>
-          </div>
+          </div> : (
+            <EmptyState
+              icon={Flag}
+              title="No goal set"
+              body="Create a goal when you are ready to give the plan a destination."
+            />
+          )}
         </div>
       </section>
     </div>
@@ -1470,9 +1763,11 @@ function PlanView({
                 <Sparkles size={18} />
                 <p>
                   <strong>Steward’s read</strong>
-                  Your plan is balanced. Directing the unassigned amount to the
-                  card would save more interest than adding it to a low-priority
-                  project.
+                  {allocation.remaining < 0
+                    ? "The current allocations exceed the expected paycheck. Reduce a flexible category before saving."
+                    : allocation.income > 0
+                      ? `${money(allocation.remaining)} remains unassigned based on the connected income and obligations above.`
+                      : "A paycheck plan will appear when recurring income is detected or entered."}
                 </p>
               </div>
               <button className="primary-button">
@@ -1490,7 +1785,13 @@ function PlanView({
               <span className="eyebrow">Supporting guardrails</span>
               <h2>Budget health</h2>
             </div>
-            <Pill tone="green">Comfortably within plan</Pill>
+            <Pill tone={state.budgets.some((item) => item.actual > item.planned) ? "amber" : "green"}>
+              {state.budgets.length
+                ? state.budgets.some((item) => item.actual > item.planned)
+                  ? "Review needed"
+                  : "Within recent averages"
+                : "Waiting for activity"}
+            </Pill>
           </div>
           <div className="budget-grid">
             {state.budgets.map((budget) => {
@@ -2365,14 +2666,16 @@ function ReviewsView({
 
 function AccountsView({
   state,
-  update,
   openModal,
   connectPlaid,
+  syncBank,
+  syncing,
 }: {
   state: StewardState;
-  update: <K extends keyof StewardState>(key: K, value: StewardState[K]) => void;
   openModal: (modal: ModalName) => void;
   connectPlaid: () => void;
+  syncBank: () => void;
+  syncing: boolean;
 }) {
   return (
     <div className="page">
@@ -2485,19 +2788,8 @@ function AccountsView({
               <span>
                 <RefreshCw size={13} /> {account.lastSynced}
               </span>
-              <button
-                onClick={() =>
-                  update(
-                    "accounts",
-                    state.accounts.map((item) =>
-                      item.id === account.id
-                        ? { ...item, lastSynced: "Just now" }
-                        : item,
-                    ),
-                  )
-                }
-              >
-                Update
+              <button onClick={syncBank} disabled={syncing}>
+                {syncing ? "Syncing…" : "Update"}
               </button>
             </div>
           </article>
@@ -2506,15 +2798,15 @@ function AccountsView({
       <div className="integration-note">
         <Landmark size={20} />
         <div>
-          <strong>Plaid Sandbox architecture is ready</strong>
+          <strong>Secure bank sync is active</strong>
           <p>
-            Link-token, secure token exchange, transaction sync, institution
-            metadata, webhooks, and reauthorization are documented. Demo mode
-            remains fully usable without credentials.
+            Plaid handles bank authentication. Steward stores encrypted access
+            tokens and imports balances, transactions, and supported recurring
+            cash flows.
           </p>
         </div>
-        <button className="secondary-button">
-          Setup guide <ExternalLink size={14} />
+        <button className="secondary-button" onClick={syncBank} disabled={syncing}>
+          {syncing ? "Syncing…" : "Sync now"} <RefreshCw size={14} />
         </button>
       </div>
     </div>
@@ -2896,7 +3188,7 @@ function EntityModal({
   if (modal === "delete") {
     const deleteWorkspace = async () => {
       await fetch("/api/steward", { method: "DELETE" });
-      setState(createDemoState());
+      setState(createEmptyState(state.profile.name, state.profile.email));
       close();
     };
     return (
@@ -2905,8 +3197,7 @@ function EntityModal({
           <span><Trash2 size={24} /></span>
           <p>
             This removes the saved workspace and audit history for this account.
-            Connected financial credentials would be revoked when Plaid is
-            enabled.
+            Connected financial credentials are revoked as part of deletion.
           </p>
           <div className="button-row end">
             <button className="secondary-button" onClick={close}>Cancel</button>

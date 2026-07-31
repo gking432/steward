@@ -1,25 +1,22 @@
 import { env } from "cloudflare:workers";
-import { headers } from "next/headers";
 import {
   plaidConfigured,
   plaidRequest,
   stablePlaidUserId,
 } from "../../../../lib/plaid";
+import { currentUser } from "../../../../lib/server-workspace";
 
 export async function POST() {
   if (!plaidConfigured()) {
     return Response.json(
       {
         error:
-          "Bank connections are not enabled yet. Manual accounts and demo data remain available.",
+          "Bank connections need Plaid credentials before you can continue.",
       },
       { status: 503 },
     );
   }
-  const requestHeaders = await headers();
-  const email =
-    requestHeaders.get("oai-authenticated-user-email") ??
-    "demo@steward.local";
+  const { email } = await currentUser();
   const runtime = env as unknown as Record<string, string | undefined>;
   try {
     const result = await plaidRequest<{
@@ -32,7 +29,9 @@ export async function POST() {
       transactions: { days_requested: 180 },
       country_codes: ["US"],
       language: "en",
-      webhook: runtime.PLAID_WEBHOOK_URL,
+      ...(runtime.PLAID_WEBHOOK_URL
+        ? { webhook: runtime.PLAID_WEBHOOK_URL }
+        : {}),
     });
     return Response.json({
       linkToken: result.link_token,

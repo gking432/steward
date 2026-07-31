@@ -37,6 +37,8 @@ export type Account = {
 
 export type Transaction = {
   id: string;
+  plaidTransactionId?: string;
+  source?: "manual" | "plaid";
   accountId: string;
   merchant: string;
   description: string;

@@ -4,14 +4,17 @@ Steward is an AI-native personal financial operating system. It connects
 balances, bills, debt, savings, goals, projects, and desired purchases to answer
 the practical question: **what should I do next?**
 
-This repository contains a complete first-pass application with a realistic demo
-workspace. It remains useful without Plaid or OpenAI credentials: critical
-arithmetic, paycheck planning, categorization rules, affordability checks, and
-recommendations are deterministic.
+The application starts with an empty, private workspace. A user connects a bank
+once; Steward imports balances and transaction history and derives the plan from
+that real activity. Critical arithmetic, paycheck planning, categorization
+rules, affordability checks, and recommendations are deterministic.
 
 ## What works
 
 - Action-first daily financial briefing
+- Installable mobile-first PWA with dedicated bottom navigation and safe-area
+  support
+- Preserved desktop application shell and primary navigation
 - Paycheck allocation planner with live reconciliation
 - Safe-to-spend and affordability engine
 - Accounts, transactions, categories, bills, budgets, and goals
@@ -23,8 +26,10 @@ recommendations are deterministic.
 - Global search, in-app notifications, light/dark modes
 - JSON and CSV export plus account-data deletion
 - D1-backed per-user workspace persistence and audit records
-- Plaid Link token, secure exchange, encrypted token storage, and sync routes
-- Plaid Sandbox-compatible Link flow when credentials are present
+- Plaid Link, secure exchange, encrypted token storage, multi-item incremental
+  sync, account refresh, and real workspace ingestion
+- Derived bills, budgets, payday details, reviews, and recommendations from
+  connected activity
 
 ## Stack
 
@@ -54,8 +59,8 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Demo mode requires no environment variables. Local D1 state is managed by the
-Cloudflare development runtime declared in `.openai/hosting.json`.
+Local D1 state is managed by the Cloudflare development runtime declared in
+`.openai/hosting.json`. Bank connection requires a configured Plaid application.
 
 ## Environment variables
 
@@ -97,15 +102,14 @@ OAuth implementation because the selected hosting platform supplies identity
 and prohibits scaffolding a separate public auth system from the starter. A
 future public standalone deployment should use Supabase Auth.
 
-## Plaid Sandbox
+## Plaid
 
 1. Create a Plaid developer account and obtain Sandbox credentials.
 2. Set `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=sandbox`, and a strong
    `APP_ENCRYPTION_KEY`.
-3. Set `PLAID_WEBHOOK_URL` to the deployed webhook route when webhook processing
-   is enabled.
-4. Restart the app, open Accounts, and choose **Connect bank**.
-5. Complete Plaid’s Sandbox Link flow.
+3. Restart the app and choose **Connect your bank**.
+4. Complete Plaid Link. Steward saves accounts immediately and imports available
+   transaction history.
 
 Access tokens are exchanged and encrypted on the server. They are never returned
 to the browser. See [PLAID_SETUP.md](./PLAID_SETUP.md).
@@ -143,7 +147,7 @@ Worker runtime environment variables matching `.env.example`.
 ## Security
 
 Read [SECURITY.md](./SECURITY.md) before enabling real financial data. The
-present release is appropriate for demo and controlled private evaluation; it
+present release is appropriate for controlled private evaluation; it
 still needs a formal security review, rate-limiting service, verified Plaid
 webhook signatures, and production incident procedures before broad public use.
 

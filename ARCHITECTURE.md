@@ -15,8 +15,8 @@ entities:
 
 ## Request boundaries
 
-- `app/page.tsx` reads optional authenticated identity headers and renders a
-  realistic initial workspace.
+- `app/page.tsx` reads optional authenticated identity headers and renders an
+  empty initial workspace.
 - `app/api/steward/route.ts` owns durable state. It derives the user key from
   trusted server headers, validates writes with Zod, and records audit events.
 - `app/api/advisor/route.ts` accepts a bounded financial context and a verified
@@ -48,6 +48,7 @@ to `auth.uid()`.
 ## External fallbacks
 
 - No OpenAI key: deterministic advisor responses remain active.
-- No Plaid credentials: manual accounts and seeded demo data remain active.
+- No Plaid credentials: the empty connect screen explains that the administrator
+  must finish the one-time Plaid configuration.
 - D1 unavailable: the browser keeps the current session usable and visibly
   reports session-only saving.

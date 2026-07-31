@@ -20,7 +20,7 @@
 Every user-owned table carries `user_id`. The active snapshot adapter stores the
 cohesive `StewardState` JSON in `steward_snapshots`, keyed by the authenticated
 email supplied by the hosting platform. This makes the current multi-surface
-demo atomic and resilient while the normalized schema establishes the migration
+workspace atomic and resilient while the normalized schema establishes the migration
 target.
 
 ## Migration
