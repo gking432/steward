@@ -284,7 +284,6 @@ function BankConnectGate({
   connect: () => void;
   loading?: boolean;
 }) {
-  const [privacyOpen, setPrivacyOpen] = useState(false);
   const busy = loading || status !== "idle";
   const label = loading
     ? "Opening your workspace…"
@@ -356,8 +355,8 @@ function BankConnectGate({
 
       <section className={cx("connect-mobile", loading && "is-launching")}>
         {loading ? (
-          <div className="ios-launch-state" role="status">
-            <div className="ios-app-icon" aria-hidden="true">
+          <div className="native-connect-loading" role="status">
+            <div className="native-connect-mark" aria-hidden="true">
               <div className="brand-mark">
                 <span />
                 <span />
@@ -365,73 +364,25 @@ function BankConnectGate({
               </div>
             </div>
             <strong>Steward</strong>
-            <small>Your financial OS</small>
-            <RefreshCw className="spin" size={17} />
+            <RefreshCw className="spin" size={18} />
           </div>
         ) : (
-          <>
-            <header className="ios-onboarding-bar">
-              <div className="ios-wordmark">
-                <div className="brand-mark" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-                <strong>Steward</strong>
-              </div>
-              <button onClick={() => setPrivacyOpen(true)}>Privacy</button>
-            </header>
-
-            <div className="ios-onboarding-scroll">
-              <div className="ios-progress" aria-label="Setup step 1 of 1">
+          <div className="native-connect">
+            <div className="native-connect-top">
+              <div className="brand-mark" aria-hidden="true">
                 <span />
-                <small>SET UP · 1 OF 1</small>
+                <span />
+                <span />
               </div>
-              <div className="ios-onboarding-copy">
-                <h1>Start with the money you already have.</h1>
-                <p>
-                  Connect your accounts once. Steward turns the activity into a
-                  clear plan—without asking you to build one from scratch.
-                </p>
-              </div>
-
-              <div className="ios-account-preview" aria-hidden="true">
-                <div className="ios-preview-top">
-                  <span>YOUR FINANCIAL PICTURE</span>
-                  <ShieldCheck size={18} />
-                </div>
-                <strong>Ready when you are</strong>
-                <p>Balances · bills · spending · cash flow</p>
-                <div className="ios-account-stack">
-                  <span><Landmark size={17} /></span>
-                  <span><WalletCards size={17} /></span>
-                  <span><TrendingUp size={17} /></span>
-                  <i />
-                </div>
-              </div>
-
-              <div className="ios-permission-group">
-                <div>
-                  <span className="ios-permission-icon"><Landmark size={18} /></span>
-                  <p><strong>Accounts and balances</strong><small>Know what is available now</small></p>
-                  <Check size={17} />
-                </div>
-                <div>
-                  <span className="ios-permission-icon"><WalletCards size={18} /></span>
-                  <p><strong>Transaction history</strong><small>Understand where money is going</small></p>
-                  <Check size={17} />
-                </div>
-                <div>
-                  <span className="ios-permission-icon"><Sparkles size={18} /></span>
-                  <p><strong>Your next best move</strong><small>Build guidance from real activity</small></p>
-                  <Check size={17} />
-                </div>
-              </div>
+              <strong>Steward</strong>
             </div>
-
-            <footer className="ios-connect-action">
+            <div className="native-connect-copy">
+              <h1>Let’s get started.</h1>
+              <p>Connect your bank so Steward can take care of the rest.</p>
+            </div>
+            <footer className="native-connect-action">
               {error && (
-                <div className="ios-connect-error" role="alert">
+                <div className="native-connect-error" role="alert">
                   <HelpCircle size={16} />
                   <span>{error}</span>
                 </div>
@@ -440,30 +391,9 @@ function BankConnectGate({
                 {busy ? <RefreshCw className="spin" size={18} /> : <Landmark size={18} />}
                 {label}
               </button>
-              <small><ShieldCheck size={13} /> Private and read-only</small>
+              <small>Securely powered by Plaid</small>
             </footer>
-
-            {privacyOpen && (
-              <>
-                <button
-                  className="ios-sheet-scrim"
-                  onClick={() => setPrivacyOpen(false)}
-                  aria-label="Close privacy details"
-                />
-                <aside className="ios-privacy-sheet" role="dialog" aria-modal="true" aria-label="Privacy details">
-                  <i className="ios-sheet-handle" />
-                  <div className="ios-sheet-icon"><ShieldCheck size={25} /></div>
-                  <h2>Your bank login stays with Plaid.</h2>
-                  <p>
-                    Steward receives read-only financial data. It cannot move
-                    money, and you can disconnect and delete your workspace at
-                    any time.
-                  </p>
-                  <button onClick={() => setPrivacyOpen(false)}>Done</button>
-                </aside>
-              </>
-            )}
-          </>
+          </div>
         )}
       </section>
     </main>

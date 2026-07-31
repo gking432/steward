@@ -5047,3 +5047,127 @@ table select { border-radius: 9px; background: var(--surface-muted); }
   .metric-card:nth-child(4) { animation-delay: 135ms; }
   @keyframes steward-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 }
+
+/* Native first-run handoff: no marketing, no preview, just start. */
+@media (max-width: 680px) {
+  .connect-gate {
+    min-height: 100svh;
+    background: #2f654d;
+    padding: 0;
+  }
+
+  .connect-desktop { display: none; }
+
+  .connect-mobile {
+    display: block;
+    min-height: 100svh;
+    background: #2f654d;
+    color: #f9faf7;
+  }
+
+  .native-connect,
+  .native-connect-loading {
+    min-height: 100svh;
+    padding: max(22px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  }
+
+  .native-connect {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .native-connect-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .native-connect-top .brand-mark,
+  .native-connect-mark .brand-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 11px;
+    background: #f9faf7;
+    box-shadow: none;
+  }
+
+  .native-connect-top .brand-mark span,
+  .native-connect-mark .brand-mark span {
+    background: #2f654d;
+  }
+
+  .native-connect-top strong,
+  .native-connect-loading > strong {
+    font-family: var(--font-dm-sans), sans-serif;
+    font-size: 19px;
+    font-weight: 650;
+    letter-spacing: -.05em;
+  }
+
+  .native-connect-copy {
+    align-self: center;
+    max-width: 290px;
+    padding-bottom: 8vh;
+  }
+
+  .native-connect-copy h1 {
+    font-family: var(--font-dm-sans), sans-serif;
+    font-size: clamp(42px, 12vw, 54px);
+    font-weight: 530;
+    line-height: .98;
+    letter-spacing: -.07em;
+  }
+
+  .native-connect-copy p {
+    margin-top: 15px;
+    color: rgba(249,250,247,.72);
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  .native-connect-action {
+    display: grid;
+    gap: 11px;
+  }
+
+  .native-connect-action > button {
+    display: flex;
+    width: 100%;
+    min-height: 56px;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border-radius: 18px;
+    background: #f9faf7;
+    color: #27563f;
+    font-size: 16px;
+    font-weight: 700;
+    box-shadow: none;
+  }
+
+  .native-connect-action > small {
+    color: rgba(249,250,247,.58);
+    text-align: center;
+    font-size: 11px;
+  }
+
+  .native-connect-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 12px;
+    background: rgba(255,255,255,.12);
+    padding: 10px 12px;
+    color: #fff;
+    font-size: 12px;
+  }
+
+  .native-connect-loading {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 13px;
+  }
+
+  .native-connect-loading .spin { color: rgba(249,250,247,.65); }
+}
