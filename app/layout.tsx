@@ -24,7 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
   );
   return {
     metadataBase,
-    title: "Steward — Your financial operating system",
+    title: "Steward — Your financial chief of staff",
     description:
       "Calm, explainable financial decisions grounded in your actual life.",
     icons: {
@@ -45,7 +45,7 @@ export async function generateMetadata(): Promise<Metadata> {
         "Advice over analytics. Steward turns your balances, bills, goals, and priorities into clear next actions.",
       images: [
         {
-          url: new URL("/og.png", metadataBase).toString(),
+          url: new URL("/og-v2.png", metadataBase).toString(),
           width: 1200,
           height: 630,
           alt: "Steward — Know what to do next with your money",
@@ -57,7 +57,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Steward — Know what to do next with your money",
       description:
         "Advice over analytics. Calm financial decisions grounded in your actual life.",
-      images: [new URL("/og.png", metadataBase).toString()],
+      images: [new URL("/og-v2.png", metadataBase).toString()],
     },
   };
 }
@@ -67,8 +67,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f7f4" },
-    { media: "(prefers-color-scheme: dark)", color: "#111713" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f5f1" },
+    { media: "(prefers-color-scheme: dark)", color: "#171715" },
   ],
 };
 

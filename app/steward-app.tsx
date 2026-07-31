@@ -1399,6 +1399,9 @@ function MobileOverview({
     month: "short",
     day: "numeric",
   }).format(new Date());
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const nextBill = state.bills
     .filter((bill) => !bill.paid)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
@@ -1414,18 +1417,17 @@ function MobileOverview({
     <section className="mobile-overview" aria-label="Today overview">
       <header className="mobile-overview-heading">
         <div>
-          <span>Today</span>
+          <span>{greeting}, {state.profile.name.split(" ")[0]}.</span>
           <small>{today}</small>
         </div>
         <p><i className={syncState === "Syncing" ? "is-syncing" : ""} /> {syncState}</p>
       </header>
 
       <button className="mobile-safe-card" onClick={() => go("plan")}>
-        <span className="mobile-card-label">SAFE TO SPEND</span>
+        <span className="mobile-card-label">AVAILABLE TO ENJOY</span>
         <strong>{money(tradeoffs.safeToSpend)}</strong>
         <p>
-          after {money(tradeoffs.billsBeforePayday)} for bills and your
-          {" "}{money(state.profile.minimumBuffer)} buffer
+          Bills are covered. Your {money(state.profile.minimumBuffer)} cushion stays protected.
         </p>
         <span className={`mobile-risk ${riskTone}`}>
           <ShieldCheck size={13} /> {tradeoffs.risk} risk
@@ -1457,7 +1459,7 @@ function MobileOverview({
           {nextAction ? <Sparkles size={19} /> : <CheckCircle2 size={19} />}
         </span>
         <span>
-          <small>UP NEXT</small>
+          <small>TODAY’S FOCUS</small>
           <strong>
             {nextAction?.title ?? "Nothing needs your attention"}
           </strong>

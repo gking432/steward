@@ -15,8 +15,8 @@ test("build contains Steward's decision briefing", async () => {
     ),
   ]);
 
-  assert.match(layout, /Steward — Your financial operating system/);
-  assert.match(layout, /og\.png/);
+  assert.match(layout, /Steward — Your financial chief of staff/);
+  assert.match(layout, /og-v2\.png/);
   assert.match(app, /Your live financial briefing/);
   assert.match(app, /Your next best move/);
   assert.match(app, /Safe to spend today/);
@@ -28,7 +28,7 @@ test("build contains Steward's decision briefing", async () => {
   assert.match(app, /ios-account-preview/);
   assert.match(app, /ios-connect-action/);
   assert.match(app, /function MobileOverview/);
-  assert.match(app, /SAFE TO SPEND/);
+  assert.match(app, /AVAILABLE TO ENJOY/);
   assert.match(css, /\.mobile-home-view/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(layout, /manifest\.webmanifest/);
