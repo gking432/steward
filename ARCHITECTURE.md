@@ -1,0 +1,53 @@
+# Steward architecture
+
+## Shape
+
+Steward is a server-rendered application shell with a rich client workspace.
+Critical financial calculations live in `lib/engine.ts`; they never depend on a
+language model. The UI is organized by user decisions rather than database
+entities:
+
+1. Today: current position and next action
+2. Plan: paycheck allocation, budgets, goals, bills
+3. Transactions: review and learning signals
+4. Projects and Wishlist: life context and purchase timing
+5. Advisor and Reviews: explanation and reflection
+
+## Request boundaries
+
+- `app/page.tsx` reads optional authenticated identity headers and renders a
+  realistic initial workspace.
+- `app/api/steward/route.ts` owns durable state. It derives the user key from
+  trusted server headers, validates writes with Zod, and records audit events.
+- `app/api/advisor/route.ts` accepts a bounded financial context and a verified
+  deterministic result. OpenAI can explain but cannot replace the result.
+- `app/api/plaid/*` creates Link tokens, exchanges public tokens, encrypts access
+  tokens, and incrementally synchronizes transactions.
+
+## Persistence choice
+
+The product brief suggested Supabase. The current Sites runtime has first-class
+D1 and identity support, so D1 was selected for the deployed version. This
+avoids two competing auth systems and keeps the application deployable without
+external setup.
+
+The application currently saves one atomic workspace snapshot per identity.
+Normalized tables are included in the migration so entity-level writes can
+replace the snapshot adapter without changing the UI or domain types.
+
+## Authentication
+
+Production identity is dispatch-owned Sign in with ChatGPT. The platform
+forwards authenticated email and optional display name. Every data route ignores
+client identity claims and derives ownership server-side.
+
+For a public consumer launch outside Sites, replace this adapter with Supabase
+Auth, maintain the same domain interfaces, and add PostgreSQL RLS policies keyed
+to `auth.uid()`.
+
+## External fallbacks
+
+- No OpenAI key: deterministic advisor responses remain active.
+- No Plaid credentials: manual accounts and seeded demo data remain active.
+- D1 unavailable: the browser keeps the current session usable and visibly
+  reports session-only saving.
