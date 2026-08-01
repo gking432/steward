@@ -273,6 +273,32 @@ export function planCycle(
   };
 }
 
+/**
+ * Free capacity once obligations have settled into their steady rate.
+ *
+ * The current cycle can be unrepresentative — bills landing before the next
+ * payday must be covered in full, so the first cycle carries catch-up that
+ * later cycles do not. Anything reasoning about *future* cycles should use this
+ * rather than re-deriving the current plan, which would re-charge every
+ * obligation from a zero reserve.
+ */
+export function steadyFreeCapacity(workspace: Workspace) {
+  const reserves = workspace.buckets
+    .filter((bucket) => bucket.kind === "reserve" && bucket.frequency !== "one-time")
+    .reduce(
+      (sum, bucket) =>
+        sum + (bucket.amountDue ?? 0) / cyclesPerPeriod(bucket.frequency, workspace),
+      0,
+    );
+  const spend = workspace.buckets
+    .filter((bucket) => bucket.kind === "spend")
+    .reduce((sum, bucket) => sum + (bucket.perCycle ?? 0), 0);
+  const commitments = workspace.claims
+    .filter((claim) => claim.status === "active" && claim.horizon === "commitment")
+    .reduce((sum, claim) => sum + (claim.pinned ?? 0), 0);
+  return round2(Math.max(0, workspace.profile.takeHomePay - reserves - spend - commitments));
+}
+
 /* ------------------------------------------------------------- allocator */
 
 export type ProposedAllocation = {

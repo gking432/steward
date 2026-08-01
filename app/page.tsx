@@ -1,6 +1,6 @@
 import { createEmptyState } from "../lib/initial-state";
 import { getChatGPTUser } from "./chatgpt-auth";
-import { StewardApp } from "./steward-app";
+import { StewardApp } from "./steward/app";
 
 export const dynamic = "force-dynamic";
 
