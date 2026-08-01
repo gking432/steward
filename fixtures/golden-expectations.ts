@@ -72,15 +72,27 @@ export const TARGET_V1 = {
   freeCapacity: 440,
 
   /**
-   * Ranked allocation of free capacity under the default policy: interest-aware
-   * suggestion for the card, then strict waterfall, then the spread limit.
+   * Ranked allocation of free capacity under `apr-bands-v1`.
+   *
+   * REVISED after Phase 2. The blueprint's payday narrative showed $250 / $100 /
+   * $90, which were illustrative round numbers written before the policy
+   * existed. These are the values the stated policy actually derives, and the
+   * policy is the contract — not the prose:
+   *
+   *   card      40% of $440 at 23.99% APR                      = $176.00
+   *   cushion   paced to reach $2,000 by its 2027-04 wantBy    =  $99.41
+   *   keyboard  indivisible, completes this cycle              =  $90.00
+   *   apartment remainder                                      =  $74.59
+   *   golf net  queued — a start date, never a token amount    =   $0.00
+   *
+   * Changing any of these means changing the policy deliberately.
    */
   allocation: [
-    { rank: 1, claim: "Card payoff", amount: 250, outcome: "paid off 2027-01-07" },
-    { rank: 2, claim: "Cushion", amount: 100, outcome: "$2,000 by 2027-04" },
-    { rank: 3, claim: "Logitech keyboard", amount: 90, outcome: "complete this cycle" },
-    { rank: 4, claim: "Apartment", amount: 0, outcome: "starts 2026-08-24" },
-    { rank: 5, claim: "Golf net", amount: 0, outcome: "starts 2026-09-07" },
+    { rank: 1, claim: "Travel Rewards Card", amount: 176, outcome: "policy cap at 23.99% APR" },
+    { rank: 2, claim: "Cushion", amount: 99.41, outcome: "paced to its target date" },
+    { rank: 3, claim: "Logitech keyboard", amount: 90, outcome: "completes this cycle" },
+    { rank: 4, claim: "Apartment", amount: 74.59, outcome: "receives the remainder" },
+    { rank: 5, claim: "Golf net", amount: 0, outcome: "queued, starts a later cycle" },
   ],
 
   /** Invariants that must hold for ANY workspace, not just this fixture. */
