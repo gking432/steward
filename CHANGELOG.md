@@ -1,5 +1,18 @@
 # Changelog
 
+## Financial chief-of-staff pivot
+
+- Rebuilt Today around five immediate decisions: Am I okay, what is actually
+  available, what is the biggest pressure, what should happen today, and can I
+  buy this.
+- Added deterministic financial-health, bottleneck, daily-decision, and
+  BUY / WAIT / DO NOT BUY affordability engines.
+- Upgraded recommendations with timing, tradeoffs, confidence, related context,
+  and expected outcomes.
+- Reframed Advisor prompts and Wishlist recommendations around decisions rather
+  than transaction reporting.
+- Reordered mobile navigation around Today, Plan, Projects, and Advisor.
+
 ## 2026-07-30
 
 - Initialized Steward as a new full-stack financial operating system.

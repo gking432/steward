@@ -4,6 +4,9 @@
 
 - Installable mobile-first PWA and preserved desktop application shell
 - Action-first daily briefing
+- Decision-center Today screen answering health, Available Cash, bottleneck,
+  next action, and affordability
+- Deterministic financial-health, bottleneck, daily-decision, and affordability engines
 - Deterministic safe-to-spend and paycheck calculations
 - Accounts, transactions, category correction, bulk categorization
 - Bills, budgets, goals, projects, tasks, and wishlist

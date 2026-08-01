@@ -5,17 +5,18 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 
 test("build contains Steward's decision briefing", async () => {
-  const [layout, app, page, css, manifest] = await Promise.all([
+  const [layout, app, page, css, engine, manifest] = await Promise.all([
     readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/steward-app.tsx", root), "utf8"),
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("lib/engine.ts", root), "utf8"),
     readFile(new URL("dist/server/vinext-server.json", root), "utf8").catch(
       () => "",
     ),
   ]);
 
-  assert.match(layout, /Steward — Your financial operating system/);
+  assert.match(layout, /Steward — Your AI financial chief of staff/);
   assert.match(layout, /og\.png/);
   assert.match(app, /Your live financial briefing/);
   assert.match(app, /Your next best move/);
@@ -28,7 +29,13 @@ test("build contains Steward's decision briefing", async () => {
   assert.match(app, /native-connect/);
   assert.match(app, /Let’s get started/);
   assert.match(app, /function MobileOverview/);
-  assert.match(app, /SAFE TO SPEND/);
+  assert.match(app, /AVAILABLE CASH/);
+  assert.match(app, /BIGGEST PRESSURE/);
+  assert.match(app, /TODAY’S MOVE/);
+  assert.match(app, /CAN I BUY THIS\?/);
+assert.match(engine, /verdict: "BUY"/);
+assert.match(engine, /verdict: "WAIT"/);
+assert.match(engine, /verdict: "DO NOT BUY"/);
   assert.match(css, /\.mobile-home-view/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(layout, /manifest\.webmanifest/);

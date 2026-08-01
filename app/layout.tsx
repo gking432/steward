@@ -24,7 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
   );
   return {
     metadataBase,
-    title: "Steward — Your financial operating system",
+    title: "Steward — Your AI financial chief of staff",
     description:
       "Calm, explainable financial decisions grounded in your actual life.",
     icons: {
@@ -35,7 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
     manifest: "/manifest.webmanifest",
     appleWebApp: {
       capable: true,
-      statusBarStyle: "default",
+      statusBarStyle: "black-translucent",
       title: "Steward",
     },
     openGraph: {
@@ -67,8 +67,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f7f4" },
-    { media: "(prefers-color-scheme: dark)", color: "#111713" },
+    { media: "(prefers-color-scheme: light)", color: "#2f654d" },
+    { media: "(prefers-color-scheme: dark)", color: "#2f654d" },
   ],
 };
 

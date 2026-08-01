@@ -51,12 +51,16 @@ import {
 } from "react";
 import { createEmptyState } from "../lib/initial-state";
 import {
+  affordabilityDecision,
   calculateTradeoffs,
+  dailyDecision,
   debtPayoffPlan,
   daysUntil,
   deterministicCategory,
+  financialHealth,
   money,
   paycheckAllocation,
+  primaryBottleneck,
   spendingByCategory,
 } from "../lib/engine";
 import { suggestBudgets } from "../lib/financial-import";
@@ -507,6 +511,9 @@ export function StewardApp({
   const tradeoffs = useMemo(() => calculateTradeoffs(state), [state]);
   const allocation = useMemo(() => paycheckAllocation(state), [state]);
   const debtPlan = useMemo(() => debtPayoffPlan(state), [state]);
+  const health = useMemo(() => financialHealth(state), [state]);
+  const bottleneck = useMemo(() => primaryBottleneck(state), [state]);
+  const todayDecision = useMemo(() => dailyDecision(state), [state]);
   const categorySpending = useMemo(
     () => spendingByCategory(state.transactions),
     [state.transactions],
@@ -560,16 +567,14 @@ export function StewardApp({
     );
     if (item || /afford|buy|purchase/.test(lower)) {
       const price = item?.price ?? Number(lower.match(/\$?(\d+)/)?.[1] ?? 0);
-      const affordable = price > 0 && price <= tradeoffs.safeToSpend;
+      const decision = affordabilityDecision(state, price);
       return {
-        text: affordable
-          ? `Yes—you can spend ${money(price)} without interfering with bills, required debt payments, savings, or your ${money(state.profile.minimumBuffer)} checking buffer.`
-          : price > 0
-            ? `I’d wait. ${money(price)} is above today’s ${money(tradeoffs.safeToSpend)} safe-to-spend amount.`
-            : `Your safe-to-spend amount is ${money(tradeoffs.safeToSpend)}. Tell me the item or price and I’ll compare it with your current priorities.`,
+        text: price > 0
+          ? `${decision.verdict}. ${decision.reason}`
+          : `Your available cash is ${money(tradeoffs.availableCash)}. Tell me the item or price and I’ll compare it with bills, debt, goals, projects, and your buffer.`,
         detail: item
-          ? item.reason
-          : `Known: ${money(tradeoffs.liquidCash)} liquid cash and ${money(tradeoffs.billsBeforePayday)} of bills before payday. Assumption: no untracked obligations.`,
+          ? `${decision.tradeoffs} Suggested timing: ${decision.suggestedDate}. ${decision.alternative}`
+          : `Known: ${money(tradeoffs.liquidCash)} liquid cash and ${money(tradeoffs.billsBeforePayday)} of bills before payday. ${decision.tradeoffs}`,
       };
     }
     if (/bill|due|obligation/.test(lower)) {
@@ -622,7 +627,7 @@ export function StewardApp({
     }
     if (/why|low|changed/.test(lower)) {
       return {
-        text: `Your current safe-to-spend calculation starts with ${money(tradeoffs.liquidCash)}, then protects ${money(tradeoffs.billsBeforePayday)} in upcoming bills and your ${money(state.profile.minimumBuffer)} cash buffer.`,
+        text: `Your available-cash calculation starts with ${money(tradeoffs.liquidCash)}, then protects ${money(tradeoffs.billsBeforePayday)} in upcoming bills, required debt payments, savings, and your ${money(state.profile.minimumBuffer)} cash buffer.`,
         detail:
           "Connected balances and recorded obligations drive this result; pending activity can still change it.",
       };
@@ -655,11 +660,14 @@ export function StewardApp({
           prompt: clean,
           deterministicAnswer: fallback.text,
           context: {
-            safeToSpend: tradeoffs.safeToSpend,
-            availableCash: tradeoffs.liquidCash,
+            availableCash: tradeoffs.availableCash,
+            liquidCash: tradeoffs.liquidCash,
             billsBeforePayday: tradeoffs.billsBeforePayday,
             minimumBuffer: state.profile.minimumBuffer,
             nextPayday: state.profile.nextPayday,
+            financialHealth: health,
+            bottleneck,
+            todayDecision,
             debt: {
               totalBalance: debtPlan.totalBalance,
               minimumPayments: debtPlan.minimumPayments,
@@ -679,10 +687,16 @@ export function StewardApp({
               target: goal.target,
               current: goal.current,
             })),
+            projects: state.projects.map((project) => ({
+              name: project.name,
+              priority: project.priority,
+              remaining: Math.max(0, project.estimatedCost - project.actualCost),
+              nextAction: project.nextAction,
+            })),
             wishlist: state.wishlist.map((item) => ({
               name: item.name,
               price: item.price,
-              status: item.status,
+              recommendation: affordabilityDecision(state, item.price).verdict,
             })),
           },
         }),
@@ -898,8 +912,11 @@ export function StewardApp({
               <MobileOverview
                 state={state}
                 tradeoffs={tradeoffs}
-                recommendations={activeRecommendations}
+                health={health}
+                bottleneck={bottleneck}
+                decision={todayDecision}
                 go={go}
+                connect={connectPlaid}
                 syncState={bankStatus === "syncing" ? "Syncing" : "Up to date"}
               />
             </div>
@@ -1016,8 +1033,8 @@ export function StewardApp({
   }[] = [
     { id: "home", label: "Today", icon: Home },
     { id: "plan", label: "Plan", icon: ListChecks },
-    { id: "transactions", label: "Activity", icon: WalletCards },
     { id: "projects", label: "Projects", icon: BriefcaseBusiness },
+    { id: "advisor", label: "Advisor", icon: Sparkles },
     { id: "more", label: "More", icon: MoreHorizontal },
   ];
 
@@ -1303,7 +1320,7 @@ export function StewardApp({
             {navItems
               .filter(
                 (item) =>
-                  !["home", "plan", "transactions", "projects"].includes(
+                  !["home", "plan", "projects", "advisor"].includes(
                     item.id,
                   ),
               )
@@ -1367,14 +1384,20 @@ function SectionHeader({
 function MobileOverview({
   state,
   tradeoffs,
-  recommendations,
+  health,
+  bottleneck,
+  decision,
   go,
+  connect,
   syncState,
 }: {
   state: StewardState;
   tradeoffs: ReturnType<typeof calculateTradeoffs>;
-  recommendations: Recommendation[];
+  health: ReturnType<typeof financialHealth>;
+  bottleneck: ReturnType<typeof primaryBottleneck>;
+  decision: ReturnType<typeof dailyDecision>;
   go: (view: NavView) => void;
+  connect: () => void;
   syncState: string;
 }) {
   const today = new Intl.DateTimeFormat("en-US", {
@@ -1382,90 +1405,69 @@ function MobileOverview({
     month: "short",
     day: "numeric",
   }).format(new Date());
-  const nextBill = state.bills
-    .filter((bill) => !bill.paid)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
-  const nextAction = recommendations[0];
-  const riskTone =
-    tradeoffs.risk === "Low"
-      ? "good"
-      : tradeoffs.risk === "Moderate"
-        ? "watch"
-        : "alert";
+  const purchase = [...state.wishlist]
+    .filter((item) => !["Purchased", "Rejected"].includes(item.status))
+    .sort((a, b) => {
+      const priority = { High: 0, Medium: 1, Low: 2 };
+      return priority[a.priority] - priority[b.priority] || a.price - b.price;
+    })[0];
+  const purchaseDecision = purchase
+    ? affordabilityDecision(state, purchase.price)
+    : null;
+  const connected = state.accounts.some((account) => !account.archived);
 
   return (
-    <section className="mobile-overview" aria-label="Today overview">
-      <header className="mobile-overview-heading">
+    <section className="mobile-chief" aria-label="Today decision center">
+      <header className="mobile-chief-heading">
         <div>
           <span>Today</span>
           <small>{today}</small>
         </div>
-        <p><i className={syncState === "Syncing" ? "is-syncing" : ""} /> {syncState}</p>
+        <p className={`health-status ${health.tone}`}>
+          <i className={syncState === "Syncing" ? "is-syncing" : ""} />
+          {health.status}
+        </p>
       </header>
 
-      <button className="mobile-safe-card" onClick={() => go("plan")}>
-        <span className="mobile-card-label">SAFE TO SPEND</span>
-        <strong>{money(tradeoffs.safeToSpend)}</strong>
-        <p>
-          after {money(tradeoffs.billsBeforePayday)} for bills and your
-          {" "}{money(state.profile.minimumBuffer)} buffer
-        </p>
-        <span className={`mobile-risk ${riskTone}`}>
-          <ShieldCheck size={13} /> {tradeoffs.risk} risk
-        </span>
-        <ArrowRight size={18} aria-hidden="true" />
+      <button className="available-cash-hero" onClick={() => connected ? go("plan") : connect()}>
+        <span>AVAILABLE CASH</span>
+        <strong>{money(tradeoffs.availableCash)}</strong>
+        <p>{health.summary}</p>
+        <small>
+          After bills · debt minimums · savings · {money(state.profile.minimumBuffer)} buffer
+        </small>
+        <ArrowRight size={18} />
       </button>
-
-      <div className="mobile-overview-stats">
-        <button onClick={() => go("accounts")}>
-          <span className="mobile-stat-icon cash"><WalletCards size={17} /></span>
-          <small>Available now</small>
-          <strong>{money(tradeoffs.liquidCash)}</strong>
-        </button>
-        <button onClick={() => go("plan")}>
-          <span className="mobile-stat-icon calendar"><CalendarClock size={17} /></span>
-          <small>{nextBill ? "Next bill" : "Bills"}</small>
-          <strong>
-            {nextBill ? money(nextBill.amount) : "None due"}
-          </strong>
-          {nextBill && <em>{nextBill.name}</em>}
-        </button>
-      </div>
 
       <button
-        className="mobile-next-action"
-        onClick={() => go(nextAction ? "advisor" : "transactions")}
+        className={`financial-bottleneck ${bottleneck.type}`}
+        onClick={() => go(bottleneck.type === "debt" ? "debt" : "advisor")}
       >
-        <span className={`mobile-action-icon ${nextAction?.type ?? "clear"}`}>
-          {nextAction ? <Sparkles size={19} /> : <CheckCircle2 size={19} />}
-        </span>
+        <span className="chief-icon"><Gauge size={18} /></span>
         <span>
-          <small>UP NEXT</small>
-          <strong>
-            {nextAction?.title ?? "Nothing needs your attention"}
-          </strong>
-          <em>
-            {nextAction?.description ??
-              "Your connected accounts are up to date."}
-          </em>
+          <small>BIGGEST PRESSURE</small>
+          <strong>{bottleneck.title}</strong>
+          <em>{bottleneck.reason}</em>
         </span>
-        <ArrowRight size={18} aria-hidden="true" />
+        <ArrowRight size={17} />
       </button>
 
-      <nav className="mobile-overview-shortcuts" aria-label="Today shortcuts">
-        <button onClick={() => go("transactions")}>
-          <WalletCards size={19} />
-          <span>Activity</span>
-        </button>
-        <button onClick={() => go("plan")}>
-          <ListChecks size={19} />
-          <span>Plan</span>
-        </button>
-        <button onClick={() => go("advisor")}>
-          <Sparkles size={19} />
-          <span>Ask</span>
-        </button>
-      </nav>
+      <button className="today-move" onClick={() => connected ? go("advisor") : connect()}>
+        <span className="today-move-top"><small>TODAY’S MOVE</small><b>{Math.round(decision.confidence * 100)}% confident</b></span>
+        <strong>{decision.title}</strong>
+        <p>{decision.reason}</p>
+        <span className="today-move-foot"><b>{decision.timing}</b><em>{decision.expectedOutcome}</em><ArrowRight size={17} /></span>
+      </button>
+
+      <button className="affordability-entry" onClick={() => go(purchase ? "wishlist" : "advisor")}>
+        <span className="chief-icon"><ShoppingBag size={18} /></span>
+        <span>
+          <small>CAN I BUY THIS?</small>
+          <strong>{purchase ? purchase.name : "Ask about a purchase"}</strong>
+          <em>{purchaseDecision ? `${purchaseDecision.verdict} · ${purchaseDecision.reason}` : "Get a clear buy, wait, or do-not-buy answer."}</em>
+        </span>
+        <ArrowRight size={17} />
+      </button>
     </section>
   );
 }
@@ -1658,19 +1660,26 @@ function MobileNativeView({
         </>}
 
         {route === "wishlist" && <>
-          {state.wishlist.map((item) => (
-            <button className={`native-wish ${item.status === "Recommended now" ? "recommended" : ""}`} key={item.id} onClick={() => { go("advisor"); void sendAdvisor(`Can I afford the ${item.name} for ${money(item.price)}?`); }}>
-              <span className="native-row-icon wishes"><ShoppingBag size={17} /></span>
-              <span><b>{item.name}</b><small>{item.status === "Recommended now" ? "A good time to buy" : item.reason}</small></span>
-              <strong>{money(item.price)}</strong><ArrowRight size={16} />
-            </button>
-          ))}
+          {state.wishlist.map((item) => {
+            const affordability = affordabilityDecision(state, item.price);
+            return (
+              <button className={`native-wish ${affordability.verdict === "BUY" ? "recommended" : ""}`} key={item.id} onClick={() => { go("advisor"); void sendAdvisor(`Can I afford the ${item.name} for ${money(item.price)}?`); }}>
+                <span className="native-row-icon wishes"><ShoppingBag size={17} /></span>
+                <span><b>{item.name}</b><small>{affordability.verdict} · {affordability.reason}</small></span>
+                <strong>{money(item.price)}</strong><ArrowRight size={16} />
+              </button>
+            );
+          })}
         </>}
 
         {route === "debt" && <>
           <section className="native-debt-total">
             <span>TRACKED DEBT</span><strong>{money(debtPlan.totalBalance)}</strong>
-            <p>{debtPlan.estimatedMonths ? `${debtPlan.estimatedMonths} months on the current path` : "Add APR and minimums to project payoff"}</p>
+            <p>
+              {debtPlan.estimatedMonths
+                ? `${debtPlan.estimatedMonths} months on the current path${debtPlan.estimatedInterestSaved ? ` · ${money(debtPlan.estimatedInterestSaved)} interest avoided` : ""}`
+                : "Add APR and minimums to project payoff"}
+            </p>
           </section>
           <section className="native-group">
             {debtPlan.debts.map((debt) => (
@@ -4198,7 +4207,7 @@ function EntityModal({
           {onboardingStep === 3 && (
             <div className="onboarding-result">
               <span><Sparkles size={22} /></span>
-              <h3>{money(calculateTradeoffs(state).safeToSpend)} is safely available today</h3>
+                  <h3>{money(calculateTradeoffs(state).availableCash)} is available after your protections</h3>
               <p>
                 Steward has reserved upcoming bills, required payments,
                 savings, and your {money(state.profile.minimumBuffer)} buffer.
@@ -4329,11 +4338,11 @@ function EntityModal({
         ...current,
         projects: [...current.projects, project],
       }));
-    }
-    if (modal === "wishlist") {
-      const price = Number(data.get("price"));
-      const safe = calculateTradeoffs(state).safeToSpend >= price;
-      const item: WishlistItem = {
+        }
+        if (modal === "wishlist") {
+          const price = Number(data.get("price"));
+          const purchaseDecision = affordabilityDecision(state, price);
+          const item: WishlistItem = {
         id: uid("wish"),
         name: String(data.get("name")),
         projectId: String(data.get("projectId")) || undefined,
@@ -4341,13 +4350,11 @@ function EntityModal({
         priority: data.get("priority") as WishlistItem["priority"],
         price,
         desiredDate: String(data.get("desiredDate")),
-        safeDate: safe
-          ? new Date().toISOString().slice(0, 10)
-          : state.profile.nextPayday,
-        status: safe ? "Recommended now" : "Wait",
-        reason: safe
-          ? "This fits the current safe-to-spend amount without disturbing protected priorities."
-          : "Waiting until the next paycheck keeps the protected buffer intact.",
+            safeDate: purchaseDecision.verdict === "BUY"
+              ? new Date().toISOString().slice(0, 10)
+              : state.profile.nextPayday,
+            status: purchaseDecision.verdict === "BUY" ? "Recommended now" : "Wait",
+            reason: purchaseDecision.reason,
         url: String(data.get("url")) || undefined,
       };
       setState((current) => ({
