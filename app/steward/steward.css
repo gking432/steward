@@ -802,3 +802,38 @@
 .sw-app .sw-answer.yes-but { color: var(--green); }
 .sw-app .sw-answer.wait { color: var(--amber); }
 .sw-primary, .sw-primary strong { color: #fff; }
+
+/* ------------------------------------------------- correction & debt --- */
+
+.sw-tx { width: 100%; background: none; text-align: left; }
+.sw-tx.needs-review .sw-tx-mark { background: var(--amber-soft); color: var(--amber); }
+
+.sw-correct {
+  display: grid;
+  gap: 9px;
+  margin: 2px 0 10px;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  padding: 12px 13px;
+}
+.sw-correct-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.sw-correct .sw-pick { font-size: 11.5px; padding: 7px 11px; }
+
+.sw-scenarios { display: grid; gap: 8px; }
+.sw-scenario {
+  display: grid;
+  align-items: center;
+  gap: 4px 12px;
+  grid-template-columns: auto 1fr;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  padding: 12px 13px;
+  text-align: left;
+}
+.sw-scenario.current { border-color: var(--green); background: var(--green-soft); }
+.sw-scenario strong { font-size: 16px; letter-spacing: -0.02em; }
+.sw-scenario strong em { display: block; color: var(--text-soft); font-size: 10.5px; font-style: normal; font-weight: 600; }
+.sw-scenario > span { font-size: 13px; font-weight: 650; text-align: right; }
+.sw-scenario small { grid-column: 1 / -1; color: var(--text-soft); font-size: 11.5px; }
+.sw-scenario.current small { color: var(--green); }

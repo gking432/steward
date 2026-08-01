@@ -369,3 +369,75 @@ test("the engine never reads the clock implicitly", () => {
   const other = JSON.stringify(planCycle(ws(), "2026-09-02"));
   assert.notEqual(a, other, "a different `today` must produce a different plan");
 });
+
+/* ------------------------------------------------- debt & correction ---- */
+
+test("payoff scenarios answer what an extra payment buys", async () => {
+  const { debtDetail } = await import("../lib/model/decide");
+  const workspace = ws();
+  const card = workspace.claims.find((claim) => claim.name === "Travel Rewards Card")!;
+  const detail = debtDetail(workspace, card.id, FIXTURE_TODAY)!;
+
+  assert.equal(detail.apr, 23.99);
+  assert.equal(detail.minimum, 78, "the minimum stays an obligation, not part of the scenario");
+  assert.ok(detail.options.length >= 2);
+
+  // Paying more must arrive sooner and cost less interest — the whole point.
+  const faster = detail.options[detail.options.length - 1];
+  assert.ok(faster.perCycle > detail.current.perCycle);
+  if (detail.current.arrivalDate && faster.arrivalDate) {
+    assert.ok(faster.arrivalDate <= detail.current.arrivalDate);
+    assert.ok(faster.totalInterest <= detail.current.totalInterest);
+  }
+});
+
+test("a debt with no rate on file gets no projected date", async () => {
+  const { debtDetail } = await import("../lib/model/decide");
+  const workspace = ws();
+  workspace.claims = workspace.claims.map((claim) =>
+    claim.kind === "payoff" ? { ...claim, delayCost: { type: "none" as const } } : claim,
+  );
+  const card = workspace.claims.find((claim) => claim.kind === "payoff")!;
+  const detail = debtDetail(workspace, card.id, FIXTURE_TODAY)!;
+  assert.equal(detail.apr, null);
+  assert.equal(detail.current.arrivalDate, null);
+});
+
+test("correcting a category updates the bucket it belongs to", async () => {
+  const { recategorise } = await import("../lib/model/decide");
+  const workspace = ws();
+  const cycle = currentCycle(workspace, FIXTURE_TODAY)!;
+  const dining = workspace.buckets.find((bucket) => bucket.name === "Dining")!;
+  const before = bucketActivity(workspace, dining, cycle).spent;
+
+  const circleK = workspace.transactions.find(
+    (row) => row.merchant === "Circle K" && row.date >= cycle.start,
+  )!;
+  const after = recategorise(workspace, circleK.id, "Groceries", false);
+
+  assert.equal(
+    bucketActivity(after, dining, cycle).spent,
+    Math.round((before - circleK.amount) * 100) / 100,
+    "the number the user was looking at moves immediately",
+  );
+});
+
+test("remembering a correction applies it to that merchant's other rows", async () => {
+  const { recategorise } = await import("../lib/model/decide");
+  const workspace = ws();
+  const circleK = workspace.transactions.find((row) => row.merchant === "Circle K")!;
+  const after = recategorise(workspace, circleK.id, "Groceries", true);
+  const remaining = after.transactions.filter(
+    (row) => row.merchant === "Circle K" && row.category !== "Groceries",
+  );
+  assert.equal(remaining.length, 0);
+});
+
+test("a correction is recorded as a reusable rule", async () => {
+  const { recategorise } = await import("../lib/model/decide");
+  const { toLegacy, toModel } = await import("../lib/model/convert");
+  const workspace = ws();
+  const circleK = workspace.transactions.find((row) => row.merchant === "Circle K")!;
+  const after = toModel(toLegacy(recategorise(workspace, circleK.id, "Groceries", true)));
+  assert.ok(after.rules.some((rule) => rule.merchantKey === "circlek" && rule.category === "Groceries"));
+});

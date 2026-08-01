@@ -44,8 +44,10 @@ import {
   claimFromPurchase,
   confirmProposal,
   dailyInsights,
+  debtDetail,
   evaluatePurchase,
   progressSummary,
+  recategorise,
   supersedeStaleProposals,
   type PaydayProposal,
   type Verdict,
@@ -237,11 +239,13 @@ function PathScreen({
   today,
   update,
   onAdd,
+  onOpenDebt,
 }: {
   workspace: Workspace;
   today: string;
   update: (next: (current: Workspace) => Workspace) => void;
   onAdd: () => void;
+  onOpenDebt: (claimId: string) => void;
 }) {
   const plan = planCycle(workspace, today);
   const arrivals = useMemo(() => projectArrivals(workspace, today), [workspace, today]);
@@ -341,6 +345,11 @@ function PathScreen({
                     </div>
                   </div>
                   <div className="sw-claim-actions">
+                    {claim.kind === "payoff" && (
+                      <button onClick={() => onOpenDebt(claim.id)} aria-label={`${claim.name} detail`}>
+                        <CreditCard size={14} />
+                      </button>
+                    )}
                     <button onClick={() => move(claim, -1)} aria-label={`Move ${claim.name} up`} disabled={index === 0}>
                       <ChevronUp size={15} />
                     </button>
@@ -400,15 +409,35 @@ function LedgerScreen({
   today,
   focusBucket,
   clearFocus,
+  update,
 }: {
   workspace: Workspace;
   today: string;
   focusBucket: Bucket | null;
   clearFocus: () => void;
+  update: (next: (current: Workspace) => Workspace) => void;
 }) {
+  const [editing, setEditing] = useState<string | null>(null);
   const cycle = currentCycle(workspace, today);
   const plan = planCycle(workspace, today);
   const [open, setOpen] = useState<string | null>(focusBucket?.id ?? null);
+  const categories = Array.from(
+    new Set([
+      ...workspace.buckets.filter((b) => b.kind === "spend").map((b) => b.category ?? b.name),
+      ...workspace.transactions.map((t) => t.category),
+    ]),
+  ).filter(Boolean).sort();
+
+  /**
+   * Correcting a category is the whole promise of Ledger: you can see where
+   * money went AND fix it when Steward got it wrong. Remembering applies the
+   * same category to every transaction from that merchant, so the numbers all
+   * move at once and the correction is visibly worth making.
+   */
+  const correct = (transactionId: string, category: string, remember: boolean) => {
+    update((current) => recategorise(current, transactionId, category, remember));
+    setEditing(null);
+  };
 
   if (!cycle || !plan) return <Empty title="No cycle" body="Add your pay schedule first." />;
 
@@ -518,15 +547,45 @@ function LedgerScreen({
         <header className="sw-block-head"><h2>All activity</h2></header>
         <div className="sw-tx-list">
           {[...rows].sort((a, b) => b.date.localeCompare(a.date)).map((row) => (
-            <div className="sw-tx" key={row.id}>
-              <span className="sw-tx-mark">{row.merchant.slice(0, 1).toUpperCase()}</span>
-              <div>
-                <strong>{row.merchant}</strong>
-                <small>{row.category} · {row.date}</small>
-              </div>
-              <b className={row.type === "income" ? "pos" : ""}>
-                {row.type === "income" ? "+" : "−"}{formatMoney(row.amount)}
-              </b>
+            <div key={row.id}>
+              <button
+                className={row.needsReview ? "sw-tx needs-review" : "sw-tx"}
+                onClick={() => setEditing(editing === row.id ? null : row.id)}
+              >
+                <span className="sw-tx-mark">{row.merchant.slice(0, 1).toUpperCase()}</span>
+                <div>
+                  <strong>{row.merchant}</strong>
+                  <small>
+                    {row.category} · {row.date}
+                    {row.needsReview ? " · needs a category" : ""}
+                  </small>
+                </div>
+                <b className={row.type === "income" ? "pos" : ""}>
+                  {row.type === "income" ? "+" : "−"}{formatMoney(row.amount)}
+                </b>
+              </button>
+              {editing === row.id && (
+                <div className="sw-correct">
+                  <span className="sw-eyebrow">Put this in</span>
+                  <div className="sw-correct-options">
+                    {categories.map((category) => (
+                      <button
+                        key={category}
+                        className={category === row.category ? "sw-pick active" : "sw-pick"}
+                        onClick={() => correct(row.id, category, false)}
+                      >
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className="sw-secondary"
+                    onClick={() => correct(row.id, row.category, true)}
+                  >
+                    Always put {row.merchant} in {row.category}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
           {!rows.length && <Empty title="No activity this cycle" body="Transactions appear here as they import." />}
@@ -636,6 +695,119 @@ function BuySheet({
 }
 
 
+
+
+/* ---------------------------------------------------------------- DEBT -- */
+
+/**
+ * Debt detail.
+ *
+ * The scenario control is the point: "what does an extra $50 buy me?" is the
+ * question that actually keeps someone paying down a balance, and it is the
+ * one every budgeting app leaves unanswered. Every figure is simulated by the
+ * engine on the stored APR — when there is no APR, Steward says so instead of
+ * printing a date it cannot defend.
+ */
+function DebtSheet({
+  workspace,
+  claimId,
+  today,
+  onClose,
+  update,
+}: {
+  workspace: Workspace;
+  claimId: string;
+  today: string;
+  onClose: () => void;
+  update: (next: (current: Workspace) => Workspace) => void;
+}) {
+  const detail = debtDetail(workspace, claimId, today);
+  if (!detail) return null;
+
+  const pin = (amount: number) =>
+    update((current) => ({
+      ...current,
+      claims: current.claims.map((claim) =>
+        claim.id === claimId ? { ...claim, pinned: amount } : claim,
+      ),
+    }));
+
+  const percentPaid =
+    detail.claim.targetAmount > 0
+      ? (detail.claim.fundedAmount / detail.claim.targetAmount) * 100
+      : 0;
+
+  return (
+    <div className="sw-sheet-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="sw-sheet" role="dialog" aria-modal="true" aria-label={detail.claim.name}
+        onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <h2>{detail.claim.name}</h2>
+          <button onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </header>
+
+        <div className="sw-verdict">
+          <div>
+            <span className="sw-eyebrow">Still owed</span>
+            <strong className="sw-huge">{formatMoney(detail.balance)}</strong>
+            <Bar percent={percentPaid} tone="slate" />
+            <p className="sw-muted">
+              {formatMoney(detail.claim.fundedAmount)} paid down ·{" "}
+              {detail.apr === null ? "no rate on file" : `${detail.apr.toFixed(2)}% APR`}
+            </p>
+          </div>
+
+          {detail.minimum > 0 && (
+            <p className="sw-note">
+              The {formatMoney(detail.minimum)} minimum is already handled in your bills. This is
+              the extra on top.
+            </p>
+          )}
+
+          {detail.apr === null ? (
+            <p className="sw-note">
+              Add this account&apos;s interest rate and Steward can project a payoff date. It
+              won&apos;t guess at one.
+            </p>
+          ) : (
+            <>
+              <span className="sw-eyebrow">What each pace costs</span>
+              <div className="sw-scenarios">
+                {[detail.current, ...detail.options].map((option, index) => {
+                  const base = detail.current;
+                  const saved = base.totalInterest - option.totalInterest;
+                  return (
+                    <button
+                      key={option.perCycle}
+                      className={index === 0 ? "sw-scenario current" : "sw-scenario"}
+                      onClick={() => pin(option.perCycle)}
+                    >
+                      <strong>{formatMoney(option.perCycle)}<em>a paycheck</em></strong>
+                      <span>
+                        {option.beyondHorizon ? "over a year out" : formatDate(option.arrivalDate)}
+                      </span>
+                      <small>
+                        {index === 0
+                          ? "your current pace"
+                          : saved > 0
+                            ? `saves ${formatMoney(saved)} in interest`
+                            : "no interest saved"}
+                      </small>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="sw-muted sw-fineprint">
+                Projected on the rate on file. Rates, minimums and fees can change — check your
+                statement. Educational planning information, not financial advice.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------------------------- ADD SOMETHING -------- */
 
@@ -1041,6 +1213,7 @@ export function StewardApp({
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
   const [paydayDismissed, setPaydayDismissed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [debtClaimId, setDebtClaimId] = useState<string | null>(null);
   const plaid = usePlaidConnect(setWorkspaceFromServer);
   const today = todayISO(fixedToday);
 
@@ -1116,6 +1289,7 @@ export function StewardApp({
             today={today}
             update={update}
             onAdd={() => setAddOpen(true)}
+            onOpenDebt={setDebtClaimId}
           />
         )}
         {tab === "ledger" && (
@@ -1124,6 +1298,7 @@ export function StewardApp({
             today={today}
             focusBucket={focusBucket}
             clearFocus={() => setFocusBucket(null)}
+            update={update}
           />
         )}
       </main>
@@ -1145,6 +1320,16 @@ export function StewardApp({
 
       {buyOpen && (
         <BuySheet workspace={workspace} today={today} update={update} onClose={() => setBuyOpen(false)} />
+      )}
+
+      {debtClaimId && (
+        <DebtSheet
+          workspace={workspace}
+          claimId={debtClaimId}
+          today={today}
+          update={update}
+          onClose={() => setDebtClaimId(null)}
+        />
       )}
 
       {addOpen && (

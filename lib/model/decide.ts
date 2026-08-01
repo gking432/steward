@@ -469,3 +469,136 @@ export function supersedeStaleProposals(workspace: Workspace, cycleId: string): 
     ),
   };
 }
+
+/* ------------------------------------------------------------------ debt */
+
+export type PayoffScenario = {
+  perCycle: number;
+  arrivalDate: string | null;
+  totalInterest: number;
+  beyondHorizon: boolean;
+};
+
+export type DebtDetail = {
+  claim: Claim;
+  apr: number | null;
+  balance: number;
+  /** The required minimum, which lives above the line as an obligation. */
+  minimum: number;
+  current: PayoffScenario;
+  /** Alternatives, so "what does an extra $50 buy me?" has a real answer. */
+  options: PayoffScenario[];
+};
+
+/**
+ * Payoff scenarios for one debt.
+ *
+ * Simulates the balance forward at a given per-cycle payment, accruing interest
+ * on the stored APR. Returns nothing rather than guessing when the APR is
+ * missing — a payoff date built on an invented rate is worse than no date.
+ */
+export function debtDetail(
+  workspace: Workspace,
+  claimId: string,
+  today: string,
+  policy: AllocationPolicy = defaultPolicy,
+): DebtDetail | null {
+  const claim = workspace.claims.find((entry) => entry.id === claimId);
+  if (!claim || claim.kind !== "payoff") return null;
+
+  const apr = claim.delayCost.type === "interest" ? claim.delayCost.apr : null;
+  const minimumBucket = workspace.buckets.find(
+    (bucket) => bucket.linkedDebtAccountId && bucket.linkedDebtAccountId === claim.linkedAccountId,
+  );
+  const minimum = minimumBucket?.amountDue ?? 0;
+
+  const plan = planCycle(workspace, today);
+  const allocated =
+    plan
+      ? allocate(workspace, plan.freeCapacity, today, policy).allocations.find(
+          (entry) => entry.claim.id === claim.id,
+        )?.amount ?? 0
+      : 0;
+
+  const balance = Math.max(0, round2(claim.targetAmount - claim.fundedAmount));
+  const run = (perCycle: number) => simulatePayoff(workspace, balance, apr, perCycle, today, policy);
+
+  const steps = [allocated, allocated + 50, allocated + 100, allocated + 200]
+    .map((value) => round2(value))
+    .filter((value, index, all) => value > 0 && all.indexOf(value) === index);
+
+  return {
+    claim,
+    apr,
+    balance,
+    minimum,
+    current: run(allocated),
+    options: steps.slice(1).map(run),
+  };
+}
+
+function simulatePayoff(
+  workspace: Workspace,
+  startBalance: number,
+  apr: number | null,
+  perCycle: number,
+  today: string,
+  policy: AllocationPolicy,
+): PayoffScenario {
+  if (apr === null || perCycle <= 0) {
+    return { perCycle, arrivalDate: null, totalInterest: 0, beyondHorizon: true };
+  }
+  const cyclesPerYear =
+    workspace.profile.payFrequency === "Weekly" ? 52 : workspace.profile.payFrequency === "Biweekly" ? 26 : 12;
+  const horizon = Math.ceil((cyclesPerYear / 12) * policy.maxProjectionMonths);
+  const paydays = upcomingPaydays(workspace, today, horizon);
+
+  let balance = startBalance;
+  let interest = 0;
+  for (let step = 0; step < horizon; step += 1) {
+    const accrued = round2(balance * (apr / 100 / cyclesPerYear));
+    interest = round2(interest + accrued);
+    balance = round2(balance + accrued - perCycle);
+    if (balance <= 0.01) {
+      return {
+        perCycle,
+        arrivalDate: paydays[step] ?? null,
+        totalInterest: interest,
+        beyondHorizon: false,
+      };
+    }
+  }
+  return { perCycle, arrivalDate: null, totalInterest: interest, beyondHorizon: true };
+}
+
+/* ---------------------------------------------------- category correction */
+
+/**
+ * Recategorise a transaction, and optionally remember it.
+ *
+ * Remembering writes a Rule and applies it to every other transaction from the
+ * same merchant, so the correction is visibly worth making. The user sees every
+ * affected number move at once, which is the point.
+ */
+export function recategorise(
+  workspace: Workspace,
+  transactionId: string,
+  category: string,
+  remember: boolean,
+): Workspace {
+  const target = workspace.transactions.find((row) => row.id === transactionId);
+  if (!target) return workspace;
+  const key = target.merchant.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  return {
+    ...workspace,
+    transactions: workspace.transactions.map((row) => {
+      const matches =
+        row.id === transactionId ||
+        (remember && row.merchant.toLowerCase().replace(/[^a-z0-9]/g, "") === key);
+      return matches
+        ? { ...row, category, categorySource: "manual" as const, needsReview: false, confidence: 1 }
+        : row;
+    }),
+  };
+}
