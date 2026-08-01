@@ -4728,3 +4728,388 @@ input[type="checkbox"] {
 
   .native-connect-loading .spin { color: rgba(249,250,247,.65); }
 }
+
+/* Mobile app shell: keep the product in Steward green, not on a white webpage. */
+@media (max-width: 767px) {
+  :root,
+  :root[data-theme="dark"] {
+    --bg: #2f654d;
+    --surface: #3a7057;
+    --surface-soft: #40775d;
+    --surface-muted: #285b44;
+    --text: #f6f8f4;
+    --text-soft: #c8d9cd;
+    --text-faint: #aac3b3;
+    --line: rgba(247, 251, 247, 0.13);
+    --line-strong: rgba(247, 251, 247, 0.22);
+    --green: #f4f8f3;
+    --green-dark: #dceadf;
+    --green-soft: rgba(244, 248, 243, 0.13);
+    --green-bright: #bfdbc8;
+    --amber: #f2c982;
+    --amber-soft: rgba(132, 89, 30, 0.28);
+    --red: #ffbbb4;
+    --red-soft: rgba(143, 52, 48, 0.3);
+    --blue: #b8d5e7;
+    --blue-soft: rgba(85, 122, 147, 0.34);
+    --violet: #d3c2e5;
+    --violet-soft: rgba(100, 78, 125, 0.34);
+    --shadow: none;
+    --shadow-lg: 0 18px 42px rgba(10, 38, 26, 0.28);
+  }
+
+  html,
+  body,
+  .app-shell,
+  .main-shell,
+  .main-content {
+    background: #2f654d;
+  }
+
+  .main-shell {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-header {
+    min-height: calc(56px + env(safe-area-inset-top));
+    border-bottom-color: rgba(247, 251, 247, 0.1);
+    background: rgba(47, 101, 77, 0.9);
+    padding: env(safe-area-inset-top) 15px 8px;
+    backdrop-filter: blur(24px) saturate(130%);
+    -webkit-backdrop-filter: blur(24px) saturate(130%);
+  }
+
+  .mobile-brand strong {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    font-size: 17px;
+    font-weight: 720;
+    letter-spacing: -0.04em;
+  }
+
+  .mobile-brand .brand-mark {
+    border-radius: 10px;
+    background: #f6f8f4;
+  }
+
+  .mobile-brand .brand-mark span {
+    background: #2f654d;
+  }
+
+  .mobile-header .icon-button {
+    color: #dce9df;
+  }
+
+  .mobile-bottom-nav {
+    height: calc(67px + env(safe-area-inset-bottom));
+    border-top-color: rgba(247, 251, 247, 0.12);
+    background: rgba(35, 82, 61, 0.94);
+    padding: 6px 7px env(safe-area-inset-bottom);
+    backdrop-filter: blur(24px) saturate(130%);
+    -webkit-backdrop-filter: blur(24px) saturate(130%);
+  }
+
+  .mobile-bottom-nav button {
+    min-height: 48px;
+    border-radius: 14px;
+    color: #b7ccbd;
+    font-size: 8px;
+    font-weight: 680;
+  }
+
+  .mobile-bottom-nav button.active {
+    background: rgba(246, 248, 244, 0.14);
+    color: #fff;
+  }
+
+  .mobile-bottom-nav button.active svg {
+    stroke-width: 2.5;
+  }
+
+  .mobile-home-view {
+    height: calc(100dvh - 126px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .mobile-overview {
+    grid-template-rows: auto minmax(142px, 1.75fr) minmax(82px, 0.9fr) minmax(90px, 1fr) minmax(60px, 0.65fr);
+    gap: 9px;
+    background: #2f654d;
+    padding: 11px 13px 9px;
+  }
+
+  .mobile-overview-heading > div > span {
+    color: #fff;
+    font-size: 25px;
+    font-weight: 720;
+  }
+
+  .mobile-overview-heading > div > small,
+  .mobile-overview-heading > p {
+    color: #c2d7c8;
+  }
+
+  .mobile-safe-card {
+    border: 1px solid rgba(247, 251, 247, 0.13);
+    border-radius: 22px;
+    background:
+      radial-gradient(circle at 100% 0%, rgba(194, 225, 203, 0.2), transparent 37%),
+      linear-gradient(145deg, #21523d, #173c2c);
+    box-shadow: 0 13px 27px rgba(19, 56, 39, 0.28);
+  }
+
+  .mobile-overview-stats > button,
+  .mobile-next-action,
+  .mobile-overview-shortcuts button {
+    border-color: rgba(247, 251, 247, 0.12);
+    background: rgba(18, 67, 47, 0.32);
+    box-shadow: none;
+  }
+
+  .mobile-stat-icon.cash,
+  .mobile-action-icon.protect,
+  .mobile-action-icon.clear {
+    background: rgba(223, 241, 229, 0.14);
+    color: #e3f0e7;
+  }
+
+  .mobile-stat-icon.calendar,
+  .mobile-action-icon.review {
+    background: rgba(239, 196, 121, 0.17);
+    color: #f5cf8e;
+  }
+
+  .mobile-action-icon {
+    background: rgba(211, 194, 229, 0.14);
+    color: #ded1ed;
+  }
+
+  .mobile-overview-stats small,
+  .mobile-next-action small,
+  .mobile-overview-shortcuts span {
+    color: #b9d0bf;
+  }
+
+  .mobile-overview-stats strong,
+  .mobile-next-action strong {
+    color: #fff;
+  }
+
+  .mobile-overview-stats em,
+  .mobile-next-action em,
+  .mobile-next-action > svg {
+    color: #b8d0be;
+  }
+
+  .page {
+    width: 100%;
+    padding: 13px 13px 28px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+
+  .section-heading {
+    gap: 8px;
+    margin-bottom: 15px;
+  }
+
+  .section-heading h1 {
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    font-size: 28px;
+    font-weight: 730;
+    letter-spacing: -0.055em;
+    line-height: 1.04;
+  }
+
+  .section-heading p {
+    margin-top: 4px;
+    color: #c2d7c8;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .eyebrow {
+    color: #bad2c1;
+    font-size: 8px;
+  }
+
+  .stack-card,
+  .metric-card,
+  .plan-hero,
+  .accounts-summary,
+  .integration-note,
+  .advisor-chat,
+  .modal,
+  .settings-panel,
+  .budget-card {
+    border-color: rgba(247, 251, 247, 0.13);
+    border-radius: 16px;
+    background: rgba(20, 72, 50, 0.36);
+    box-shadow: none;
+  }
+
+  .decision-hero {
+    border-color: rgba(247, 251, 247, 0.13);
+    border-radius: 20px;
+    background: linear-gradient(145deg, #1c4b37, #153b2b);
+    box-shadow: none;
+  }
+
+  .safe-spend-card {
+    border: 1px solid rgba(247, 251, 247, 0.13);
+    border-radius: 16px;
+    background: rgba(20, 72, 50, 0.36);
+    color: #f6f8f4;
+  }
+
+  .safe-spend-card > div:first-child span,
+  .safe-spend-card > div:first-child small,
+  .safe-spend-breakdown span {
+    color: #bdd2c3;
+  }
+
+  .safe-spend-card > div:first-child strong,
+  .safe-spend-breakdown b {
+    color: #fff;
+  }
+
+  .safe-spend-card > button {
+    color: #ecf7ee;
+  }
+
+  .primary-button,
+  .small-primary {
+    border-radius: 12px;
+    background: #f5f8f3;
+    color: #23543e;
+    font-weight: 720;
+  }
+
+  .primary-button:hover,
+  .small-primary:hover {
+    background: #e4eee6;
+  }
+
+  .secondary-button {
+    border-color: rgba(247, 251, 247, 0.22);
+    border-radius: 12px;
+    background: rgba(247, 251, 247, 0.08);
+    color: #f6f8f4;
+  }
+
+  .text-button,
+  .card-heading button,
+  .account-footer button,
+  .project-footer button {
+    color: #dceee1;
+  }
+
+  .content-grid .stack-card,
+  .bottom-grid .stack-card,
+  .allocation-layout > .stack-card,
+  .debt-plan-card,
+  .debt-accounts-card,
+  .settings-panel,
+  .review-card,
+  .project-card,
+  .wishlist-card,
+  .account-card,
+  .debt-summary-card {
+    padding: 15px;
+  }
+
+  .metric-card,
+  .debt-summary-card {
+    min-height: 105px;
+  }
+
+  .project-card,
+  .wishlist-card,
+  .account-card,
+  .budget-card,
+  .goal-card {
+    border-color: rgba(247, 251, 247, 0.13);
+    background: rgba(20, 72, 50, 0.36);
+  }
+
+  .local-search,
+  .transaction-tools select,
+  .bulk-bar select,
+  .wishlist-actions select,
+  .transaction-table select,
+  .field input,
+  .field select,
+  .field textarea,
+  .entity-form input,
+  .entity-form select,
+  .entity-form textarea,
+  .money-input {
+    border-color: rgba(247, 251, 247, 0.16);
+    background: rgba(15, 56, 39, 0.28);
+    color: #f6f8f4;
+  }
+
+  .tab-bar,
+  .filter-row button.active,
+  .review-metrics,
+  .date-tile {
+    border-color: rgba(247, 251, 247, 0.12);
+    background: rgba(16, 61, 43, 0.34);
+  }
+
+  .tab-bar button.active,
+  .filter-row button.active {
+    background: rgba(247, 251, 247, 0.13);
+    color: #fff;
+    box-shadow: none;
+  }
+
+  .advisor-chat {
+    min-height: calc(100dvh - 164px);
+  }
+
+  .chat-thread {
+    gap: 12px;
+    padding: 15px;
+  }
+
+  .chat-message {
+    max-width: 88%;
+  }
+
+  .chat-message.user > div {
+    background: #f1f7f2;
+    color: #23523d;
+  }
+
+  .chat-message.advisor > div {
+    border-color: rgba(247, 251, 247, 0.13);
+    background: rgba(247, 251, 247, 0.1);
+  }
+
+  .mobile-more-sheet {
+    border-color: rgba(247, 251, 247, 0.18);
+    background: #285f46;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .mobile-more-sheet > button {
+    border-top-color: rgba(247, 251, 247, 0.12);
+  }
+
+  .modal-backdrop {
+    background: rgba(8, 33, 22, 0.66);
+  }
+
+  .modal {
+    background: #2d684d;
+  }
+
+  .modal-head,
+  .settings-section-head {
+    border-bottom-color: rgba(247, 251, 247, 0.14);
+  }
+
+  .notification-popover {
+    border-color: rgba(247, 251, 247, 0.16);
+    background: #326d51;
+  }
+}
