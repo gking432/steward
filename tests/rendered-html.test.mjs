@@ -25,8 +25,8 @@ test("build contains Steward's decision briefing", async () => {
   assert.match(page, /<StewardApp initialState=\{initialState\}/);
   assert.match(css, /\.decision-hero/);
   assert.match(css, /\.mobile-bottom-nav/);
-  assert.match(app, /ios-account-preview/);
-  assert.match(app, /ios-connect-action/);
+  assert.match(app, /native-connect/);
+  assert.match(app, /Let’s get started/);
   assert.match(app, /function MobileOverview/);
   assert.match(app, /SAFE TO SPEND/);
   assert.match(css, /\.mobile-home-view/);
