@@ -51,6 +51,7 @@ import { BucketsScreen } from "./buckets";
 import { ConnectScreen } from "./connect";
 import { AskScreen } from "./ask";
 import { HomeScreen } from "./home";
+import { SplitSheet } from "./split";
 import { Onboarding } from "./onboarding";
 import { usePlaidConnect } from "./use-plaid";
 import { useWorkspace } from "./workspace-store";
@@ -87,12 +88,14 @@ function LedgerScreen({
   focusBucket,
   clearFocus,
   update,
+  onSplit,
 }: {
   workspace: Workspace;
   today: string;
   focusBucket: Bucket | null;
   clearFocus: () => void;
   update: (next: (current: Workspace) => Workspace) => void;
+  onSplit: (transactionId: string) => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const cycle = currentCycle(workspace, today);
@@ -260,6 +263,11 @@ function LedgerScreen({
                     onClick={() => correct(row.id, row.category, true)}
                   >
                     Always put {row.merchant} in {row.category}
+                  </button>
+                  <button className="sw-secondary" onClick={() => onSplit(row.id)}>
+                    {row.split?.length
+                      ? `Edit split · ${row.split.length} categories`
+                      : "Split across categories"}
                   </button>
                 </div>
               )}
@@ -891,6 +899,7 @@ export function StewardApp({
   const [tab, setTab] = useState<Tab>("home");
   const [buyOpen, setBuyOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
+  const [splitting, setSplitting] = useState<string | null>(null);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
   const [paydayDismissed, setPaydayDismissed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -1006,6 +1015,7 @@ export function StewardApp({
             focusBucket={focusBucket}
             clearFocus={() => setFocusBucket(null)}
             update={update}
+            onSplit={setSplitting}
           />
         )}
       </main>
@@ -1027,6 +1037,18 @@ export function StewardApp({
           <Receipt size={19} /><span>Activity</span>
         </button>
       </nav>
+
+      {splitting && (() => {
+        const row = workspace.transactions.find((entry) => entry.id === splitting);
+        return row ? (
+          <SplitSheet
+            workspace={workspace}
+            transaction={row}
+            update={update}
+            onClose={() => setSplitting(null)}
+          />
+        ) : null;
+      })()}
 
       {askOpen && (
         <AskScreen workspace={workspace} today={today} update={update} onClose={() => setAskOpen(false)} />

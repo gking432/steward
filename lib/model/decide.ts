@@ -771,3 +771,66 @@ export function planNarrative(workspace: Workspace, today: string, policy: Alloc
     summary: `Your paycheck is ${formatMoney(plan.income)}. ${formatMoney(plan.reservesTotal)} covers bills and minimums, ${formatMoney(plan.spendTotal)} is everyday spending, which leaves ${formatMoney(plan.freeCapacity)}.`,
   };
 }
+
+
+/* ------------------------------------------------------------------ split */
+
+export type SplitLine = { category: string; amount: number };
+
+/**
+ * A split is valid only if it reconciles to what the bank actually charged.
+ *
+ * The transaction total is truth; a receipt or a manual split only explains its
+ * composition. This is what lets Steward accept extracted line items without
+ * trusting them — arithmetic decides, not the source.
+ */
+export function splitIsBalanced(total: number, lines: SplitLine[]) {
+  const sum = lines.reduce((running, line) => running + line.amount, 0);
+  return Math.abs(round2(sum) - round2(total)) < 0.01;
+}
+
+export function splitDifference(total: number, lines: SplitLine[]) {
+  return round2(total - lines.reduce((running, line) => running + line.amount, 0));
+}
+
+/**
+ * Apply a split. Refuses anything that does not reconcile, rather than filing
+ * numbers that quietly do not add up.
+ */
+export function splitTransaction(
+  workspace: Workspace,
+  transactionId: string,
+  lines: SplitLine[],
+): Workspace {
+  const target = workspace.transactions.find((row) => row.id === transactionId);
+  if (!target) return workspace;
+  const clean = lines.filter((line) => line.category && line.amount > 0);
+  if (!clean.length || !splitIsBalanced(target.amount, clean)) return workspace;
+
+  return {
+    ...workspace,
+    transactions: workspace.transactions.map((row) =>
+      row.id === transactionId
+        ? {
+            ...row,
+            split: clean,
+            // The headline category becomes the largest line, so the row still
+            // reads sensibly in a list that shows one label.
+            category: [...clean].sort((a, b) => b.amount - a.amount)[0].category,
+            categorySource: "manual" as const,
+            needsReview: false,
+          }
+        : row,
+    ),
+  };
+}
+
+/** Remove a split and return the transaction to a single category. */
+export function unsplitTransaction(workspace: Workspace, transactionId: string): Workspace {
+  return {
+    ...workspace,
+    transactions: workspace.transactions.map((row) =>
+      row.id === transactionId ? { ...row, split: undefined } : row,
+    ),
+  };
+}

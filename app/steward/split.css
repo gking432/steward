@@ -1,0 +1,134 @@
+/** The split editor. Same immersive language, sheet presentation. */
+
+.sp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  background: rgba(8, 26, 18, 0.5);
+}
+@media (min-width: 640px) { .sp-backdrop { align-items: center; } }
+
+.sp-sheet {
+  display: grid;
+  gap: 13px;
+  width: min(520px, 100%);
+  max-height: 92dvh;
+  overflow-y: auto;
+  border-radius: 22px 22px 0 0;
+  background: #2f654d;
+  padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
+  color: #f6f8f4;
+}
+@media (min-width: 640px) { .sp-sheet { border-radius: 22px; } }
+
+.sp-sheet > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sp-sheet header strong { display: block; font-size: 16px; font-weight: 650; letter-spacing: -0.02em; }
+.sp-sheet header small { color: rgba(246, 248, 244, 0.62); font-size: 12px; }
+.sp-sheet header button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  color: rgba(246, 248, 244, 0.75);
+}
+
+.sp-sources { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+.sp-sources button {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(246, 248, 244, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f6f8f4;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.sp-note {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 10px 12px;
+  color: rgba(246, 248, 244, 0.86);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.sp-lines { display: grid; gap: 8px; }
+.sp-line { display: grid; gap: 8px; grid-template-columns: 1fr 116px 44px; }
+.sp-line select,
+.sp-line label {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(246, 248, 244, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.09);
+  padding: 0 11px;
+  color: #f6f8f4;
+  font-size: 14.5px;
+}
+.sp-line label span { color: rgba(246, 248, 244, 0.6); }
+.sp-line label input {
+  width: 100%;
+  border: none;
+  background: none;
+  color: #f6f8f4;
+  font-size: 14.5px;
+}
+.sp-line > button {
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(246, 248, 244, 0.75);
+}
+
+.sp-add {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(246, 248, 244, 0.8);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sp-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 12px;
+  background: rgba(240, 192, 138, 0.18);
+  padding: 11px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sp-check.ok { background: rgba(255, 255, 255, 0.12); }
+
+.sp-save {
+  display: grid;
+  min-height: 54px;
+  place-items: center;
+  border-radius: 16px;
+  background: #f6f8f4;
+  color: #27563f;
+  font-size: 15.5px;
+  font-weight: 700;
+}

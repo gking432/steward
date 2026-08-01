@@ -166,13 +166,35 @@ export function transactionsInCycle(transactions: Transaction[], cycle: Cycle) {
   );
 }
 
+/**
+ * How much of a transaction belongs to a given category.
+ *
+ * A split transaction contributes a portion to several buckets. Without this,
+ * one $120 shop lands entirely in whichever category it was labelled, so one
+ * bucket reads over and another reads untouched — two wrong numbers from one
+ * purchase, on the screen whose entire promise is that the numbers are true.
+ */
+export function amountForCategory(transaction: Transaction, category: string) {
+  if (transaction.split?.length) {
+    return round2(
+      transaction.split
+        .filter((line) => line.category === category)
+        .reduce((sum, line) => sum + line.amount, 0),
+    );
+  }
+  return transaction.category === category ? transaction.amount : 0;
+}
+
 /** Spend recorded against a bucket this cycle, and the transactions behind it. */
 export function bucketActivity(workspace: Workspace, bucket: Bucket, cycle: Cycle) {
+  const category = bucket.category ?? bucket.name;
   const rows = transactionsInCycle(workspace.transactions, cycle).filter(
     (transaction) =>
-      transaction.type === "expense" && transaction.category === (bucket.category ?? bucket.name),
+      transaction.type === "expense" && amountForCategory(transaction, category) > 0,
   );
-  const spent = round2(rows.reduce((sum, row) => sum + row.amount, 0));
+  const spent = round2(
+    rows.reduce((sum, row) => sum + amountForCategory(row, category), 0),
+  );
   const planned = round2(bucket.perCycle ?? 0);
   return {
     bucket,

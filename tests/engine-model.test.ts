@@ -452,3 +452,89 @@ test("the most severe insight is surfaced, not the first bucket in the array", a
     assert.ok(insights[i - 1].severity >= insights[i].severity, "sorted by severity");
   }
 });
+
+/* ------------------------------------------------------------- splits --- */
+
+test("a split transaction counts toward every bucket it touches", async () => {
+  const { splitTransaction } = await import("../lib/model/decide");
+  const workspace = ws();
+  const cycle = currentCycle(workspace, FIXTURE_TODAY)!;
+  const groceries = workspace.buckets.find((b) => b.name === "Groceries")!;
+  const shopping = workspace.buckets.find((b) => b.name === "Shopping")!;
+
+  // Amazon $63.15 currently lands entirely in Shopping.
+  const amazon = workspace.transactions.find((row) => row.merchant === "Amazon")!;
+  const beforeGroceries = bucketActivity(workspace, groceries, cycle).spent;
+  const beforeShopping = bucketActivity(workspace, shopping, cycle).spent;
+
+  const after = splitTransaction(workspace, amazon.id, [
+    { category: "Groceries", amount: 40 },
+    { category: "Shopping", amount: 23.15 },
+  ]);
+
+  assert.equal(bucketActivity(after, groceries, cycle).spent, round(beforeGroceries + 40));
+  assert.equal(bucketActivity(after, shopping, cycle).spent, round(beforeShopping - 40));
+});
+
+test("a split that does not reconcile to the charge is refused", async () => {
+  const { splitTransaction, splitIsBalanced, splitDifference } = await import("../lib/model/decide");
+  const workspace = ws();
+  const amazon = workspace.transactions.find((row) => row.merchant === "Amazon")!;
+
+  // The bank says $63.15. A receipt reading $58 does not explain that charge.
+  assert.equal(splitIsBalanced(amazon.amount, [{ category: "Shopping", amount: 58 }]), false);
+  assert.equal(splitDifference(amazon.amount, [{ category: "Shopping", amount: 58 }]), 5.15);
+
+  const after = splitTransaction(workspace, amazon.id, [{ category: "Shopping", amount: 58 }]);
+  assert.equal(
+    after.transactions.find((row) => row.id === amazon.id)?.split,
+    undefined,
+    "nothing is filed when the arithmetic does not agree",
+  );
+});
+
+test("splitting never changes the total spent across all buckets", async () => {
+  const { splitTransaction } = await import("../lib/model/decide");
+  const workspace = ws();
+  const cycle = currentCycle(workspace, FIXTURE_TODAY)!;
+  const total = (state: Workspace) =>
+    round(
+      state.buckets
+        .filter((bucket) => bucket.kind === "spend")
+        .reduce((sum, bucket) => sum + bucketActivity(state, bucket, cycle).spent, 0),
+    );
+
+  const amazon = workspace.transactions.find((row) => row.merchant === "Amazon")!;
+  const after = splitTransaction(workspace, amazon.id, [
+    { category: "Groceries", amount: 40 },
+    { category: "Shopping", amount: 23.15 },
+  ]);
+  assert.equal(total(after), total(workspace), "money moves between buckets, it is not created");
+});
+
+test("the headline category becomes the largest line", async () => {
+  const { splitTransaction } = await import("../lib/model/decide");
+  const workspace = ws();
+  const amazon = workspace.transactions.find((row) => row.merchant === "Amazon")!;
+  const after = splitTransaction(workspace, amazon.id, [
+    { category: "Groceries", amount: 50 },
+    { category: "Shopping", amount: 13.15 },
+  ]);
+  assert.equal(after.transactions.find((row) => row.id === amazon.id)?.category, "Groceries");
+});
+
+test("a split survives a save and reload", async () => {
+  const { splitTransaction } = await import("../lib/model/decide");
+  const { toLegacy, toModel } = await import("../lib/model/convert");
+  const workspace = ws();
+  const amazon = workspace.transactions.find((row) => row.merchant === "Amazon")!;
+  const after = toModel(toLegacy(splitTransaction(workspace, amazon.id, [
+    { category: "Groceries", amount: 40 },
+    { category: "Shopping", amount: 23.15 },
+  ])));
+  assert.equal(after.transactions.find((row) => row.id === amazon.id)?.split?.length, 2);
+});
+
+function round(value: number) {
+  return Math.round(value * 100) / 100;
+}
