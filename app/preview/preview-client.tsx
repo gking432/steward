@@ -6,9 +6,10 @@ import { toLegacy, toModel } from "../../lib/model/convert";
 import type { Workspace } from "../../lib/model/types";
 import { BucketsScreen } from "../steward/buckets";
 import { ConnectScreen } from "../steward/connect";
+import { HomeScreen } from "../steward/home";
 
 export function PreviewClient({ today }: { today: string }) {
-  const [screen, setScreen] = useState<"connect" | "buckets">("connect");
+  const [screen, setScreen] = useState<"connect" | "buckets" | "home">("connect");
   const [workspace, setWorkspace] = useState<Workspace>(() => toModel(goldenWorkspace()));
 
   const update = (next: (current: Workspace) => Workspace) =>
@@ -23,13 +24,21 @@ export function PreviewClient({ today }: { today: string }) {
           onConnect={() => setScreen("buckets")}
           onManual={() => setScreen("buckets")}
         />
-      ) : (
+      ) : screen === "buckets" ? (
         <BucketsScreen
           workspace={workspace}
           today={today}
           mode="review"
           update={update}
-          onApprove={() => setScreen("connect")}
+          onApprove={() => setScreen("home")}
+        />
+      ) : (
+        <HomeScreen
+          workspace={workspace}
+          today={today}
+          onOpenBuckets={() => setScreen("buckets")}
+          onOpenBucket={() => setScreen("buckets")}
+          onAsk={() => setScreen("buckets")}
         />
       )}
     </>
