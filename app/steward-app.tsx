@@ -47,20 +47,15 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { createEmptyState } from "../lib/initial-state";
 import {
-  affordabilityDecision,
   calculateTradeoffs,
-  dailyDecision,
   debtPayoffPlan,
   daysUntil,
   deterministicCategory,
-  financialHealth,
   money,
   paycheckAllocation,
-  primaryBottleneck,
   spendingByCategory,
 } from "../lib/engine";
 import { suggestBudgets } from "../lib/financial-import";
@@ -289,6 +284,7 @@ function BankConnectGate({
   connect: () => void;
   loading?: boolean;
 }) {
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const busy = loading || status !== "idle";
   const label = loading
     ? "Opening your workspace…"
@@ -360,8 +356,8 @@ function BankConnectGate({
 
       <section className={cx("connect-mobile", loading && "is-launching")}>
         {loading ? (
-          <div className="native-connect-loading" role="status">
-            <div className="native-connect-mark" aria-hidden="true">
+          <div className="ios-launch-state" role="status">
+            <div className="ios-app-icon" aria-hidden="true">
               <div className="brand-mark">
                 <span />
                 <span />
@@ -369,25 +365,73 @@ function BankConnectGate({
               </div>
             </div>
             <strong>Steward</strong>
-            <RefreshCw className="spin" size={18} />
+            <small>Your financial OS</small>
+            <RefreshCw className="spin" size={17} />
           </div>
         ) : (
-          <div className="native-connect">
-            <div className="native-connect-top">
-              <div className="brand-mark" aria-hidden="true">
-                <span />
-                <span />
-                <span />
+          <>
+            <header className="ios-onboarding-bar">
+              <div className="ios-wordmark">
+                <div className="brand-mark" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <strong>Steward</strong>
               </div>
-              <strong>Steward</strong>
+              <button onClick={() => setPrivacyOpen(true)}>Privacy</button>
+            </header>
+
+            <div className="ios-onboarding-scroll">
+              <div className="ios-progress" aria-label="Setup step 1 of 1">
+                <span />
+                <small>SET UP · 1 OF 1</small>
+              </div>
+              <div className="ios-onboarding-copy">
+                <h1>Start with the money you already have.</h1>
+                <p>
+                  Connect your accounts once. Steward turns the activity into a
+                  clear plan—without asking you to build one from scratch.
+                </p>
+              </div>
+
+              <div className="ios-account-preview" aria-hidden="true">
+                <div className="ios-preview-top">
+                  <span>YOUR FINANCIAL PICTURE</span>
+                  <ShieldCheck size={18} />
+                </div>
+                <strong>Ready when you are</strong>
+                <p>Balances · bills · spending · cash flow</p>
+                <div className="ios-account-stack">
+                  <span><Landmark size={17} /></span>
+                  <span><WalletCards size={17} /></span>
+                  <span><TrendingUp size={17} /></span>
+                  <i />
+                </div>
+              </div>
+
+              <div className="ios-permission-group">
+                <div>
+                  <span className="ios-permission-icon"><Landmark size={18} /></span>
+                  <p><strong>Accounts and balances</strong><small>Know what is available now</small></p>
+                  <Check size={17} />
+                </div>
+                <div>
+                  <span className="ios-permission-icon"><WalletCards size={18} /></span>
+                  <p><strong>Transaction history</strong><small>Understand where money is going</small></p>
+                  <Check size={17} />
+                </div>
+                <div>
+                  <span className="ios-permission-icon"><Sparkles size={18} /></span>
+                  <p><strong>Your next best move</strong><small>Build guidance from real activity</small></p>
+                  <Check size={17} />
+                </div>
+              </div>
             </div>
-            <div className="native-connect-copy">
-              <h1>Let’s get started.</h1>
-              <p>Connect your bank so Steward can take care of the rest.</p>
-            </div>
-            <footer className="native-connect-action">
+
+            <footer className="ios-connect-action">
               {error && (
-                <div className="native-connect-error" role="alert">
+                <div className="ios-connect-error" role="alert">
                   <HelpCircle size={16} />
                   <span>{error}</span>
                 </div>
@@ -396,24 +440,33 @@ function BankConnectGate({
                 {busy ? <RefreshCw className="spin" size={18} /> : <Landmark size={18} />}
                 {label}
               </button>
-              <small>Securely powered by Plaid</small>
+              <small><ShieldCheck size={13} /> Private and read-only</small>
             </footer>
-          </div>
+
+            {privacyOpen && (
+              <>
+                <button
+                  className="ios-sheet-scrim"
+                  onClick={() => setPrivacyOpen(false)}
+                  aria-label="Close privacy details"
+                />
+                <aside className="ios-privacy-sheet" role="dialog" aria-modal="true" aria-label="Privacy details">
+                  <i className="ios-sheet-handle" />
+                  <div className="ios-sheet-icon"><ShieldCheck size={25} /></div>
+                  <h2>Your bank login stays with Plaid.</h2>
+                  <p>
+                    Steward receives read-only financial data. It cannot move
+                    money, and you can disconnect and delete your workspace at
+                    any time.
+                  </p>
+                  <button onClick={() => setPrivacyOpen(false)}>Done</button>
+                </aside>
+              </>
+            )}
+          </>
         )}
       </section>
     </main>
-  );
-}
-
-function useMobileViewport() {
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      const mediaQuery = window.matchMedia("(max-width: 680px)");
-      mediaQuery.addEventListener("change", onStoreChange);
-      return () => mediaQuery.removeEventListener("change", onStoreChange);
-    },
-    () => window.matchMedia("(max-width: 680px)").matches,
-    () => false,
   );
 }
 
@@ -428,9 +481,6 @@ export function StewardApp({
   const [mobileMore, setMobileMore] = useState(false);
   const [modal, setModal] = useState<ModalName>(null);
   const [loading, setLoading] = useState(true);
-  // Temporary mobile-only preview so the unfinished bank connection does not
-  // prevent product review. Desktop keeps its existing connection gate.
-  const mobileAppPreview = useMobileViewport();
   const [saveState, setSaveState] = useState<
     "saved" | "saving" | "offline"
   >("saving");
@@ -511,9 +561,6 @@ export function StewardApp({
   const tradeoffs = useMemo(() => calculateTradeoffs(state), [state]);
   const allocation = useMemo(() => paycheckAllocation(state), [state]);
   const debtPlan = useMemo(() => debtPayoffPlan(state), [state]);
-  const health = useMemo(() => financialHealth(state), [state]);
-  const bottleneck = useMemo(() => primaryBottleneck(state), [state]);
-  const todayDecision = useMemo(() => dailyDecision(state), [state]);
   const categorySpending = useMemo(
     () => spendingByCategory(state.transactions),
     [state.transactions],
@@ -567,14 +614,16 @@ export function StewardApp({
     );
     if (item || /afford|buy|purchase/.test(lower)) {
       const price = item?.price ?? Number(lower.match(/\$?(\d+)/)?.[1] ?? 0);
-      const decision = affordabilityDecision(state, price);
+      const affordable = price > 0 && price <= tradeoffs.safeToSpend;
       return {
-        text: price > 0
-          ? `${decision.verdict}. ${decision.reason}`
-          : `Your available cash is ${money(tradeoffs.availableCash)}. Tell me the item or price and I’ll compare it with bills, debt, goals, projects, and your buffer.`,
+        text: affordable
+          ? `Yes—you can spend ${money(price)} without interfering with bills, required debt payments, savings, or your ${money(state.profile.minimumBuffer)} checking buffer.`
+          : price > 0
+            ? `I’d wait. ${money(price)} is above today’s ${money(tradeoffs.safeToSpend)} safe-to-spend amount.`
+            : `Your safe-to-spend amount is ${money(tradeoffs.safeToSpend)}. Tell me the item or price and I’ll compare it with your current priorities.`,
         detail: item
-          ? `${decision.tradeoffs} Suggested timing: ${decision.suggestedDate}. ${decision.alternative}`
-          : `Known: ${money(tradeoffs.liquidCash)} liquid cash and ${money(tradeoffs.billsBeforePayday)} of bills before payday. ${decision.tradeoffs}`,
+          ? item.reason
+          : `Known: ${money(tradeoffs.liquidCash)} liquid cash and ${money(tradeoffs.billsBeforePayday)} of bills before payday. Assumption: no untracked obligations.`,
       };
     }
     if (/bill|due|obligation/.test(lower)) {
@@ -627,7 +676,7 @@ export function StewardApp({
     }
     if (/why|low|changed/.test(lower)) {
       return {
-        text: `Your available-cash calculation starts with ${money(tradeoffs.liquidCash)}, then protects ${money(tradeoffs.billsBeforePayday)} in upcoming bills, required debt payments, savings, and your ${money(state.profile.minimumBuffer)} cash buffer.`,
+        text: `Your current safe-to-spend calculation starts with ${money(tradeoffs.liquidCash)}, then protects ${money(tradeoffs.billsBeforePayday)} in upcoming bills and your ${money(state.profile.minimumBuffer)} cash buffer.`,
         detail:
           "Connected balances and recorded obligations drive this result; pending activity can still change it.",
       };
@@ -660,14 +709,11 @@ export function StewardApp({
           prompt: clean,
           deterministicAnswer: fallback.text,
           context: {
-            availableCash: tradeoffs.availableCash,
-            liquidCash: tradeoffs.liquidCash,
+            safeToSpend: tradeoffs.safeToSpend,
+            availableCash: tradeoffs.liquidCash,
             billsBeforePayday: tradeoffs.billsBeforePayday,
             minimumBuffer: state.profile.minimumBuffer,
             nextPayday: state.profile.nextPayday,
-            financialHealth: health,
-            bottleneck,
-            todayDecision,
             debt: {
               totalBalance: debtPlan.totalBalance,
               minimumPayments: debtPlan.minimumPayments,
@@ -687,16 +733,10 @@ export function StewardApp({
               target: goal.target,
               current: goal.current,
             })),
-            projects: state.projects.map((project) => ({
-              name: project.name,
-              priority: project.priority,
-              remaining: Math.max(0, project.estimatedCost - project.actualCost),
-              nextAction: project.nextAction,
-            })),
             wishlist: state.wishlist.map((item) => ({
               name: item.name,
               price: item.price,
-              recommendation: affordabilityDecision(state, item.price).verdict,
+              status: item.status,
             })),
           },
         }),
@@ -867,31 +907,6 @@ export function StewardApp({
     ].slice(0, 8);
   }, [query, state]);
 
-  const responsiveRoute = (desktop: ReactNode, route: NavView) => (
-    <>
-      <div className="desktop-route-view">{desktop}</div>
-      <div className="mobile-route-view">
-        <MobileNativeView
-          route={route}
-          state={state}
-          allocation={allocation}
-          tradeoffs={tradeoffs}
-          debtPlan={debtPlan}
-          recommendations={activeRecommendations}
-          chat={chat}
-          prompt={advisorPrompt}
-          setPrompt={setAdvisorPrompt}
-          go={go}
-          sendAdvisor={sendAdvisor}
-          openModal={setModal}
-          connectPlaid={connectPlaid}
-          syncBank={syncBank}
-          syncing={bankStatus === "syncing"}
-        />
-      </div>
-    </>
-  );
-
   const renderView = () => {
     switch (view) {
       case "home":
@@ -912,28 +927,24 @@ export function StewardApp({
               <MobileOverview
                 state={state}
                 tradeoffs={tradeoffs}
-                health={health}
-                bottleneck={bottleneck}
-                decision={todayDecision}
+                recommendations={activeRecommendations}
                 go={go}
-                connect={connectPlaid}
                 syncState={bankStatus === "syncing" ? "Syncing" : "Up to date"}
               />
             </div>
           </>
         );
       case "plan":
-        return responsiveRoute(
+        return (
           <PlanView
             state={state}
             allocation={allocation}
             update={update}
             openModal={setModal}
-          />,
-          "plan",
+          />
         );
       case "debt":
-        return responsiveRoute(
+        return (
           <DebtView
             state={state}
             plan={debtPlan}
@@ -943,11 +954,10 @@ export function StewardApp({
               void sendAdvisor(prompt);
             }}
             openModal={setModal}
-          />,
-          "debt",
+          />
         );
       case "transactions":
-        return responsiveRoute(
+        return (
           <TransactionsView
             state={state}
             update={update}
@@ -956,65 +966,55 @@ export function StewardApp({
             selected={selectedTransactions}
             setSelected={setSelectedTransactions}
             openModal={setModal}
-          />,
-          "transactions",
+          />
         );
       case "projects":
-        return responsiveRoute(
-          <ProjectsView state={state} update={update} openModal={setModal} />,
-          "projects",
+        return (
+          <ProjectsView state={state} update={update} openModal={setModal} />
         );
       case "wishlist":
-        return responsiveRoute(
+        return (
           <WishlistView
             state={state}
             update={update}
             ask={askAboutItem}
             openModal={setModal}
-          />,
-          "wishlist",
+          />
         );
       case "advisor":
-        return responsiveRoute(
+        return (
           <AdvisorView
             chat={chat}
             prompt={advisorPrompt}
             setPrompt={setAdvisorPrompt}
             send={sendAdvisor}
-          />,
-          "advisor",
+          />
         );
       case "reviews":
-        return responsiveRoute(<ReviewsView state={state} update={update} />, "reviews");
+        return <ReviewsView state={state} update={update} />;
       case "accounts":
-        return responsiveRoute(
+        return (
           <AccountsView
             state={state}
             openModal={setModal}
             connectPlaid={connectPlaid}
             syncBank={syncBank}
             syncing={bankStatus === "syncing"}
-          />,
-          "accounts",
+          />
         );
       case "settings":
-        return responsiveRoute(
+        return (
           <SettingsView
             state={state}
             update={update}
             openModal={setModal}
             saveState={saveState}
-          />,
-          "settings",
+          />
         );
     }
   };
 
-  if (
-    loading ||
-    (!mobileAppPreview &&
-      state.accounts.filter((account) => !account.archived).length === 0)
-  ) {
+  if (loading || state.accounts.filter((account) => !account.archived).length === 0) {
     return (
       <BankConnectGate
         name={state.profile.name}
@@ -1031,10 +1031,10 @@ export function StewardApp({
     label: string;
     icon: typeof Home;
   }[] = [
-    { id: "home", label: "Plan", icon: ListChecks },
+    { id: "home", label: "Today", icon: Home },
+    { id: "plan", label: "Plan", icon: ListChecks },
     { id: "transactions", label: "Activity", icon: WalletCards },
     { id: "projects", label: "Projects", icon: BriefcaseBusiness },
-    { id: "advisor", label: "Advisor", icon: Sparkles },
     { id: "more", label: "More", icon: MoreHorizontal },
   ];
 
@@ -1320,7 +1320,7 @@ export function StewardApp({
             {navItems
               .filter(
                 (item) =>
-                  !["home", "plan", "transactions", "projects", "advisor"].includes(
+                  !["home", "plan", "transactions", "projects"].includes(
                     item.id,
                   ),
               )
@@ -1384,20 +1384,14 @@ function SectionHeader({
 function MobileOverview({
   state,
   tradeoffs,
-  health,
-  bottleneck,
-  decision,
+  recommendations,
   go,
-  connect,
   syncState,
 }: {
   state: StewardState;
   tradeoffs: ReturnType<typeof calculateTradeoffs>;
-  health: ReturnType<typeof financialHealth>;
-  bottleneck: ReturnType<typeof primaryBottleneck>;
-  decision: ReturnType<typeof dailyDecision>;
+  recommendations: Recommendation[];
   go: (view: NavView) => void;
-  connect: () => void;
   syncState: string;
 }) {
   const today = new Intl.DateTimeFormat("en-US", {
@@ -1405,378 +1399,90 @@ function MobileOverview({
     month: "short",
     day: "numeric",
   }).format(new Date());
-  const connected = state.accounts.some((account) => !account.archived);
-  const allocation = paycheckAllocation(state);
-  const payoff = debtPayoffPlan(state);
-  const budgets = [...state.budgets]
-    .sort((a, b) => {
-      const aUse = a.planned ? a.actual / a.planned : 0;
-      const bUse = b.planned ? b.actual / b.planned : 0;
-      return Number(b.essential) - Number(a.essential) || bUse - aUse;
-    })
-    .slice(0, 5);
-  const budgetPlanned = state.budgets.reduce((sum, item) => sum + item.planned, 0);
-  const budgetSpent = state.budgets.reduce((sum, item) => sum + item.actual, 0);
-  const hottestBudget = [...state.budgets]
-    .filter((item) => item.planned > 0)
-    .sort((a, b) => b.actual / b.planned - a.actual / a.planned)[0];
-  const insight = hottestBudget
-    ? hottestBudget.actual > hottestBudget.planned
-      ? `${hottestBudget.category} is ${money(hottestBudget.actual - hottestBudget.planned)} over plan. Steward will account for that before recommending another purchase.`
-      : `${hottestBudget.category} has used ${Math.round((hottestBudget.actual / hottestBudget.planned) * 100)}% of its plan. You still have ${money(Math.max(0, hottestBudget.planned - hottestBudget.actual))} available there.`
-    : "Connect your bank and Steward will explain what changed—not just list transactions.";
+  const nextBill = state.bills
+    .filter((bill) => !bill.paid)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+  const nextAction = recommendations[0];
+  const riskTone =
+    tradeoffs.risk === "Low"
+      ? "good"
+      : tradeoffs.risk === "Moderate"
+        ? "watch"
+        : "alert";
 
   return (
-    <section className="mobile-plan-home" aria-label="Plan overview">
-      <header className="plan-home-heading">
+    <section className="mobile-overview" aria-label="Today overview">
+      <header className="mobile-overview-heading">
         <div>
-          <span>Your plan</span>
+          <span>Today</span>
           <small>{today}</small>
         </div>
-        <p className={`plan-health ${health.tone}`}>
-          <i className={syncState === "Syncing" ? "is-syncing" : ""} />
-          {health.status}
+        <p><i className={syncState === "Syncing" ? "is-syncing" : ""} /> {syncState}</p>
+      </header>
+
+      <button className="mobile-safe-card" onClick={() => go("plan")}>
+        <span className="mobile-card-label">SAFE TO SPEND</span>
+        <strong>{money(tradeoffs.safeToSpend)}</strong>
+        <p>
+          after {money(tradeoffs.billsBeforePayday)} for bills and your
+          {" "}{money(state.profile.minimumBuffer)} buffer
         </p>
-      </header>
+        <span className={`mobile-risk ${riskTone}`}>
+          <ShieldCheck size={13} /> {tradeoffs.risk} risk
+        </span>
+        <ArrowRight size={18} aria-hidden="true" />
+      </button>
 
-      <div className="plan-home-scroll">
-        <section className="executive-layer" aria-label="Executive summary">
-          <button className="plan-cash" onClick={() => connected ? go("accounts") : connect()}>
-            <span>AVAILABLE CASH</span>
-            <strong>{money(tradeoffs.availableCash)}</strong>
-            <small>{health.summary}</small>
-            <ArrowRight size={18} />
-          </button>
-          <div className="plan-vitals">
-            <button onClick={() => go("debt")}>
-              <small>DEBT</small>
-              <strong>{money(payoff.totalBalance)}</strong>
-              <em>{payoff.estimatedMonths ? `${payoff.estimatedMonths} months on plan` : "Add terms for payoff date"}</em>
-            </button>
-            <button onClick={() => go("plan")}>
-              <small>NEXT PAYCHECK</small>
-              <strong>{money(allocation.income)}</strong>
-              <em>{state.paycheckPlan.date || "Add your payday"}</em>
-            </button>
-          </div>
-          <button className="plan-recommendation" onClick={() => connected ? go("advisor") : connect()}>
-            <span><Sparkles size={17} /></span>
-            <div>
-              <small>STEWARD’S RECOMMENDATION · {Math.round(decision.confidence * 100)}%</small>
-              <strong>{decision.title}</strong>
-              <p>{decision.reason}</p>
-              <em>{decision.expectedOutcome}</em>
-            </div>
-            <ArrowRight size={17} />
-          </button>
-        </section>
-
-        <section className="budget-layer" aria-label="This paycheck budget">
-          <header>
-            <div><span>THIS PAYCHECK</span><h2>Your spending plan</h2></div>
-            <button onClick={() => go("plan")}>{money(budgetSpent)} of {money(budgetPlanned)} <ArrowRight size={14} /></button>
-          </header>
-          {budgets.length ? (
-            <div className="plan-buckets">
-              {budgets.map((budget) => {
-                const percent = budget.planned ? (budget.actual / budget.planned) * 100 : 0;
-                return (
-                  <button key={budget.id} onClick={() => go("plan")}>
-                    <span><b>{budget.category}</b><em>{Math.round(percent)}%</em></span>
-                    <Progress value={percent} tone={percent > 90 ? "amber" : "green"} />
-                    <small>{money(budget.actual)} of {money(budget.planned)}</small>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <button className="empty-plan-buckets" onClick={() => connected ? go("plan") : connect()}>
-              <ListChecks size={20} />
-              <span><b>Build your spending plan</b><small>Steward can suggest editable amounts from your income, bills, and activity.</small></span>
-              <ArrowRight size={16} />
-            </button>
-          )}
-        </section>
-
-        <section className="insight-layer" aria-label="Steward insight">
-          <span><Sparkles size={18} /></span>
-          <div><small>WHAT STEWARD SEES</small><p>{insight}</p></div>
-          <button onClick={() => go(bottleneck.type === "debt" ? "debt" : "advisor")} aria-label="Explain this insight"><ArrowRight size={16} /></button>
-        </section>
+      <div className="mobile-overview-stats">
+        <button onClick={() => go("accounts")}>
+          <span className="mobile-stat-icon cash"><WalletCards size={17} /></span>
+          <small>Available now</small>
+          <strong>{money(tradeoffs.liquidCash)}</strong>
+        </button>
+        <button onClick={() => go("plan")}>
+          <span className="mobile-stat-icon calendar"><CalendarClock size={17} /></span>
+          <small>{nextBill ? "Next bill" : "Bills"}</small>
+          <strong>
+            {nextBill ? money(nextBill.amount) : "None due"}
+          </strong>
+          {nextBill && <em>{nextBill.name}</em>}
+        </button>
       </div>
-    </section>
-  );
-}
 
-function MobileNativeView({
-  route,
-  state,
-  allocation,
-  tradeoffs,
-  debtPlan,
-  recommendations,
-  chat,
-  prompt,
-  setPrompt,
-  go,
-  sendAdvisor,
-  openModal,
-  connectPlaid,
-  syncBank,
-  syncing,
-}: {
-  route: NavView;
-  state: StewardState;
-  allocation: ReturnType<typeof paycheckAllocation>;
-  tradeoffs: ReturnType<typeof calculateTradeoffs>;
-  debtPlan: ReturnType<typeof debtPayoffPlan>;
-  recommendations: Recommendation[];
-  chat: ChatMessage[];
-  prompt: string;
-  setPrompt: (value: string) => void;
-  go: (view: NavView) => void;
-  sendAdvisor: (prompt?: string) => Promise<void>;
-  openModal: (modal: ModalName) => void;
-  connectPlaid: () => void;
-  syncBank: () => void;
-  syncing: boolean;
-}) {
-  const title =
-    route === "plan" ? "Your plan" :
-    route === "transactions" ? "Activity" :
-    route === "projects" ? "Projects" :
-    route === "wishlist" ? "Wishlist" :
-    route === "advisor" ? "Ask Steward" :
-    route === "debt" ? "Debt" :
-    route === "accounts" ? "Accounts" :
-    route === "reviews" ? "Reviews" : "Settings";
-  const activeRecommendation = recommendations[0];
-  const transactions = [...state.transactions]
-    .filter((transaction) => !transaction.excluded)
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 8);
-  const action =
-    route === "projects" ? () => openModal("project") :
-    route === "wishlist" ? () => openModal("wishlist") :
-    route === "accounts" ? () => openModal("account") :
-    route === "plan" ? () => openModal("goal") :
-    route === "transactions" ? () => openModal("transaction") : null;
+      <button
+        className="mobile-next-action"
+        onClick={() => go(nextAction ? "advisor" : "transactions")}
+      >
+        <span className={`mobile-action-icon ${nextAction?.type ?? "clear"}`}>
+          {nextAction ? <Sparkles size={19} /> : <CheckCircle2 size={19} />}
+        </span>
+        <span>
+          <small>UP NEXT</small>
+          <strong>
+            {nextAction?.title ?? "Nothing needs your attention"}
+          </strong>
+          <em>
+            {nextAction?.description ??
+              "Your connected accounts are up to date."}
+          </em>
+        </span>
+        <ArrowRight size={18} aria-hidden="true" />
+      </button>
 
-  if (route === "advisor") {
-    return (
-      <section className="native-route native-advisor" aria-label="Ask Steward">
-        <header className="native-route-header">
-          <div>
-            <span>YOUR FINANCIAL CHIEF OF STAFF</span>
-            <h1>{title}</h1>
-          </div>
-          <span className="native-spark"><Sparkles size={18} /></span>
-        </header>
-        <div className="native-advisor-context">
-          <Sparkles size={15} />
-          <span>
-            {activeRecommendation
-              ? activeRecommendation.title
-              : "I’m ready when you want a second opinion."}
-          </span>
-        </div>
-        <div className="native-chat-thread" aria-live="polite">
-          {chat.map((message) => (
-            <div className={`native-chat-message ${message.role}`} key={message.id}>
-              {message.role === "advisor" && <span><Sparkles size={14} /></span>}
-              <div>
-                <p>{message.text}</p>
-                {message.detail && <small>{message.detail}</small>}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="native-prompt-row">
-          <button onClick={() => void sendAdvisor("Can I afford this right now?")}>Can I afford this?</button>
-          <button onClick={() => void sendAdvisor("What should I do next?")}>What’s next?</button>
-        </div>
-        <form
-          className="native-composer"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void sendAdvisor();
-          }}
-        >
-          <textarea
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder="Ask anything about your money"
-            rows={1}
-            aria-label="Ask Steward"
-          />
-          <button type="submit" aria-label="Send question"><ArrowUpRight size={19} /></button>
-        </form>
-        <p className="native-disclaimer">Planning guidance, not financial advice.</p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="native-route" aria-label={`${title} screen`}>
-      <header className="native-route-header">
-        <div>
-          <span>{route === "transactions" ? "WHERE YOUR MONEY WENT" : "STEWARD"}</span>
-          <h1>{title}</h1>
-        </div>
-        {action ? (
-          <button className="native-add" onClick={action} aria-label={`Add ${title.toLowerCase()}`}>
-            <Plus size={20} />
-          </button>
-        ) : route === "accounts" ? null : (
-          <button className="native-add" onClick={() => go("home")} aria-label="Back to today">
-            <Home size={18} />
-          </button>
-        )}
-      </header>
-
-      <div className="native-route-scroll">
-        {route === "plan" && <>
-          <button className="native-amount-card" onClick={() => go("accounts")}>
-            <span>NEXT PAYCHECK · {state.paycheckPlan.date}</span>
-            <strong>{money(allocation.income)}</strong>
-            <p>{money(allocation.remaining)} still unassigned</p>
-            <Progress value={allocation.percentAssigned} />
-          </button>
-          <section className="native-group">
-            <button className="native-row" onClick={() => openModal("bill")}>
-              <span className="native-row-icon bills"><CalendarClock size={17} /></span>
-              <span><b>Bills protected</b><small>{money(allocation.upcomingBills)} before payday</small></span>
-              <strong>{money(tradeoffs.billsBeforePayday)}</strong><ArrowRight size={16} />
-            </button>
-            <button className="native-row" onClick={() => openModal("goal")}>
-              <span className="native-row-icon goals"><Flag size={17} /></span>
-              <span><b>Goals & savings</b><small>{state.goals.length} active priorities</small></span>
-              <strong>{money(state.paycheckPlan.savings)}</strong><ArrowRight size={16} />
-            </button>
-            <button className="native-row" onClick={() => go("debt")}>
-              <span className="native-row-icon debt"><CreditCard size={17} /></span>
-              <span><b>Debt payoff</b><small>Extra payment this cycle</small></span>
-              <strong>{money(state.paycheckPlan.debt)}</strong><ArrowRight size={16} />
-            </button>
-          </section>
-          <section className="native-budget-block">
-            <header><span>SPENDING BUCKETS</span><strong>This paycheck</strong></header>
-            {state.budgets.length ? state.budgets.slice(0, 8).map((budget) => {
-              const percent = budget.planned ? (budget.actual / budget.planned) * 100 : 0;
-              return (
-                <button className="native-budget-row" key={budget.id} onClick={() => go("transactions")}>
-                  <span><b>{budget.category}</b><small>{money(Math.max(0, budget.planned - budget.actual))} left</small></span>
-                  <strong>{money(budget.actual)} / {money(budget.planned)}</strong>
-                  <Progress value={percent} tone={percent > 90 ? "amber" : "green"} />
-                </button>
-              );
-            }) : (
-              <button className="native-budget-empty" onClick={connectPlaid}>
-                <ListChecks size={18} />
-                <span><b>Your categories will appear here</b><small>Connect activity to build an editable plan.</small></span>
-                <ArrowRight size={16} />
-              </button>
-            )}
-          </section>
-          <button className="native-advice-card" onClick={() => go("advisor")}>
-            <Sparkles size={18} />
-            <span><b>Steward’s take</b><small>{allocation.remaining < 0 ? "Your plan needs a small adjustment." : "Your next paycheck has room to direct."}</small></span>
-            <ArrowRight size={17} />
-          </button>
-        </>}
-
-        {route === "transactions" && <>
-          <div className="native-summary-line">
-            <span>{state.transactions.filter((transaction) => transaction.needsReview).length} to review</span>
-            <button onClick={() => openModal("transaction")}>Add activity</button>
-          </div>
-          <section className="native-group native-activity-list">
-            {transactions.map((transaction) => (
-              <button className="native-row native-transaction" key={transaction.id} onClick={() => openModal("transaction")}>
-                <span className="native-merchant">{transaction.merchant.slice(0, 1).toUpperCase()}</span>
-                <span><b>{transaction.merchant}</b><small>{transaction.category} · {transaction.date}</small></span>
-                <strong className={transaction.type === "income" ? "positive" : ""}>{transaction.type === "income" ? "+" : "−"}{money(Math.abs(transaction.amount))}</strong>
-              </button>
-            ))}
-          </section>
-        </>}
-
-        {route === "projects" && <>
-          <p className="native-screen-note">Things you’re making room for—not another to-do list.</p>
-          <section className="native-group">
-            {state.projects.map((project) => (
-              <button className="native-project-row" key={project.id} onClick={() => openModal("project")}>
-                <span className="native-row-icon projects"><BriefcaseBusiness size={17} /></span>
-                <span><b>{project.name}</b><small>{project.nextAction || "Choose the next step"}</small><Progress value={project.progress} /></span>
-                <em>{Math.round(project.progress)}%</em>
-              </button>
-            ))}
-          </section>
-        </>}
-
-        {route === "wishlist" && <>
-          {state.wishlist.map((item) => {
-            const affordability = affordabilityDecision(state, item.price);
-            return (
-              <button className={`native-wish ${affordability.verdict === "BUY" ? "recommended" : ""}`} key={item.id} onClick={() => { go("advisor"); void sendAdvisor(`Can I afford the ${item.name} for ${money(item.price)}?`); }}>
-                <span className="native-row-icon wishes"><ShoppingBag size={17} /></span>
-                <span><b>{item.name}</b><small>{affordability.verdict} · {affordability.reason}</small></span>
-                <strong>{money(item.price)}</strong><ArrowRight size={16} />
-              </button>
-            );
-          })}
-        </>}
-
-        {route === "debt" && <>
-          <section className="native-debt-total">
-            <span>TRACKED DEBT</span><strong>{money(debtPlan.totalBalance)}</strong>
-            <p>
-              {debtPlan.estimatedMonths
-                ? `${debtPlan.estimatedMonths} months on the current path${debtPlan.estimatedInterestSaved ? ` · ${money(debtPlan.estimatedInterestSaved)} interest avoided` : ""}`
-                : "Add APR and minimums to project payoff"}
-            </p>
-          </section>
-          <section className="native-group">
-            {debtPlan.debts.map((debt) => (
-              <button className="native-row" key={debt.id} onClick={() => go("advisor")}>
-                <span className="native-row-icon debt"><CreditCard size={17} /></span>
-                <span><b>{debt.name}</b><small>{debt.hasInterestRate ? `${debt.apr.toFixed(1)}% APR` : "Add APR"} · {money(debt.minimum)} minimum</small></span>
-                <strong>{money(debt.balance)}</strong><ArrowRight size={16} />
-              </button>
-            ))}
-          </section>
-          <button className="native-advice-card" onClick={() => { go("advisor"); void sendAdvisor("Explain my debt payoff plan."); }}><Sparkles size={18} /><span><b>Ask about your payoff path</b><small>See the tradeoffs before changing it.</small></span><ArrowRight size={17} /></button>
-        </>}
-
-        {route === "accounts" && <>
-          <div className="native-account-total"><span>AVAILABLE NOW</span><strong>{money(tradeoffs.liquidCash)}</strong><button onClick={connectPlaid}><Landmark size={15} /> Connect bank</button></div>
-          <section className="native-group">
-            {state.accounts.filter((account) => !account.archived).map((account) => (
-              <button className="native-row" key={account.id} onClick={() => syncBank()}>
-                <span className="native-row-icon accounts">{account.type === "Credit card" ? <CreditCard size={17} /> : <Landmark size={17} />}</span>
-                <span><b>{account.name}</b><small>{account.institution} · {account.status}</small></span>
-                <strong>{money(account.balance)}</strong>{syncing ? <RefreshCw className="spin" size={15} /> : <ArrowRight size={16} />}
-              </button>
-            ))}
-          </section>
-        </>}
-
-        {route === "reviews" && <>
-          <p className="native-screen-note">A shorter, calmer look at what changed.</p>
-          <section className="native-group">
-            {state.reviews.map((review) => <button className="native-review-row" key={review.id} onClick={() => go("advisor")}><span className="native-row-icon reviews"><BookOpen size={17} /></span><span><b>{review.period}</b><small>{review.focus}</small></span><ArrowRight size={16} /></button>)}
-          </section>
-        </>}
-
-        {route === "settings" && <>
-          <section className="native-profile-card"><span>{state.profile.name.slice(0, 1).toUpperCase()}</span><div><b>{state.profile.name}</b><small>{state.profile.email || "Private workspace"}</small></div></section>
-          <section className="native-group">
-            <button className="native-row" onClick={() => openModal("onboarding")}><span className="native-row-icon settings"><Settings size={17} /></span><span><b>Profile & plan</b><small>{state.profile.payFrequency} pay cycle</small></span><ArrowRight size={16} /></button>
-            <button className="native-row" onClick={() => go("accounts")}><span className="native-row-icon accounts"><Landmark size={17} /></span><span><b>Connections</b><small>Accounts and bank sync</small></span><ArrowRight size={16} /></button>
-            <button className="native-row" onClick={() => go("advisor")}><span className="native-row-icon settings"><ShieldCheck size={17} /></span><span><b>Privacy & memory</b><small>What Steward uses to help</small></span><ArrowRight size={16} /></button>
-          </section>
-        </>}
-      </div>
+      <nav className="mobile-overview-shortcuts" aria-label="Today shortcuts">
+        <button onClick={() => go("transactions")}>
+          <WalletCards size={19} />
+          <span>Activity</span>
+        </button>
+        <button onClick={() => go("plan")}>
+          <ListChecks size={19} />
+          <span>Plan</span>
+        </button>
+        <button onClick={() => go("advisor")}>
+          <Sparkles size={19} />
+          <span>Ask</span>
+        </button>
+      </nav>
     </section>
   );
 }
@@ -4262,7 +3968,7 @@ function EntityModal({
           {onboardingStep === 3 && (
             <div className="onboarding-result">
               <span><Sparkles size={22} /></span>
-                  <h3>{money(calculateTradeoffs(state).availableCash)} is available after your protections</h3>
+              <h3>{money(calculateTradeoffs(state).safeToSpend)} is safely available today</h3>
               <p>
                 Steward has reserved upcoming bills, required payments,
                 savings, and your {money(state.profile.minimumBuffer)} buffer.
@@ -4393,11 +4099,11 @@ function EntityModal({
         ...current,
         projects: [...current.projects, project],
       }));
-        }
-        if (modal === "wishlist") {
-          const price = Number(data.get("price"));
-          const purchaseDecision = affordabilityDecision(state, price);
-          const item: WishlistItem = {
+    }
+    if (modal === "wishlist") {
+      const price = Number(data.get("price"));
+      const safe = calculateTradeoffs(state).safeToSpend >= price;
+      const item: WishlistItem = {
         id: uid("wish"),
         name: String(data.get("name")),
         projectId: String(data.get("projectId")) || undefined,
@@ -4405,11 +4111,13 @@ function EntityModal({
         priority: data.get("priority") as WishlistItem["priority"],
         price,
         desiredDate: String(data.get("desiredDate")),
-            safeDate: purchaseDecision.verdict === "BUY"
-              ? new Date().toISOString().slice(0, 10)
-              : state.profile.nextPayday,
-            status: purchaseDecision.verdict === "BUY" ? "Recommended now" : "Wait",
-            reason: purchaseDecision.reason,
+        safeDate: safe
+          ? new Date().toISOString().slice(0, 10)
+          : state.profile.nextPayday,
+        status: safe ? "Recommended now" : "Wait",
+        reason: safe
+          ? "This fits the current safe-to-spend amount without disturbing protected priorities."
+          : "Waiting until the next paycheck keeps the protected buffer intact.",
         url: String(data.get("url")) || undefined,
       };
       setState((current) => ({

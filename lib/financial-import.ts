@@ -7,13 +7,7 @@ import type {
   StewardState,
   Transaction,
 } from "./steward-types";
-import {
-  affordabilityDecision,
-  calculateTradeoffs,
-  debtPayoffPlan,
-  deterministicCategory,
-  money,
-} from "./engine";
+import { deterministicCategory } from "./engine";
 
 export type PlaidAccount = {
   account_id: string;
@@ -366,8 +360,6 @@ function deriveRecommendations(
   today: Date,
 ): Recommendation[] {
   const result: Recommendation[] = [];
-  const tradeoffs = calculateTradeoffs(state);
-  const debtPlan = debtPayoffPlan(state);
   const inThirtyDays = new Date(today);
   inThirtyDays.setDate(today.getDate() + 30);
   const upcoming = bills.filter((bill) => {
@@ -375,39 +367,6 @@ function deriveRecommendations(
     return !bill.paid && due >= today && due <= inThirtyDays;
   });
   const upcomingTotal = upcoming.reduce((sum, bill) => sum + bill.amount, 0);
-  if (tradeoffs.risk === "High") {
-    result.push({
-      id: "derived-protect-cash",
-      title: "Pause flexible spending until payday",
-      description: "The current plan leaves no unreserved cash before the next paycheck.",
-      type: "protect",
-      priority: "now",
-      impact: Math.max(0, -tradeoffs.expectedBalance),
-      confidence: 0.98,
-      reason: `${money(tradeoffs.liquidCash)} is available before protecting bills, debt minimums, savings, and the cash buffer.`,
-      action: "Review the paycheck plan",
-      tradeoffs: "Flexible purchases wait so current obligations stay protected.",
-      timing: "Today",
-      expectedOutcome: "The next paycheck arrives without creating a preventable cash gap.",
-      status: "active",
-    });
-  } else if (debtPlan.target && debtPlan.target.apr >= 15 && state.paycheckPlan.debt > 0) {
-    result.push({
-      id: "derived-prioritize-debt",
-      title: `Pay ${money(state.paycheckPlan.debt)} extra toward ${debtPlan.target.name}`,
-      description: "Direct the planned extra payment to the highest-cost balance.",
-      type: "debt",
-      priority: "now",
-      impact: state.paycheckPlan.debt,
-      confidence: debtPlan.missingTerms.length ? 0.72 : 0.94,
-      reason: `${debtPlan.target.apr.toFixed(1)}% APR makes this the most expensive tracked debt.`,
-      action: "Review the debt plan",
-      tradeoffs: "This uses money already assigned to debt and does not reduce bill reserves.",
-      timing: "This paycheck",
-      expectedOutcome: "The highest-cost balance falls faster while recorded minimums remain covered.",
-      status: "active",
-    });
-  }
   if (upcomingTotal > 0) {
     result.push({
       id: "derived-protect-upcoming",
@@ -419,34 +378,6 @@ function deriveRecommendations(
       confidence: 0.9,
       reason: "Derived from recurring activity reported by your institution.",
       action: "Review the bill plan",
-      tradeoffs: "This money stays unavailable for flexible purchases until the bills clear.",
-      timing: "Before the due dates",
-      expectedOutcome: "Upcoming obligations remain funded without relying on the next paycheck.",
-      status: "active",
-    });
-  }
-  const buyNow = state.wishlist
-    .map((item) => ({ item, decision: affordabilityDecision(state, item.price) }))
-    .filter(({ item, decision }) => item.status !== "Purchased" && decision.verdict === "BUY")
-    .sort((a, b) => {
-      const priority = { High: 0, Medium: 1, Low: 2 };
-      return priority[a.item.priority] - priority[b.item.priority] || a.item.price - b.item.price;
-    })[0];
-  if (buyNow && tradeoffs.risk === "Low") {
-    result.push({
-      id: `derived-buy-${buyNow.item.id}`,
-      title: `You can buy ${buyNow.item.name}`,
-      description: buyNow.decision.reason,
-      type: "spend",
-      priority: result.length ? "soon" : "now",
-      impact: buyNow.item.price,
-      confidence: buyNow.decision.confidence === "High" ? 0.92 : 0.76,
-      reason: buyNow.decision.tradeoffs,
-      action: "Review the purchase",
-      tradeoffs: buyNow.decision.tradeoffs,
-      timing: buyNow.decision.suggestedDate,
-      expectedOutcome: `The purchase is made with ${money(tradeoffs.availableCash - buyNow.item.price)} of available cash remaining.`,
-      relatedProjectId: buyNow.item.projectId,
       status: "active",
     });
   }
@@ -462,9 +393,6 @@ function deriveRecommendations(
       confidence: 1,
       reason: "These transactions did not include a category Steward could map.",
       action: "Review transactions",
-      tradeoffs: "A short review improves future decisions without changing current balances.",
-      timing: "When you have two minutes",
-      expectedOutcome: "Spending patterns and plan suggestions become more accurate.",
       status: "active",
     });
   }
@@ -480,9 +408,6 @@ function deriveRecommendations(
       confidence: 1,
       reason: "No protected cash buffer has been set.",
       action: "Set a buffer",
-      tradeoffs: "A larger buffer lowers available cash but makes purchase guidance safer.",
-      timing: "Before the next purchase decision",
-      expectedOutcome: "Steward can distinguish truly available money from cash that should remain untouched.",
       status: "active",
     });
   }

@@ -1,29 +1,5 @@
 # Changelog
 
-## Plan-first recovery
-
-- Restored budgets, category progress, debt, and paycheck orientation to the
-  primary mobile experience.
-- Recentered mobile navigation around Plan instead of Today.
-- Kept Available Cash and one recommendation as the executive layer without
-  allowing either to replace the underlying financial plan.
-- Added an interpretation layer that explains category progress and provides
-  the context behind recommendations.
-- Added spending buckets to the detailed mobile paycheck plan.
-
-## Financial chief-of-staff pivot
-
-- Rebuilt Today around five immediate decisions: Am I okay, what is actually
-  available, what is the biggest pressure, what should happen today, and can I
-  buy this.
-- Added deterministic financial-health, bottleneck, daily-decision, and
-  BUY / WAIT / DO NOT BUY affordability engines.
-- Upgraded recommendations with timing, tradeoffs, confidence, related context,
-  and expected outcomes.
-- Reframed Advisor prompts and Wishlist recommendations around decisions rather
-  than transaction reporting.
-- Reordered mobile navigation around Today, Plan, Projects, and Advisor.
-
 ## 2026-07-30
 
 - Initialized Steward as a new full-stack financial operating system.

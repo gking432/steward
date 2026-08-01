@@ -1,8 +1,8 @@
 # Steward
 
-Steward is a financial planning system with an AI chief of staff layered on
-top. It keeps budgets, balances, bills, debt, goals, projects, and desired
-purchases visible, then explains what they mean and what to do next.
+Steward is an AI-native personal financial operating system. It connects
+balances, bills, debt, savings, goals, projects, and desired purchases to answer
+the practical question: **what should I do next?**
 
 The application starts with an empty, private workspace. A user connects a bank
 once; Steward imports balances and transaction history and derives the plan from
@@ -11,12 +11,7 @@ rules, affordability checks, and recommendations are deterministic.
 
 ## What works
 
-- Plan-first mobile home with executive summary, spending buckets, and insights
-- Automatic financial-health status and primary-bottleneck detection
-- Protected Available Cash alongside category progress, debt, and payday context
-- Deterministic BUY / WAIT / DO NOT BUY affordability decisions
-- One daily recommendation with reason, impact, confidence, timing, tradeoffs,
-  and expected outcome
+- Action-first daily financial briefing
 - Installable mobile-first PWA with dedicated bottom navigation and safe-area
   support
 - Preserved desktop application shell and primary navigation

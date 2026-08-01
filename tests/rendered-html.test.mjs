@@ -4,19 +4,18 @@ import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 
-test("build contains Steward's plan-first financial briefing", async () => {
-  const [layout, app, page, css, engine, manifest] = await Promise.all([
+test("build contains Steward's decision briefing", async () => {
+  const [layout, app, page, css, manifest] = await Promise.all([
     readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/steward-app.tsx", root), "utf8"),
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
-    readFile(new URL("lib/engine.ts", root), "utf8"),
     readFile(new URL("dist/server/vinext-server.json", root), "utf8").catch(
       () => "",
     ),
   ]);
 
-  assert.match(layout, /Steward — Your AI financial chief of staff/);
+  assert.match(layout, /Steward — Your financial operating system/);
   assert.match(layout, /og\.png/);
   assert.match(app, /Your live financial briefing/);
   assert.match(app, /Your next best move/);
@@ -26,17 +25,10 @@ test("build contains Steward's plan-first financial briefing", async () => {
   assert.match(page, /<StewardApp initialState=\{initialState\}/);
   assert.match(css, /\.decision-hero/);
   assert.match(css, /\.mobile-bottom-nav/);
-  assert.match(app, /native-connect/);
-  assert.match(app, /Let’s get started/);
+  assert.match(app, /ios-account-preview/);
+  assert.match(app, /ios-connect-action/);
   assert.match(app, /function MobileOverview/);
-  assert.match(app, /AVAILABLE CASH/);
-  assert.match(app, /THIS PAYCHECK/);
-  assert.match(app, /Your spending plan/);
-  assert.match(app, /SPENDING BUCKETS/);
-  assert.match(app, /WHAT STEWARD SEES/);
-  assert.match(engine, /verdict: "BUY"/);
-  assert.match(engine, /verdict: "WAIT"/);
-  assert.match(engine, /verdict: "DO NOT BUY"/);
+  assert.match(app, /SAFE TO SPEND/);
   assert.match(css, /\.mobile-home-view/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(layout, /manifest\.webmanifest/);

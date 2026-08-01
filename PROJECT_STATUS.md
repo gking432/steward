@@ -3,9 +3,7 @@
 ## Complete
 
 - Installable mobile-first PWA and preserved desktop application shell
-- Plan-first mobile briefing combining health, Available Cash, debt, payday,
-  editable spending buckets, and an explained next action
-- Deterministic financial-health, bottleneck, daily-decision, and affordability engines
+- Action-first daily briefing
 - Deterministic safe-to-spend and paycheck calculations
 - Accounts, transactions, category correction, bulk categorization
 - Bills, budgets, goals, projects, tasks, and wishlist

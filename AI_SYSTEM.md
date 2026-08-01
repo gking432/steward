@@ -6,11 +6,7 @@ Steward follows a strict calculation/explanation split.
 
 `lib/engine.ts` owns:
 
-- available cash after obligations and reserves
-- financial-health classification
-- primary financial-bottleneck detection
-- one daily decision
-- BUY / WAIT / DO NOT BUY affordability decisions
+- safe-to-spend
 - bills before payday
 - required debt coverage
 - paycheck reconciliation
@@ -31,10 +27,8 @@ It receives:
 - a bounded financial context
 - structured goals and wishlist summaries
 
-It returns structured `answer`, `rationale`, and `assumptions` fields. The model
-is instructed to behave like a financial chief of staff: explain what happened,
-why it matters, what to do next, the tradeoffs, and the strongest alternative.
-Requests use `store: false`.
+It returns structured `answer`, `rationale`, and `assumptions` fields. Requests
+use `store: false`.
 
 Financial record strings are treated as untrusted data. The developer prompt
 explicitly prohibits following instructions embedded in merchant names, notes,

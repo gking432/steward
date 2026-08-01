@@ -129,46 +129,6 @@ export type Recommendation = {
   reason: string;
   action: string;
   status: "active" | "completed" | "dismissed" | "snoozed";
-  tradeoffs?: string;
-  timing?: string;
-  expectedOutcome?: string;
-  relatedProjectId?: string;
-  relatedGoalId?: string;
-};
-
-export type FinancialHealth = {
-  status: "Stable" | "Watch spending" | "Immediate attention" | "Needs connection";
-  tone: "stable" | "watch" | "attention" | "setup";
-  summary: string;
-};
-
-export type FinancialBottleneck = {
-  type: "cash" | "debt" | "savings" | "bills" | "spending" | "income" | "clear";
-  title: string;
-  reason: string;
-  impact: number;
-  action: string;
-};
-
-export type DailyDecision = {
-  title: string;
-  reason: string;
-  impact: number;
-  confidence: number;
-  expectedOutcome: string;
-  timing: string;
-  action: string;
-};
-
-export type AffordabilityDecision = {
-  verdict: "BUY" | "WAIT" | "DO NOT BUY";
-  reason: string;
-  tradeoffs: string;
-  risk: "Low" | "Moderate" | "High";
-  impact: number;
-  suggestedDate: string;
-  alternative: string;
-  confidence: "High" | "Medium";
 };
 
 export type PaycheckPlan = {
@@ -258,7 +218,6 @@ export type TradeoffResult = {
   requiredDebt: number;
   savingsCommitment: number;
   safeToSpend: number;
-  availableCash: number;
   risk: "Low" | "Moderate" | "High";
   expectedBalance: number;
   reasons: string[];

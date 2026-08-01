@@ -5,32 +5,11 @@ const requestSchema = z.object({
   prompt: z.string().min(1).max(2_000),
   deterministicAnswer: z.string().min(1).max(4_000),
   context: z.object({
+    safeToSpend: z.number().finite(),
     availableCash: z.number().finite(),
-    liquidCash: z.number().finite(),
     billsBeforePayday: z.number().finite(),
     minimumBuffer: z.number().finite(),
     nextPayday: z.string(),
-    financialHealth: z.object({
-      status: z.string(),
-      tone: z.string(),
-      summary: z.string(),
-    }),
-    bottleneck: z.object({
-      type: z.string(),
-      title: z.string(),
-      reason: z.string(),
-      impact: z.number().finite(),
-      action: z.string(),
-    }),
-    todayDecision: z.object({
-      title: z.string(),
-      reason: z.string(),
-      impact: z.number().finite(),
-      confidence: z.number().finite(),
-      expectedOutcome: z.string(),
-      timing: z.string(),
-      action: z.string(),
-    }),
     debt: z.object({
       totalBalance: z.number().finite().nonnegative(),
       minimumPayments: z.number().finite().nonnegative(),
@@ -58,22 +37,12 @@ const requestSchema = z.object({
         }),
       )
       .max(20),
-    projects: z
-      .array(
-        z.object({
-          name: z.string(),
-          priority: z.string(),
-          remaining: z.number().finite().nonnegative(),
-          nextAction: z.string(),
-        }),
-      )
-      .max(30),
     wishlist: z
       .array(
         z.object({
           name: z.string(),
           price: z.number().finite(),
-          recommendation: z.string(),
+          status: z.string(),
         }),
       )
       .max(30),

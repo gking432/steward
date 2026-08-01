@@ -7,14 +7,10 @@ import {
 } from "../lib/financial-import";
 import { createEmptyState } from "../lib/initial-state";
 import {
-  affordabilityDecision,
   calculateTradeoffs,
-  dailyDecision,
   debtPayoffPlan,
   deterministicCategory,
-  financialHealth,
   paycheckAllocation,
-  primaryBottleneck,
   splitIsValid,
   spendingByCategory,
 } from "../lib/engine";
@@ -84,49 +80,6 @@ test("safe-to-spend never becomes negative", () => {
   assert.equal(calculateTradeoffs(state).risk, "High");
 });
 
-test("financial health turns verified cash math into a clear status", () => {
-  const state = connectedState();
-  assert.equal(financialHealth(state).status, "Stable");
-  state.accounts[0].available = 50;
-  assert.equal(financialHealth(state).status, "Immediate attention");
-});
-
-test("Steward identifies exactly one primary financial bottleneck", () => {
-  const state = connectedState();
-  state.accounts.push({
-    id: "card",
-    name: "High-rate card",
-    institution: "Issuer",
-    type: "Credit card",
-    balance: 2_000,
-    available: 0,
-    interestRate: 24,
-    minimumPayment: 60,
-    source: "manual",
-    status: "manual",
-    lastSynced: "Now",
-  });
-  const bottleneck = primaryBottleneck(state);
-  assert.equal(bottleneck.type, "debt");
-  assert.match(bottleneck.title, /High-rate card/);
-});
-
-test("affordability engine returns buy, wait, and do-not-buy decisions", () => {
-  const state = connectedState();
-  assert.equal(affordabilityDecision(state, 100).verdict, "BUY");
-  assert.equal(affordabilityDecision(state, 1_300).verdict, "WAIT");
-  assert.equal(affordabilityDecision(state, 2_000).verdict, "DO NOT BUY");
-});
-
-test("daily decision includes reason, timing, confidence, and outcome", () => {
-  const decision = dailyDecision(connectedState());
-  assert.ok(decision.title);
-  assert.ok(decision.reason);
-  assert.ok(decision.timing);
-  assert.ok(decision.expectedOutcome);
-  assert.ok(decision.confidence > 0 && decision.confidence <= 1);
-});
-
 test("paycheck allocation reconciles editable allocations", () => {
   const state = connectedState();
   const result = paycheckAllocation(state);
@@ -172,7 +125,6 @@ test("debt payoff plan uses minimums plus the planned extra on highest APR first
   assert.equal(plan.target?.name, "High APR card");
   assert.ok(plan.estimatedMonths && plan.estimatedMonths > 0);
   assert.ok(plan.estimatedInterest && plan.estimatedInterest > 0);
-  assert.ok(plan.estimatedInterestSaved && plan.estimatedInterestSaved > 0);
   assert.equal(plan.missingTerms.length, 0);
 });
 

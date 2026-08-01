@@ -4,16 +4,14 @@
 
 Steward is a server-rendered application shell with a rich client workspace.
 Critical financial calculations live in `lib/engine.ts`; they never depend on a
-language model. Steward’s deterministic decision layer produces Available
-Cash, financial health, one primary bottleneck, a daily action, debt payoff
-projections, and purchase verdicts. The UI is organized by user decisions
-rather than database entities:
+language model. The UI is organized by user decisions rather than database
+entities:
 
-1. Today: health, Available Cash, primary bottleneck, next action, and purchase decision
+1. Today: current position and next action
 2. Plan: paycheck allocation, budgets, goals, bills
-3. Projects: priorities, progress, next purchase, and next action
-4. Advisor: decision explanation, tradeoffs, and alternatives
-5. Transactions and Accounts: supporting evidence and data controls
+3. Transactions: review and learning signals
+4. Projects and Wishlist: life context and purchase timing
+5. Advisor and Reviews: explanation and reflection
 
 ## Request boundaries
 
