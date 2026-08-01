@@ -49,6 +49,7 @@ import type { Bucket, Claim, Workspace } from "../../lib/model/types";
 import type { StewardState } from "../../lib/steward-types";
 import { BucketsScreen } from "./buckets";
 import { ConnectScreen } from "./connect";
+import { AskScreen } from "./ask";
 import { HomeScreen } from "./home";
 import { Onboarding } from "./onboarding";
 import { usePlaidConnect } from "./use-plaid";
@@ -889,6 +890,7 @@ export function StewardApp({
   );
   const [tab, setTab] = useState<Tab>("home");
   const [buyOpen, setBuyOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
   const [paydayDismissed, setPaydayDismissed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -991,7 +993,7 @@ export function StewardApp({
               setFocusBucket(bucket);
               setTab("activity");
             }}
-            onAsk={() => setBuyOpen(true)}
+            onAsk={() => setAskOpen(true)}
           />
         )}
         {tab === "plan" && (
@@ -1012,7 +1014,7 @@ export function StewardApp({
         <button className={tab === "home" ? "active" : ""} onClick={() => setTab("home")}>
           <Target size={19} /><span>Home</span>
         </button>
-        <button className="sw-fab" onClick={() => setBuyOpen(true)} aria-label="Can I buy this?">
+        <button className="sw-fab" onClick={() => setAskOpen(true)} aria-label="Ask Steward">
           <Sparkles size={21} />
         </button>
         <button className={tab === "plan" ? "active" : ""} onClick={() => setTab("plan")}>
@@ -1025,6 +1027,10 @@ export function StewardApp({
           <Receipt size={19} /><span>Activity</span>
         </button>
       </nav>
+
+      {askOpen && (
+        <AskScreen workspace={workspace} today={today} update={update} onClose={() => setAskOpen(false)} />
+      )}
 
       {buyOpen && (
         <BuySheet workspace={workspace} today={today} update={update} onClose={() => setBuyOpen(false)} />

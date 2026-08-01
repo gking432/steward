@@ -12,6 +12,7 @@
 import {
   allocate,
   diffArrivals,
+  formatDate,
   formatMoney,
   planCycle,
   projectArrivals,
@@ -135,7 +136,7 @@ export function evaluatePurchase(
       : answer === "yes-but"
         ? "Yes — with one tradeoff."
         : waitUntil
-          ? `Wait until ${waitUntil}.`
+          ? `Wait until ${formatDate(waitUntil)}.`
           : "Not this cycle.";
 
   const tradeoff = delayed.length
@@ -392,8 +393,8 @@ export function buildPaydayProposal(
       amount: entry.required,
       note:
         entry.cyclesRemaining > 1
-          ? `${formatMoney(entry.bucket.amountDue ?? 0)} due ${entry.bucket.dueDate}, split over ${entry.cyclesRemaining} paychecks`
-          : `due ${entry.bucket.dueDate ?? "this cycle"}`,
+          ? `${formatMoney(entry.bucket.amountDue ?? 0)} due ${formatDate(entry.bucket.dueDate ?? null)}, split over ${entry.cyclesRemaining} paychecks`
+          : `due ${entry.bucket.dueDate ? formatDate(entry.bucket.dueDate) : "this cycle"}`,
     })),
     reservesTotal: plan.reservesTotal,
     spend: plan.spend.map((entry) => ({ name: entry.bucket.name, amount: entry.amount })),
@@ -612,5 +613,161 @@ export function recategorise(
         ? { ...row, category, categorySource: "manual" as const, needsReview: false, confidence: 1 }
         : row;
     }),
+  };
+}
+
+/* ---------------------------------------------------------- acceleration */
+
+export type CutOption = {
+  bucketId: string;
+  name: string;
+  currentPerCycle: number;
+  suggestedCut: number;
+  /** Where the claim lands if this cut is made. */
+  newArrival: string | null;
+  cyclesSaved: number;
+};
+
+export type Acceleration = {
+  claim: Claim;
+  currentArrival: string | null;
+  currentPerCycle: number;
+  /** Extra per paycheck needed to land it one cycle sooner. */
+  /** What it would take to finish this out of this paycheck. */
+  neededPerCycle: number;
+  /** Whether trimming everything discretionary would even cover it. */
+  enoughAvailable: boolean;
+  totalAvailable: number;
+  soonestArrival: string | null;
+  options: CutOption[];
+};
+
+/**
+ * "Want it sooner? Here's what we'd cut."
+ *
+ * The negotiation half of the product. Steward never picks for the user — it
+ * prices each option and lets them choose. Cuts are only ever offered from
+ * discretionary spend buckets; obligations are not on the table, which is why
+ * they are filtered out here rather than ranked lower.
+ */
+export function accelerate(
+  workspace: Workspace,
+  claimId: string,
+  today: string,
+  policy: AllocationPolicy = defaultPolicy,
+): Acceleration | null {
+  const claim = workspace.claims.find((entry) => entry.id === claimId);
+  const plan = planCycle(workspace, today);
+  if (!claim || !plan) return null;
+
+  const before = projectArrivals(workspace, today, policy);
+  const currentArrival = before.find((entry) => entry.claimId === claimId)?.arrivalDate ?? null;
+  const allocatedNow =
+    allocate(workspace, plan.freeCapacity, today, policy).allocations.find(
+      (entry) => entry.claim.id === claimId,
+    )?.amount ?? 0;
+  const remaining = Math.max(0, round2(claim.targetAmount - claim.fundedAmount));
+
+  // What it would take to finish this claim out of *this* paycheck.
+  //
+  // Pacing it "one cycle faster" is the wrong question for anything that
+  // completes as soon as it is funded — a queued purchase doesn't arrive
+  // sooner by receiving slightly more each cycle, it arrives sooner by being
+  // funded now. So the number quoted is the real shortfall.
+  const neededPerCycle = round2(Math.max(0, remaining - allocatedNow));
+
+  const options: CutOption[] = [];
+  for (const entry of plan.spend) {
+    const bucket = entry.bucket;
+    // Obligations and essentials are not on the table, by design.
+    if (bucket.essential || entry.amount <= 0) continue;
+
+    const cut = round2(Math.min(entry.amount, neededPerCycle || entry.amount));
+    const trimmed: Workspace = {
+      ...workspace,
+      buckets: workspace.buckets.map((candidate) =>
+        candidate.id === bucket.id
+          ? { ...candidate, perCycle: round2((candidate.perCycle ?? 0) - cut) }
+          : candidate,
+      ),
+    };
+    const after = projectArrivals(trimmed, today, policy).find(
+      (arrival) => arrival.claimId === claimId,
+    );
+    const newArrival = after?.arrivalDate ?? null;
+    const saved =
+      currentArrival && newArrival && newArrival < currentArrival
+        ? Math.max(1, Math.round(daysBetween(newArrival, currentArrival) / 14))
+        : 0;
+
+    options.push({
+      bucketId: bucket.id,
+      name: bucket.name,
+      currentPerCycle: entry.amount,
+      suggestedCut: cut,
+      newArrival,
+      cyclesSaved: saved,
+    });
+  }
+
+  // Everything discretionary, combined. Tells the user honestly when no single
+  // cut is enough rather than offering three that each change nothing.
+  const totalAvailable = round2(
+    plan.spend
+      .filter((entry) => !entry.bucket.essential)
+      .reduce((sum, entry) => sum + entry.amount, 0),
+  );
+
+  return {
+    claim,
+    currentArrival,
+    currentPerCycle: allocatedNow,
+    neededPerCycle,
+    enoughAvailable: totalAvailable >= neededPerCycle,
+    totalAvailable,
+    soonestArrival:
+      options
+        .map((option) => option.newArrival)
+        .filter((date): date is string => Boolean(date))
+        .sort()[0] ?? null,
+    options: options.sort((a, b) => b.cyclesSaved - a.cyclesSaved || b.suggestedCut - a.suggestedCut).slice(0, 3),
+  };
+}
+
+/**
+ * The plan, as sentences.
+ *
+ * Every figure comes from the engine. The AI layer may reword these; it may not
+ * produce them, and the guard in lib/model/ai.ts rejects any number it adds.
+ */
+export function planNarrative(workspace: Workspace, today: string, policy: AllocationPolicy = defaultPolicy) {
+  const plan = planCycle(workspace, today);
+  if (!plan) return null;
+  const result = allocate(workspace, plan.freeCapacity, today, policy);
+  const arrivals = projectArrivals(workspace, today, policy);
+
+  const lines = result.allocations.map((entry) => {
+    const arrival = arrivals.find((item) => item.claimId === entry.claim.id);
+    return {
+      claimId: entry.claim.id,
+      name: entry.claim.name,
+      amount: entry.amount,
+      arrival: arrival?.arrivalDate ?? null,
+      completes: entry.completes,
+      sentence: entry.completes
+        ? `${formatMoney(entry.amount)} finishes ${entry.claim.name} — it's yours this paycheck.`
+        : arrival?.arrivalDate
+          ? `${formatMoney(entry.amount)} to ${entry.claim.name}, which lands ${formatDate(arrival.arrivalDate)}.`
+          : `${formatMoney(entry.amount)} to ${entry.claim.name}.`,
+    };
+  });
+
+  return {
+    reserved: plan.reservesTotal,
+    everyday: plan.spendTotal,
+    free: plan.freeCapacity,
+    lines,
+    queued: result.queued.map((entry) => entry.claim.name),
+    summary: `Your paycheck is ${formatMoney(plan.income)}. ${formatMoney(plan.reservesTotal)} covers bills and minimums, ${formatMoney(plan.spendTotal)} is everyday spending, which leaves ${formatMoney(plan.freeCapacity)}.`,
   };
 }
