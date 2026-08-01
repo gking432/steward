@@ -418,21 +418,26 @@ function useMobileViewport() {
 
 export function StewardApp({
   initialState,
+  // Fixture and visual-regression harness (see /fixture). When false the app
+  // renders exactly the state it was handed and never contacts the workspace
+  // API, so screenshots are reproducible. Production routes leave this true.
+  syncWithServer = true,
 }: {
   initialState: StewardState;
+  syncWithServer?: boolean;
 }) {
   const [state, setState] = useState(initialState);
   const [view, setView] = useState<NavView>("home");
   const [mobileNav, setMobileNav] = useState(false);
   const [mobileMore, setMobileMore] = useState(false);
   const [modal, setModal] = useState<ModalName>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(syncWithServer);
   // Temporary mobile-only preview so the unfinished bank connection does not
   // prevent product review. Desktop keeps its existing connection gate.
   const mobileAppPreview = useMobileViewport();
   const [saveState, setSaveState] = useState<
     "saved" | "saving" | "offline"
-  >("saving");
+  >(syncWithServer ? "saving" : "saved");
   const [bankStatus, setBankStatus] = useState<
     "idle" | "opening" | "importing" | "syncing"
   >("idle");
@@ -466,6 +471,7 @@ export function StewardApp({
   }, []);
 
   useEffect(() => {
+    if (!syncWithServer) return;
     fetch("/api/steward")
       .then((response) => response.json())
       .then((payload) => {
@@ -477,7 +483,7 @@ export function StewardApp({
         loadedRef.current = true;
         setLoading(false);
       });
-  }, []);
+  }, [syncWithServer]);
 
   useEffect(() => {
     const theme =
