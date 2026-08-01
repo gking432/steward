@@ -53,6 +53,8 @@ import {
 import { fallbackIntent, type IntentDraft } from "../../lib/model/ai";
 import type { Bucket, Claim, Workspace } from "../../lib/model/types";
 import type { StewardState } from "../../lib/steward-types";
+import { Onboarding } from "./onboarding";
+import { usePlaidConnect } from "./use-plaid";
 import { useWorkspace } from "./workspace-store";
 import "./steward.css";
 
@@ -914,6 +916,111 @@ function PaydayFlow({
   );
 }
 
+
+/**
+ * Turn onboarding answers into a workspace.
+ *
+ * Everything created here is an ordinary object the user can edit afterwards —
+ * onboarding is a shortcut into the normal model, not a special mode.
+ */
+function applyOnboarding(
+  current: Workspace,
+  input: {
+    takeHome: number;
+    frequency: Workspace["profile"]["payFrequency"];
+    nextPayday: string;
+    rent: number;
+    otherBills: number;
+    everyday: number;
+    picks: { label: string; kind: string; amount: number | null }[];
+  },
+): Workspace {
+  const buckets: Workspace["buckets"] = [];
+
+  if (input.rent > 0) {
+    buckets.push({
+      id: "reserve:onboard-rent",
+      kind: "reserve",
+      name: "Rent",
+      essential: true,
+      source: "manual",
+      amountDue: input.rent,
+      dueDate: firstOfNextMonth(input.nextPayday),
+      reserved: 0,
+      frequency: "monthly",
+      autopay: false,
+    });
+  }
+  if (input.otherBills > 0) {
+    buckets.push({
+      id: "reserve:onboard-bills",
+      kind: "reserve",
+      name: "Bills",
+      essential: true,
+      source: "manual",
+      amountDue: input.otherBills,
+      dueDate: firstOfNextMonth(input.nextPayday),
+      reserved: 0,
+      frequency: "monthly",
+      autopay: false,
+    });
+  }
+  // One everyday bucket to start. Splitting it into groceries, gas and the
+  // rest is a natural first edit, and a far better first edit than being made
+  // to invent four numbers before seeing anything.
+  if (input.everyday > 0) {
+    buckets.push({
+      id: "spend:onboard-everyday",
+      kind: "spend",
+      name: "Everyday",
+      category: "Everyday",
+      essential: true,
+      source: "manual",
+      perCycle: input.everyday,
+      rollover: "roll",
+    });
+  }
+
+  const claims = input.picks.map((pick, index) => ({
+    id: `claim:onboard-${index}`,
+    name: pick.label,
+    kind: (pick.kind === "payoff" ? "payoff" : pick.kind === "purchase" ? "purchase" : "fund") as
+      | "payoff"
+      | "purchase"
+      | "fund",
+    targetAmount: pick.amount ?? 0,
+    fundedAmount: 0,
+    rank: index,
+    // Without a target there is nothing to pace, so it waits in Someday until
+    // the user gives it one. Better than inventing an amount on their behalf.
+    status: (pick.amount ? "active" : "someday") as "active" | "someday",
+    horizon: "arrival" as const,
+    divisible: pick.kind !== "purchase",
+    delayCost: { type: "none" as const },
+    protected: false,
+  }));
+
+  return {
+    ...current,
+    profile: {
+      ...current.profile,
+      takeHomePay: input.takeHome,
+      payFrequency: input.frequency,
+      nextPayday: input.nextPayday,
+      bufferFloor: current.profile.bufferFloor || Math.round(input.everyday),
+      onboardingComplete: true,
+    },
+    buckets: [...current.buckets, ...buckets],
+    claims: [...current.claims, ...claims],
+  };
+}
+
+function firstOfNextMonth(from: string) {
+  const date = new Date(`${from}T12:00:00`);
+  date.setMonth(date.getMonth() + 1, 1);
+  return date.toISOString().slice(0, 10);
+}
+
 /* --------------------------------------------------------------- SHELL -- */
 
 export function StewardApp({
@@ -925,12 +1032,16 @@ export function StewardApp({
   syncWithServer?: boolean;
   fixedToday?: string;
 }) {
-  const { workspace, update, loading, saveState } = useWorkspace(initialState, syncWithServer);
+  const { workspace, update, loading, saveState, setWorkspaceFromServer } = useWorkspace(
+    initialState,
+    syncWithServer,
+  );
   const [tab, setTab] = useState<Tab>("now");
   const [buyOpen, setBuyOpen] = useState(false);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
   const [paydayDismissed, setPaydayDismissed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const plaid = usePlaidConnect(setWorkspaceFromServer);
   const today = todayISO(fixedToday);
 
   const proposal = useMemo(
@@ -963,17 +1074,14 @@ export function StewardApp({
 
   if (!hasData) {
     return (
-      <main className="sw-onboard">
-        <div>
-          <h1>Know what you can spend.<br />Know what it costs you.</h1>
-          <p>
-            Connect an account and Steward will show you how much of every paycheck isn&apos;t
-            already spoken for — then help you decide what it should do.
-          </p>
-          <a className="sw-primary" href="/legacy">Connect your bank</a>
-          <small>Steward starts empty. There is no sample data to delete.</small>
-        </div>
-      </main>
+      <Onboarding
+        connecting={plaid.status !== "idle"}
+        connectError={plaid.error}
+        onConnect={plaid.connect}
+        onComplete={(input) => {
+          update((current) => applyOnboarding(current, input));
+        }}
+      />
     );
   }
 

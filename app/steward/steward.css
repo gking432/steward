@@ -711,3 +711,94 @@
   color: var(--text);
   font-size: 15px;
 }
+
+/* ----------------------------------------------------------- onboarding */
+
+.sw-onboard-card {
+  display: grid;
+  gap: 14px;
+  width: min(440px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 26px 22px;
+}
+.sw-onboard-card h1 { font-size: clamp(24px, 6.5vw, 31px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.14; }
+.sw-onboard-card h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
+.sw-onboard-card p { color: var(--text-soft); font-size: 13.5px; }
+.sw-onboard-card small { color: var(--text-faint); font-size: 11.5px; }
+.sw-onboard-sub { margin-top: 4px; font-size: 15px !important; }
+
+.sw-onboard-error {
+  border-radius: 10px;
+  background: var(--amber-soft);
+  padding: 9px 11px;
+  color: var(--text) !important;
+  font-size: 12.5px;
+}
+
+.sw-onboard-fields { display: grid; gap: 12px; }
+.sw-onboard-fields label { display: grid; gap: 5px; }
+.sw-onboard-fields label > span { color: var(--text-soft); font-size: 12px; font-weight: 650; }
+.sw-onboard-fields small { color: var(--text-faint); font-size: 11px; }
+.sw-onboard-fields input,
+.sw-onboard-fields select {
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  padding: 11px 12px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.sw-reveal { letter-spacing: -0.04em; }
+.sw-reveal-math { margin-top: 0; border-top: none; }
+
+.sw-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.sw-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  padding: 9px 13px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.sw-pick.active { border-color: var(--green); background: var(--green-soft); color: var(--green); }
+
+.sw-spin { animation: sw-rotate 900ms linear infinite; }
+@keyframes sw-rotate { to { transform: rotate(360deg); } }
+
+/*
+ * globals.css styles bare h1/h2/dd for the legacy tree. Until that file is cut
+ * back in Phase 10, the new tree states its own text colours explicitly rather
+ * than inheriting whatever the old design left behind.
+ */
+.sw-onboard-card h1,
+.sw-onboard-card h2,
+.sw-onboard-card dt,
+.sw-onboard-card dd,
+.sw-app h1,
+.sw-app h2,
+.sw-app dt,
+.sw-app dd,
+.sw-app strong,
+.sw-app b {
+  color: var(--text);
+}
+.sw-app .sw-eyebrow,
+.sw-onboard-card .sw-eyebrow,
+.sw-app .sw-math dt,
+.sw-onboard-card .sw-math dt { color: var(--text-soft); }
+.sw-app .sw-link,
+.sw-app .sw-arrival,
+.sw-app .sw-tap-hint { color: var(--green); }
+.sw-app .sw-tx b.pos { color: var(--green); }
+.sw-app .sw-answer.yes,
+.sw-app .sw-answer.yes-but { color: var(--green); }
+.sw-app .sw-answer.wait { color: var(--amber); }
+.sw-primary, .sw-primary strong { color: #fff; }

@@ -209,3 +209,47 @@ test("a claim created after load is given a legacy home rather than dropped", ()
   // Round-trip is still stable once they have a home.
   assert.deepEqual(toLegacy(toModel(written)), written);
 });
+
+test("a bucket created after load is given a legacy home rather than dropped", () => {
+  const model = toModel(goldenWorkspace());
+  const withNew = {
+    ...model,
+    buckets: [
+      ...model.buckets,
+      {
+        id: "spend:onboard-everyday",
+        kind: "spend" as const,
+        name: "Everyday",
+        category: "Everyday",
+        essential: true,
+        source: "manual" as const,
+        perCycle: 322,
+        rollover: "roll" as const,
+      },
+      {
+        id: "reserve:onboard-rent",
+        kind: "reserve" as const,
+        name: "Rent",
+        essential: true,
+        source: "manual" as const,
+        amountDue: 1600,
+        dueDate: "2026-09-01",
+        reserved: 0,
+        frequency: "monthly" as const,
+        autopay: false,
+      },
+    ],
+  };
+
+  const written = toLegacy(withNew);
+  assert.ok(written.budgets.some((budget) => budget.category === "Everyday"));
+  assert.ok(written.bills.some((bill) => bill.name === "Rent" && bill.amount === 1600));
+
+  const reread = toModel(written);
+  assert.equal(
+    reread.buckets.find((bucket) => bucket.name === "Everyday")?.perCycle,
+    322,
+    "the per-cycle amount survives, which is what Now renders",
+  );
+  assert.deepEqual(toLegacy(toModel(written)), written);
+});

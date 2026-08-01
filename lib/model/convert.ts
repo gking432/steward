@@ -502,6 +502,43 @@ export function toLegacy(workspace: Workspace): StewardState {
     });
   });
 
+  // Buckets created after load (onboarding, or adding a bill) are absent from
+  // the recorded order and would be dropped on write, exactly as claims were.
+  const knownBuckets = new Set([
+    ...legacy.order.bills.map((id) => `reserve:${id}`),
+    ...legacy.order.budgets.map((id) => `spend:${id}`),
+  ]);
+  for (const bucket of workspace.buckets) {
+    if (isDerived(bucket.id) || knownBuckets.has(bucket.id)) continue;
+    if (bucket.kind === "reserve") {
+      bills.push(
+        compact({
+          id: stripPrefix(bucket.id, "reserve:"),
+          name: bucket.name,
+          amount: bucket.amountDue ?? 0,
+          dueDate: bucket.dueDate ?? "",
+          frequency: bucket.frequency ?? "monthly",
+          autopay: bucket.autopay ?? false,
+          essential: bucket.essential,
+          accountId: bucket.accountId ?? "",
+        }) as Bill,
+      );
+    } else {
+      budgets.push(
+        compact({
+          id: stripPrefix(bucket.id, "spend:"),
+          category: bucket.category ?? bucket.name,
+          planned: 0,
+          actual: 0,
+          cadence: "Monthly",
+          essential: bucket.essential,
+          source: "manual",
+          paycheckAmount: bucket.perCycle,
+        }) as Budget,
+      );
+    }
+  }
+
   // Claims created after load have no entry in the recorded order, so they
   // would otherwise be dropped on write. Give each one a legacy home: a
   // purchase becomes a wishlist item, anything else becomes a goal. On the

@@ -65,5 +65,11 @@ export function useWorkspace(initial: StewardState, sync = true) {
     setLegacy((current) => toLegacy(next(toModel(current))));
   }, []);
 
-  return { workspace, update, loading, saveState };
+  /** Replace the whole workspace with one returned by the server (bank sync). */
+  const setWorkspaceFromServer = useCallback((next: StewardState) => {
+    loaded.current = true;
+    setLegacy(next);
+  }, []);
+
+  return { workspace, update, loading, saveState, setWorkspaceFromServer };
 }
