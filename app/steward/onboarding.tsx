@@ -17,7 +17,7 @@
  *     answer that lands the user in a working budgeting app.
  */
 
-import { ArrowRight, Check, Landmark, RefreshCw } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { useState } from "react";
 import { formatMoney } from "../../lib/model/engine";
 import type { StewardState } from "../../lib/steward-types";
@@ -39,9 +39,6 @@ const cyclesPerMonth = (frequency: Frequency) =>
 
 export function Onboarding({
   onComplete,
-  onConnect,
-  connecting,
-  connectError,
 }: {
   onComplete: (input: {
     takeHome: number;
@@ -52,23 +49,23 @@ export function Onboarding({
     everyday: number;
     picks: { label: string; kind: string; amount: number | null }[];
   }) => void;
-  onConnect: () => void;
-  connecting: boolean;
-  connectError: string;
 }) {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(1);
   const [takeHome, setTakeHome] = useState("");
   const [frequency, setFrequency] = useState<Frequency>("Biweekly");
   const [nextPayday, setNextPayday] = useState("");
   const [rent, setRent] = useState("");
   const [otherBills, setOtherBills] = useState("");
-  const [everyday, setEveryday] = useState("");
+
   const [picked, setPicked] = useState<string[]>([]);
 
   const pay = Number(takeHome) || 0;
   const perCycle = (monthly: number) => monthly / cyclesPerMonth(frequency);
   const reservedPerCycle = perCycle((Number(rent) || 0) + (Number(otherBills) || 0));
-  const everydayPerCycle = Number(everyday) || 0;
+  // Not asked. Nobody knows this number, which is the entire reason Steward
+  // reads transactions. On the manual path Steward starts from what is left
+  // after obligations and the user adjusts it on the buckets screen.
+  const everydayPerCycle = Math.max(0, Math.round((pay - reservedPerCycle) * 0.45));
   const free = Math.max(0, Math.round((pay - reservedPerCycle - everydayPerCycle) * 100) / 100);
 
   const basicsReady = pay > 0 && nextPayday !== "";
@@ -92,29 +89,6 @@ export function Onboarding({
   return (
     <main className="sw-onboard">
       <div className="sw-onboard-card">
-        {step === 0 && (
-          <>
-            <h1>
-              Know what you can spend.
-              <br />
-              Know what it costs you.
-            </h1>
-            <p>
-              Steward reserves everything you owe before it shows you what&apos;s left — then
-              helps you decide what that money should do.
-            </p>
-            <button className="sw-primary" onClick={onConnect} disabled={connecting}>
-              {connecting ? <RefreshCw size={16} className="sw-spin" /> : <Landmark size={16} />}
-              {connecting ? "Opening secure connection…" : "Connect your bank"}
-            </button>
-            {connectError && <p className="sw-onboard-error">{connectError}</p>}
-            <button className="sw-secondary" onClick={() => setStep(1)}>
-              I&apos;ll enter it myself
-            </button>
-            <small>Bank credentials are handled by Plaid, never Steward. Read-only.</small>
-          </>
-        )}
-
         {step === 1 && (
           <>
             <span className="sw-eyebrow">Step 1 of 3</span>
@@ -157,11 +131,6 @@ export function Onboarding({
                 <input value={otherBills} onChange={(e) => setOtherBills(e.target.value)} inputMode="decimal" placeholder="500" />
                 <small>Utilities, phone, insurance, minimum payments.</small>
               </label>
-              <label>
-                <span>Everyday spending, each paycheck</span>
-                <input value={everyday} onChange={(e) => setEveryday(e.target.value)} inputMode="decimal" placeholder="320" />
-                <small>Groceries, gas, eating out. A rough figure is fine — you can change it.</small>
-              </label>
             </div>
             <button className="sw-primary" onClick={() => setStep(3)}>
               Show me where I stand <ArrowRight size={15} />
@@ -179,10 +148,16 @@ export function Onboarding({
             <dl className="sw-math sw-reveal-math">
               <div><dt>Comes in</dt><dd>{formatMoney(pay)}</dd></div>
               <div><dt>Rent and bills, per paycheck</dt><dd>−{formatMoney(reservedPerCycle)}</dd></div>
-              <div><dt>Everyday spending</dt><dd>−{formatMoney(everydayPerCycle)}</dd></div>
+              <div>
+                <dt>Everyday spending <em>Steward&apos;s starting guess</em></dt>
+                <dd>−{formatMoney(everydayPerCycle)}</dd>
+              </div>
               <div className="sw-math-total"><dt>Yours to direct</dt><dd>{formatMoney(free)}</dd></div>
             </dl>
-            <p>You can change any of this later. Nothing here is locked in.</p>
+            <p>
+              Connecting a bank replaces the guess with what you actually spend. Either way
+              you can change all of it on the next screen.
+            </p>
 
             <h2 className="sw-onboard-sub">What should that money do?</h2>
             <div className="sw-chips">

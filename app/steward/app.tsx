@@ -11,14 +11,12 @@
  */
 
 import {
-  ArrowRight,
   Check,
   ChevronDown,
   ChevronUp,
   CreditCard,
   Landmark,
   ListChecks,
-  Plus,
   Receipt,
   ShieldCheck,
   Sparkles,
@@ -28,25 +26,19 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  allocate,
   bucketActivity,
   currentCycle,
-  daysBetween,
   formatDate,
   formatMoney,
   planCycle,
-  projectArrivals,
   transactionsInCycle,
-  type Arrival,
 } from "../../lib/model/engine";
 import {
   buildPaydayProposal,
   claimFromPurchase,
   confirmProposal,
-  dailyInsights,
   debtDetail,
   evaluatePurchase,
-  progressSummary,
   recategorise,
   supersedeStaleProposals,
   type PaydayProposal,
@@ -55,12 +47,15 @@ import {
 import { fallbackIntent, type IntentDraft } from "../../lib/model/ai";
 import type { Bucket, Claim, Workspace } from "../../lib/model/types";
 import type { StewardState } from "../../lib/steward-types";
+import { BucketsScreen } from "./buckets";
+import { ConnectScreen } from "./connect";
+import { HomeScreen } from "./home";
 import { Onboarding } from "./onboarding";
 import { usePlaidConnect } from "./use-plaid";
 import { useWorkspace } from "./workspace-store";
 import "./steward.css";
 
-type Tab = "now" | "path" | "ledger";
+type Tab = "home" | "plan" | "activity";
 
 const todayISO = (fixed?: string) => fixed ?? new Date().toISOString().slice(0, 10);
 
@@ -79,325 +74,6 @@ function Empty({ title, body }: { title: string; body: string }) {
     <div className="sw-empty">
       <strong>{title}</strong>
       <p>{body}</p>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------- NOW ----- */
-
-function NowScreen({
-  workspace,
-  today,
-  onOpenBucket,
-  onGoPath,
-  onGoLedger,
-}: {
-  workspace: Workspace;
-  today: string;
-  onOpenBucket: (bucket: Bucket) => void;
-  onGoPath: () => void;
-  onGoLedger: () => void;
-}) {
-  const plan = planCycle(workspace, today);
-  const cycle = currentCycle(workspace, today);
-  const insights = useMemo(() => dailyInsights(workspace, today), [workspace, today]);
-  const progress = useMemo(() => progressSummary(workspace, today), [workspace, today]);
-
-  if (!plan || !cycle) {
-    return (
-      <Empty
-        title="No pay cycle yet"
-        body="Connect an account or add your take-home pay and next payday, and Steward can build the plan."
-      />
-    );
-  }
-
-  const spendBuckets = workspace.buckets.filter((bucket) => bucket.kind === "spend");
-  const activity = spendBuckets.map((bucket) => bucketActivity(workspace, bucket, cycle));
-  const leftEveryday = activity.reduce((sum, entry) => sum + Math.max(0, entry.remaining), 0);
-  const daysLeft = Math.max(0, daysBetween(today, cycle.end));
-  const spentEveryday = activity.reduce((sum, entry) => sum + entry.spent, 0);
-  const plannedEveryday = activity.reduce((sum, entry) => sum + entry.planned, 0);
-
-  // The overview must fit a viewport, so each region shows a bounded number of
-  // rows and hands off to a scrollable screen for the rest. Nothing is clipped:
-  // whatever is cut is reachable by tapping the region it belongs to.
-  const SHOWN_BUCKETS = 4;
-  const shownBuckets = activity.slice(0, SHOWN_BUCKETS);
-  const hiddenBuckets = activity.length - shownBuckets.length;
-  const shownProgress = progress.slice(0, 2);
-  const hiddenProgress = progress.length - shownProgress.length;
-
-  const nextReserve = [...plan.reserves]
-    .filter((entry) => entry.bucket.dueDate)
-    .sort((a, b) => (a.bucket.dueDate! < b.bucket.dueDate! ? -1 : 1))[0];
-  const insight = insights[0];
-
-  return (
-    <div className="sw-overview">
-      {/* Cycle position. Taps through to the full breakdown in Ledger. */}
-      <button className="sw-position tappable" onClick={onGoLedger}>
-        <span className="sw-eyebrow">Left for everyday spending</span>
-        <strong className="sw-huge">{formatMoney(leftEveryday)}</strong>
-        <p className="sw-sub">
-          {daysLeft} {daysLeft === 1 ? "day" : "days"} until payday · {formatMoney(spentEveryday)} of{" "}
-          {formatMoney(plannedEveryday)} used
-        </p>
-        <Bar percent={plannedEveryday > 0 ? (spentEveryday / plannedEveryday) * 100 : 0} />
-        <span className="sw-tap-hint">
-          {formatMoney(plan.reservesTotal)} reserved · {formatMoney(plan.freeCapacity)} free
-          <ArrowRight size={13} />
-        </span>
-      </button>
-
-      {plan.shortfall && (
-        <button className="sw-alert tappable" onClick={onGoLedger}>
-          <strong>{formatMoney(plan.shortfall.amount)} short this cycle</strong>
-          <p>{plan.shortfall.largestDriver} is the biggest driver.</p>
-        </button>
-      )}
-
-      <section className="sw-block tight">
-        <header className="sw-block-head">
-          <h2>Buckets</h2>
-          <button className="sw-link" onClick={onGoLedger}>
-            {hiddenBuckets > 0 ? `+${hiddenBuckets} more` : "All"} <ArrowRight size={12} />
-          </button>
-        </header>
-        <div className="sw-bucket-strip">
-          {shownBuckets.map((entry) => (
-            <button key={entry.bucket.id} className="sw-chip" onClick={() => onOpenBucket(entry.bucket)}>
-              <span className="sw-chip-name">{entry.bucket.name}</span>
-              <strong>{formatMoney(Math.max(0, entry.remaining))}</strong>
-              <Bar percent={entry.percent} tone={entry.percent > 100 || entry.hot ? "amber" : "green"} />
-            </button>
-          ))}
-          {!activity.length && <p className="sw-muted">No everyday buckets yet.</p>}
-        </div>
-      </section>
-
-      <section className="sw-block tight">
-        <header className="sw-block-head">
-          <h2>Working toward</h2>
-          <button className="sw-link" onClick={onGoPath}>
-            {hiddenProgress > 0 ? `+${hiddenProgress} more` : "Path"} <ArrowRight size={12} />
-          </button>
-        </header>
-        {shownProgress.length ? (
-          <ul className="sw-progress">
-            {shownProgress.map((entry) => (
-              <li key={entry.claim.id}>
-                <div>
-                  <strong>{entry.claim.name}</strong>
-                  <small>
-                    {entry.arrivalDate ? formatDate(entry.arrivalDate) : "over a year out"}
-                  </small>
-                </div>
-                <Bar percent={entry.percent} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="sw-muted">Nothing funded yet — ask “Can I buy this?” to start something.</p>
-        )}
-      </section>
-
-      <div className="sw-overview-foot">
-        {nextReserve && (
-          <button className="sw-mini" onClick={onGoLedger}>
-            <span>Next up</span>
-            <strong>{nextReserve.bucket.name}</strong>
-            <small>
-              {formatMoney(nextReserve.bucket.reserved ?? 0)} of{" "}
-              {formatMoney(nextReserve.bucket.amountDue ?? 0)} · {formatDate(nextReserve.bucket.dueDate ?? null)}
-            </small>
-          </button>
-        )}
-        {insight && (
-          <button
-            className={`sw-mini insight ${insight.tone}`}
-            onClick={() => {
-              const target = activity.find((entry) => insight.id.endsWith(entry.bucket.id));
-              if (target) onOpenBucket(target.bucket);
-              else onGoLedger();
-            }}
-          >
-            <span><Sparkles size={12} /> Worth noticing</span>
-            <strong>{insight.headline}</strong>
-            <small>{insight.detail}</small>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------- PATH ----- */
-
-function PathScreen({
-  workspace,
-  today,
-  update,
-  onAdd,
-  onOpenDebt,
-}: {
-  workspace: Workspace;
-  today: string;
-  update: (next: (current: Workspace) => Workspace) => void;
-  onAdd: () => void;
-  onOpenDebt: (claimId: string) => void;
-}) {
-  const plan = planCycle(workspace, today);
-  const arrivals = useMemo(() => projectArrivals(workspace, today), [workspace, today]);
-  const allocation = useMemo(
-    () => (plan ? allocate(workspace, plan.freeCapacity, today) : null),
-    [workspace, plan, today],
-  );
-  const [showSomeday, setShowSomeday] = useState(false);
-
-  const active = workspace.claims
-    .filter((claim) => claim.status === "active" && claim.horizon === "arrival")
-    .sort((a, b) => a.rank - b.rank);
-  const someday = workspace.claims.filter((claim) => claim.status === "someday");
-  const commitments = workspace.claims.filter(
-    (claim) => claim.status === "active" && claim.horizon === "commitment",
-  );
-
-  const arrivalFor = (claim: Claim): Arrival | undefined =>
-    arrivals.find((entry) => entry.claimId === claim.id);
-  const amountFor = (claim: Claim) =>
-    allocation?.allocations.find((entry) => entry.claim.id === claim.id)?.amount ?? 0;
-
-  /** Reordering affects future cycles only; funded amounts never move. */
-  const move = (claim: Claim, direction: -1 | 1) => {
-    const ordered = [...active];
-    const index = ordered.findIndex((entry) => entry.id === claim.id);
-    const swap = index + direction;
-    if (index < 0 || swap < 0 || swap >= ordered.length) return;
-    const ids = ordered.map((entry) => entry.id);
-    [ids[index], ids[swap]] = [ids[swap], ids[index]];
-    update((current) => ({
-      ...current,
-      claims: current.claims.map((entry) => {
-        const rank = ids.indexOf(entry.id);
-        return rank === -1 ? entry : { ...entry, rank };
-      }),
-    }));
-  };
-
-  const setStatus = (claim: Claim, status: Claim["status"]) =>
-    update((current) => ({
-      ...current,
-      claims: current.claims.map((entry) => (entry.id === claim.id ? { ...entry, status } : entry)),
-    }));
-
-  return (
-    <div className="sw-screen">
-      <section className="sw-position compact">
-        <span className="sw-eyebrow">Yours to direct each paycheck</span>
-        <strong className="sw-huge">{formatMoney(plan?.freeCapacity ?? 0)}</strong>
-        <p className="sw-sub">after {formatMoney(plan?.reservesTotal ?? 0)} of bills and {formatMoney(plan?.spendTotal ?? 0)} of everyday spending</p>
-      </section>
-
-      {commitments.length > 0 && (
-        <section className="sw-block">
-          <header className="sw-block-head"><h2>On autopilot</h2></header>
-          {commitments.map((claim) => (
-            <div className="sw-row" key={claim.id}>
-              <div><strong>{claim.name}</strong><small>continuing commitment</small></div>
-              <b>{formatMoney(claim.pinned ?? 0)}<em>each paycheck</em></b>
-            </div>
-          ))}
-        </section>
-      )}
-
-      <section className="sw-block">
-        <header className="sw-block-head">
-          <h2>Working toward</h2>
-          <span>{active.length} of 7</span>
-        </header>
-        {active.length ? (
-          <ol className="sw-claims">
-            {active.map((claim, index) => {
-              const arrival = arrivalFor(claim);
-              const amount = amountFor(claim);
-              const percent = claim.targetAmount > 0 ? (claim.fundedAmount / claim.targetAmount) * 100 : 0;
-              return (
-                <li key={claim.id} className={amount > 0 ? "funded" : "queued"}>
-                  <div className="sw-claim-rank">{index + 1}</div>
-                  <div className="sw-claim-body">
-                    <div className="sw-claim-top">
-                      <strong>{claim.name}</strong>
-                      <span>{formatMoney(claim.fundedAmount)} of {formatMoney(claim.targetAmount)}</span>
-                    </div>
-                    <Bar percent={percent} tone={claim.kind === "payoff" ? "slate" : "green"} />
-                    <div className="sw-claim-foot">
-                      <small>
-                        {amount > 0
-                          ? `${formatMoney(amount)} this paycheck`
-                          : arrival && arrival.startsInCycles > 0
-                            ? "starts a later cycle"
-                            : "not funded this cycle"}
-                      </small>
-                      <small className="sw-arrival">
-                        {arrival?.arrivalDate ? formatDate(arrival.arrivalDate) : "more than a year out"}
-                      </small>
-                    </div>
-                  </div>
-                  <div className="sw-claim-actions">
-                    {claim.kind === "payoff" && (
-                      <button onClick={() => onOpenDebt(claim.id)} aria-label={`${claim.name} detail`}>
-                        <CreditCard size={14} />
-                      </button>
-                    )}
-                    <button onClick={() => move(claim, -1)} aria-label={`Move ${claim.name} up`} disabled={index === 0}>
-                      <ChevronUp size={15} />
-                    </button>
-                    <button onClick={() => move(claim, 1)} aria-label={`Move ${claim.name} down`} disabled={index === active.length - 1}>
-                      <ChevronDown size={15} />
-                    </button>
-                    <button onClick={() => setStatus(claim, "someday")} aria-label={`Move ${claim.name} to someday`}>
-                      <X size={15} />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        ) : (
-          <Empty title="Nothing here yet" body="Ask “Can I buy this?” and Steward will offer to start saving for whatever you're eyeing." />
-        )}
-        {allocation?.exceededConcentration && (
-          <p className="sw-note">
-            Funding {allocation.allocations.length} things at once — each arrives later than if you
-            focused on fewer. That&apos;s your call to make.
-          </p>
-        )}
-      </section>
-
-      <section className="sw-block">
-        <button className="sw-primary sw-add" onClick={onAdd}>
-          <Plus size={16} /> Add something
-        </button>
-      </section>
-
-      <section className="sw-block">
-        <button className="sw-link" onClick={() => setShowSomeday((open) => !open)}>
-          Someday · {someday.length} {showSomeday ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-        </button>
-        {showSomeday && (
-          <ul className="sw-someday">
-            {someday.map((claim) => (
-              <li key={claim.id}>
-                <span>{claim.name}</span>
-                <b>{formatMoney(claim.targetAmount)}</b>
-                <button onClick={() => setStatus(claim, "active")}>Start funding</button>
-              </li>
-            ))}
-            {!someday.length && <li className="sw-muted">Nothing parked.</li>}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }
@@ -1180,7 +856,10 @@ function applyOnboarding(
       payFrequency: input.frequency,
       nextPayday: input.nextPayday,
       bufferFloor: current.profile.bufferFloor || Math.round(input.everyday),
-      onboardingComplete: true,
+      // Deliberately not marked complete here. Gathering the basics and
+      // approving the resulting buckets are two different things, and the
+      // review screen is where Steward shows its work — skipping it was how
+      // the manual path used to drop the user straight onto Home.
     },
     buckets: [...current.buckets, ...buckets],
     claims: [...current.claims, ...claims],
@@ -1208,12 +887,13 @@ export function StewardApp({
     initialState,
     syncWithServer,
   );
-  const [tab, setTab] = useState<Tab>("now");
+  const [tab, setTab] = useState<Tab>("home");
   const [buyOpen, setBuyOpen] = useState(false);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
   const [paydayDismissed, setPaydayDismissed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [debtClaimId, setDebtClaimId] = useState<string | null>(null);
+  const [manualSetup, setManualSetup] = useState(false);
   const plaid = usePlaidConnect(setWorkspaceFromServer);
   const today = todayISO(fixedToday);
 
@@ -1245,54 +925,79 @@ export function StewardApp({
     return <div className="sw-boot"><div className="sw-boot-mark" /><span>Steward</span></div>;
   }
 
-  if (!hasData) {
+  // First run, in three states.
+  //
+  //   no data                 → Connect. The real path, because connecting is
+  //                             how Steward derives the budget rather than
+  //                             asking the user to invent one.
+  //   data, not yet approved  → the buckets Steward worked out, for review.
+  //   approved                → the app.
+  //
+  // The manual form is reachable from Connect and is deliberately secondary.
+  if (!hasData && !manualSetup) {
+    return (
+      <ConnectScreen
+        status={plaid.status}
+        error={plaid.error}
+        onConnect={plaid.connect}
+        onManual={() => setManualSetup(true)}
+      />
+    );
+  }
+
+  if (!hasData && manualSetup) {
     return (
       <Onboarding
-        connecting={plaid.status !== "idle"}
-        connectError={plaid.error}
-        onConnect={plaid.connect}
         onComplete={(input) => {
           update((current) => applyOnboarding(current, input));
+          setManualSetup(false);
         }}
+      />
+    );
+  }
+
+  if (!workspace.profile.onboardingComplete) {
+    return (
+      <BucketsScreen
+        workspace={workspace}
+        today={today}
+        mode="review"
+        update={update}
+        onApprove={() =>
+          update((current) => ({
+            ...current,
+            profile: { ...current.profile, onboardingComplete: true },
+          }))
+        }
       />
     );
   }
 
   return (
     <div className="sw-app">
-      <header className="sw-top">
-        <div className="sw-brand">
-          <span className="sw-mark" aria-hidden="true" />
-          <strong>Steward</strong>
-        </div>
-        <span className={`sw-save ${saveState}`}>
-          {saveState === "saving" ? "Saving" : saveState === "offline" ? "Session only" : "Saved"}
-        </span>
-      </header>
+      {saveState === "offline" && (
+        <p className="sw-offline" role="status">
+          Saving to this session only — changes won&apos;t persist until storage reconnects.
+        </p>
+      )}
 
-      <main className={tab === "now" ? "sw-main sw-main-fixed" : "sw-main"}>
-        {tab === "now" && (
-          <NowScreen
+      <main className="sw-main-full">
+        {tab === "home" && (
+          <HomeScreen
             workspace={workspace}
             today={today}
+            onOpenBuckets={() => setTab("plan")}
             onOpenBucket={(bucket) => {
               setFocusBucket(bucket);
-              setTab("ledger");
+              setTab("activity");
             }}
-            onGoPath={() => setTab("path")}
-            onGoLedger={() => { setFocusBucket(null); setTab("ledger"); }}
+            onAsk={() => setBuyOpen(true)}
           />
         )}
-        {tab === "path" && (
-          <PathScreen
-            workspace={workspace}
-            today={today}
-            update={update}
-            onAdd={() => setAddOpen(true)}
-            onOpenDebt={setDebtClaimId}
-          />
+        {tab === "plan" && (
+          <BucketsScreen workspace={workspace} today={today} mode="plan" update={update} />
         )}
-        {tab === "ledger" && (
+        {tab === "activity" && (
           <LedgerScreen
             workspace={workspace}
             today={today}
@@ -1304,17 +1009,20 @@ export function StewardApp({
       </main>
 
       <nav className="sw-nav" aria-label="Main">
-        <button className={tab === "now" ? "active" : ""} onClick={() => setTab("now")}>
-          <Target size={19} /><span>Now</span>
+        <button className={tab === "home" ? "active" : ""} onClick={() => setTab("home")}>
+          <Target size={19} /><span>Home</span>
         </button>
         <button className="sw-fab" onClick={() => setBuyOpen(true)} aria-label="Can I buy this?">
-          <Plus size={22} />
+          <Sparkles size={21} />
         </button>
-        <button className={tab === "path" ? "active" : ""} onClick={() => setTab("path")}>
-          <ListChecks size={19} /><span>Path</span>
+        <button className={tab === "plan" ? "active" : ""} onClick={() => setTab("plan")}>
+          <ListChecks size={19} /><span>Plan</span>
         </button>
-        <button className={tab === "ledger" ? "active" : ""} onClick={() => { setFocusBucket(null); setTab("ledger"); }}>
-          <Receipt size={19} /><span>Ledger</span>
+        <button
+          className={tab === "activity" ? "active" : ""}
+          onClick={() => { setFocusBucket(null); setTab("activity"); }}
+        >
+          <Receipt size={19} /><span>Activity</span>
         </button>
       </nav>
 

@@ -837,3 +837,23 @@
 .sw-scenario > span { font-size: 13px; font-weight: 650; text-align: right; }
 .sw-scenario small { grid-column: 1 / -1; color: var(--text-soft); font-size: 11.5px; }
 .sw-scenario.current small { color: var(--green); }
+
+/* The immersive screens paint their own full surface, so the shell only
+   reserves room for the tab bar. */
+.sw-main-full { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+.sw-app:has(.sw-main-full) { background: #2f654d; padding-bottom: 0; }
+.sw-nav { background: rgba(31, 74, 54, 0.94); border-top-color: rgba(246, 248, 244, 0.12); }
+.sw-nav button { color: rgba(246, 248, 244, 0.6); }
+.sw-nav button.active { background: transparent; color: #f6f8f4; }
+.sw-fab { background: #f6f8f4 !important; color: #27563f !important; box-shadow: 0 8px 22px rgba(10, 39, 27, 0.35); }
+
+.sw-offline {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(240, 192, 138, 0.22);
+  padding: 9px 16px calc(9px + env(safe-area-inset-top));
+  color: #f6f8f4;
+  text-align: center;
+  font-size: 11.5px;
+}
