@@ -655,3 +655,46 @@
   .sw-overview { grid-template-columns: 1.05fr 1fr; grid-template-rows: auto 1fr auto; }
   .sw-overview > .sw-position { grid-column: 1 / -1; }
 }
+
+/* ---------------------------------------------------------------- payday */
+
+.sw-payday { max-width: 520px; }
+.sw-payday-step { display: grid; gap: 13px; }
+.sw-payday-step .sw-huge { margin: 2px 0 0; font-size: clamp(34px, 10vw, 46px); }
+.sw-payday-step .sw-primary { margin-top: 4px; }
+
+.sw-payday-group { border-radius: 12px; background: var(--surface-soft); padding: 12px 13px; }
+.sw-payday-group h3 { margin-bottom: 7px; font-size: 12px; font-weight: 700; }
+.sw-payday-line { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 12.5px; }
+.sw-payday-line span { display: grid; }
+.sw-payday-line small { color: var(--text-faint); font-size: 10.5px; }
+.sw-payday-line b { font-variant-numeric: tabular-nums; }
+
+.sw-payday-free {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line));
+  border-radius: 12px;
+  background: var(--green-soft);
+  padding: 13px 14px;
+}
+.sw-payday-free span { font-size: 12.5px; font-weight: 650; }
+.sw-payday-free strong { font-size: 22px; letter-spacing: -0.02em; }
+
+.sw-payday-plan { display: grid; gap: 4px; }
+.sw-payday-plan li {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  grid-template-columns: 22px 1fr auto auto;
+  border-radius: 10px;
+  padding: 9px 7px;
+}
+.sw-payday-plan li:nth-child(odd) { background: var(--surface-soft); }
+.sw-payday-plan li.queued { opacity: 0.6; }
+.sw-payday-plan strong { display: block; font-size: 13px; }
+.sw-payday-plan small { color: var(--text-soft); font-size: 11px; }
+.sw-payday-amount { text-align: right; }
+.sw-payday-amount b { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.sw-payday-amount em { display: block; color: var(--green); font-size: 10.5px; font-style: normal; font-weight: 650; }

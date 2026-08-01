@@ -199,6 +199,22 @@ export type NotificationItem = {
   type: "bill" | "goal" | "recommendation" | "sync";
 };
 
+/**
+ * A recorded allocation of a paycheck to a claim.
+ *
+ * `proposed` rows are a payday plan awaiting confirmation. They are stored so
+ * the flow is resumable, but they contribute nothing to a claim's funding —
+ * inaction must never move money (BLUEPRINT.md §C10 / amendment A1).
+ */
+export type StoredAllocation = {
+  id: string;
+  cycleId: string;
+  claimId: string;
+  amount: number;
+  status: "proposed" | "confirmed";
+  createdAt: string;
+};
+
 export type StewardState = {
   version: number;
   profile: {
@@ -227,6 +243,8 @@ export type StewardState = {
   reviews: Review[];
   notifications: NotificationItem[];
   notificationPreferences: Record<string, boolean>;
+  /** Optional: absent on workspaces saved before the payday flow existed. */
+  allocations?: StoredAllocation[];
 };
 
 export type TradeoffResult = {

@@ -367,12 +367,13 @@ export function allocate(
 
   // 2 — deadlines: fund what a stated wantBy actually requires.
   for (const claim of claims) {
-    if (claim.delayCost.type !== "deadline") continue;
+    const cost = claim.delayCost;
+    if (cost.type !== "deadline") continue;
     const paydaysBefore = upcomingPaydays(workspace, today, 60).filter(
-      (payday) => payday <= claim.delayCost.date,
+      (payday) => payday <= cost.date,
     ).length;
     const cycles = Math.max(1, paydaysBefore);
-    give(claim, needOf(claim) / cycles, `Needed by ${claim.delayCost.date}.`);
+    give(claim, needOf(claim) / cycles, `Needed by ${cost.date}.`);
   }
 
   // 3 — ranked waterfall with per-cycle ceilings.

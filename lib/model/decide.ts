@@ -334,3 +334,138 @@ export function progressSummary(workspace: Workspace, today: string) {
       };
     });
 }
+
+/* ---------------------------------------------------------------- payday */
+
+export type PaydayProposal = {
+  cycleId: string;
+  cycleEnd: string;
+  income: number;
+  reserves: { name: string; amount: number; note: string }[];
+  reservesTotal: number;
+  spend: { name: string; amount: number }[];
+  spendTotal: number;
+  bufferTopUp: number;
+  freeCapacity: number;
+  lines: { claim: Claim; amount: number; reason: string; arrival: string | null; completes: boolean }[];
+  queued: { claim: Claim; arrival: string | null }[];
+  /** True once the user has confirmed this cycle's plan. */
+  confirmed: boolean;
+};
+
+/**
+ * Build the payday plan for the current cycle.
+ *
+ * This only ever *describes* what Steward would do. Nothing here mutates
+ * funding — see `confirmProposal`, which is the only path that does, and which
+ * requires an explicit user action (BLUEPRINT.md §C10 / amendment A1).
+ */
+export function buildPaydayProposal(
+  workspace: Workspace,
+  today: string,
+  policy: AllocationPolicy = defaultPolicy,
+): PaydayProposal | null {
+  const plan = planCycle(workspace, today);
+  if (!plan) return null;
+  const result = allocate(workspace, plan.freeCapacity, today, policy);
+  const arrivals = projectArrivals(workspace, today, policy);
+  const arrivalFor = (id: string) => arrivals.find((entry) => entry.claimId === id)?.arrivalDate ?? null;
+
+  return {
+    cycleId: plan.cycle.id,
+    cycleEnd: plan.cycle.end,
+    income: plan.income,
+    reserves: plan.reserves.map((entry) => ({
+      name: entry.bucket.name,
+      amount: entry.required,
+      note:
+        entry.cyclesRemaining > 1
+          ? `${formatMoney(entry.bucket.amountDue ?? 0)} due ${entry.bucket.dueDate}, split over ${entry.cyclesRemaining} paychecks`
+          : `due ${entry.bucket.dueDate ?? "this cycle"}`,
+    })),
+    reservesTotal: plan.reservesTotal,
+    spend: plan.spend.map((entry) => ({ name: entry.bucket.name, amount: entry.amount })),
+    spendTotal: plan.spendTotal,
+    bufferTopUp: plan.bufferTopUp,
+    freeCapacity: plan.freeCapacity,
+    lines: result.allocations.map((entry) => ({
+      claim: entry.claim,
+      amount: entry.amount,
+      reason: entry.reason,
+      arrival: arrivalFor(entry.claim.id),
+      completes: entry.completes,
+    })),
+    queued: result.queued.map((entry) => ({
+      claim: entry.claim,
+      arrival: arrivalFor(entry.claim.id),
+    })),
+    confirmed: isCycleConfirmed(workspace, plan.cycle.id),
+  };
+}
+
+export function isCycleConfirmed(workspace: Workspace, cycleId: string) {
+  return workspace.allocations.some(
+    (row) => row.cycleId === cycleId && row.status === "confirmed",
+  );
+}
+
+/**
+ * Record the plan as confirmed. The ONLY path that moves discretionary money.
+ *
+ * Proposals for other cycles are dropped rather than merged: a plan the user
+ * walked away from is superseded, never quietly applied later.
+ */
+export function confirmProposal(
+  workspace: Workspace,
+  proposal: PaydayProposal,
+  now = new Date().toISOString(),
+): Workspace {
+  const kept = workspace.allocations.filter(
+    (row) => row.status === "confirmed" && row.cycleId !== proposal.cycleId,
+  );
+  // Money already recorded for this cycle is replaced, not stacked, so
+  // confirming twice cannot double-fund.
+  const alreadyThisCycle = new Map<string, number>();
+  for (const row of workspace.allocations) {
+    if (row.cycleId !== proposal.cycleId || row.status !== "confirmed") continue;
+    alreadyThisCycle.set(row.targetId, (alreadyThisCycle.get(row.targetId) ?? 0) + row.amount);
+  }
+  const delta = new Map<string, number>();
+  for (const line of proposal.lines) {
+    delta.set(
+      line.claim.id,
+      round2(line.amount - (alreadyThisCycle.get(line.claim.id) ?? 0)),
+    );
+  }
+
+  return {
+    ...workspace,
+    claims: workspace.claims.map((claim) =>
+      delta.has(claim.id)
+        ? { ...claim, fundedAmount: round2(claim.fundedAmount + (delta.get(claim.id) ?? 0)) }
+        : claim,
+    ),
+    allocations: [
+      ...kept,
+      ...proposal.lines.map((line, index) => ({
+        id: `alloc:${proposal.cycleId}:${index}`,
+        cycleId: proposal.cycleId,
+        targetType: "claim" as const,
+        targetId: line.claim.id,
+        amount: line.amount,
+        status: "confirmed" as const,
+        createdAt: now,
+      })),
+    ],
+  };
+}
+
+/** Discard any stored proposal that is not for the cycle in question. */
+export function supersedeStaleProposals(workspace: Workspace, cycleId: string): Workspace {
+  return {
+    ...workspace,
+    allocations: workspace.allocations.filter(
+      (row) => row.status === "confirmed" || row.cycleId === cycleId,
+    ),
+  };
+}

@@ -40,10 +40,14 @@ import {
   type Arrival,
 } from "../../lib/model/engine";
 import {
+  buildPaydayProposal,
   claimFromPurchase,
+  confirmProposal,
   dailyInsights,
   evaluatePurchase,
   progressSummary,
+  supersedeStaleProposals,
+  type PaydayProposal,
   type Verdict,
 } from "../../lib/model/decide";
 import type { Bucket, Claim, Workspace } from "../../lib/model/types";
@@ -620,6 +624,151 @@ function BuySheet({
   );
 }
 
+
+/* -------------------------------------------------------------- PAYDAY -- */
+
+/**
+ * The payday moment. Reserves and obligations are automatic; discretionary
+ * allocation is not.
+ *
+ * Dismissing this flow, or never opening it, confirms nothing. The free
+ * capacity simply stays undirected and Now says so. Only the confirm button
+ * writes allocations (BLUEPRINT.md §C10 / amendment A1).
+ */
+function PaydayFlow({
+  workspace,
+  proposal,
+  onConfirm,
+  onDismiss,
+  update,
+}: {
+  workspace: Workspace;
+  proposal: PaydayProposal;
+  onConfirm: () => void;
+  onDismiss: () => void;
+  update: (next: (current: Workspace) => Workspace) => void;
+}) {
+  const [step, setStep] = useState<0 | 1 | 2>(0);
+
+  // Reordering during payday recomputes the plan live, before anything is
+  // written, so the user sees the consequence while deciding.
+  const move = (claim: Claim, direction: -1 | 1) => {
+    const active = workspace.claims
+      .filter((entry) => entry.status === "active" && entry.horizon === "arrival")
+      .sort((a, b) => a.rank - b.rank);
+    const index = active.findIndex((entry) => entry.id === claim.id);
+    const swap = index + direction;
+    if (index < 0 || swap < 0 || swap >= active.length) return;
+    const ids = active.map((entry) => entry.id);
+    [ids[index], ids[swap]] = [ids[swap], ids[index]];
+    update((current) => ({
+      ...current,
+      claims: current.claims.map((entry) => {
+        const rank = ids.indexOf(entry.id);
+        return rank === -1 ? entry : { ...entry, rank };
+      }),
+    }));
+  };
+
+  return (
+    <div className="sw-sheet-backdrop" role="presentation">
+      <div className="sw-sheet sw-payday" role="dialog" aria-modal="true" aria-label="Payday">
+        <header>
+          <h2>Payday</h2>
+          <button onClick={onDismiss} aria-label="Close"><X size={18} /></button>
+        </header>
+
+        {step === 0 && (
+          <div className="sw-payday-step">
+            <span className="sw-eyebrow">Landed</span>
+            <strong className="sw-huge">{formatMoney(proposal.income)}</strong>
+            <p className="sw-sub">Let&apos;s put it to work.</p>
+            <button className="sw-primary" onClick={() => setStep(1)}>Continue</button>
+          </div>
+        )}
+
+        {step === 1 && (
+          <div className="sw-payday-step">
+            <span className="sw-eyebrow">Already taken care of</span>
+            <div className="sw-payday-group">
+              <h3>Bills &amp; minimums · {formatMoney(proposal.reservesTotal)}</h3>
+              {proposal.reserves.map((entry) => (
+                <div className="sw-payday-line" key={entry.name}>
+                  <span>{entry.name}<small>{entry.note}</small></span>
+                  <b>{formatMoney(entry.amount)}</b>
+                </div>
+              ))}
+            </div>
+            <div className="sw-payday-group">
+              <h3>Everyday · {formatMoney(proposal.spendTotal)}</h3>
+              {proposal.spend.map((entry) => (
+                <div className="sw-payday-line" key={entry.name}>
+                  <span>{entry.name}</span>
+                  <b>{formatMoney(entry.amount)}</b>
+                </div>
+              ))}
+            </div>
+            {proposal.bufferTopUp > 0 && (
+              <div className="sw-payday-group">
+                <h3>Buffer top-up</h3>
+                <div className="sw-payday-line"><span>Back to your floor</span><b>{formatMoney(proposal.bufferTopUp)}</b></div>
+              </div>
+            )}
+            <div className="sw-payday-free">
+              <span>Yours to direct</span>
+              <strong>{formatMoney(proposal.freeCapacity)}</strong>
+            </div>
+            <button className="sw-primary" onClick={() => setStep(2)}>Continue</button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="sw-payday-step">
+            <span className="sw-eyebrow">Here&apos;s what I&apos;d do with {formatMoney(proposal.freeCapacity)}</span>
+            <ol className="sw-payday-plan">
+              {proposal.lines.map((line, index) => (
+                <li key={line.claim.id}>
+                  <span className="sw-claim-rank">{index + 1}</span>
+                  <div>
+                    <strong>{line.claim.name}</strong>
+                    <small>{line.reason}</small>
+                  </div>
+                  <div className="sw-payday-amount">
+                    <b>{formatMoney(line.amount)}</b>
+                    <em>{line.completes ? "complete" : line.arrival ? formatDate(line.arrival) : "over a year"}</em>
+                  </div>
+                  <div className="sw-claim-actions">
+                    <button onClick={() => move(line.claim, -1)} aria-label={`Move ${line.claim.name} up`}>
+                      <ChevronUp size={14} />
+                    </button>
+                    <button onClick={() => move(line.claim, 1)} aria-label={`Move ${line.claim.name} down`}>
+                      <ChevronDown size={14} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+              {proposal.queued.map((entry) => (
+                <li key={entry.claim.id} className="queued">
+                  <span className="sw-claim-rank">–</span>
+                  <div><strong>{entry.claim.name}</strong><small>starts a later cycle</small></div>
+                  <div className="sw-payday-amount"><b>{formatMoney(0)}</b></div>
+                </li>
+              ))}
+            </ol>
+            <p className="sw-muted">Reorder anything — the dates update before you confirm.</p>
+            <button className="sw-primary" onClick={onConfirm}>Confirm this plan</button>
+            <button className="sw-secondary" onClick={onDismiss}>Not now</button>
+            <p className="sw-muted sw-fineprint">
+              Nothing is assigned to your goals until you confirm. Bills and minimums are
+              already reserved either way.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------------------------------------------- SHELL -- */
 
 export function StewardApp({
@@ -635,7 +784,17 @@ export function StewardApp({
   const [tab, setTab] = useState<Tab>("now");
   const [buyOpen, setBuyOpen] = useState(false);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
+  const [paydayDismissed, setPaydayDismissed] = useState(false);
   const today = todayISO(fixedToday);
+
+  const proposal = useMemo(
+    () => buildPaydayProposal(workspace, today),
+    [workspace, today],
+  );
+  // Shown when a cycle has money to direct and has not been confirmed. Closing
+  // it writes nothing; the plan stays pending until the next cycle supersedes it.
+  const paydayDue =
+    !!proposal && !proposal.confirmed && proposal.freeCapacity > 0 && !paydayDismissed;
 
   // Apply the stored appearance. Without this the page inherits the OS
   // preference and renders the dark palette regardless of the user's choice.
@@ -725,6 +884,21 @@ export function StewardApp({
 
       {buyOpen && (
         <BuySheet workspace={workspace} today={today} update={update} onClose={() => setBuyOpen(false)} />
+      )}
+
+      {paydayDue && proposal && (
+        <PaydayFlow
+          workspace={workspace}
+          proposal={proposal}
+          update={update}
+          onDismiss={() => setPaydayDismissed(true)}
+          onConfirm={() => {
+            update((current) =>
+              confirmProposal(supersedeStaleProposals(current, proposal.cycleId), proposal),
+            );
+            setPaydayDismissed(true);
+          }}
+        />
       )}
     </div>
   );

@@ -22,9 +22,8 @@
  * ranking policy all belong to the Phase 2 engine.
  */
 
-import type { Bill, Budget, Goal, Project as LegacyProject, StewardState, WishlistItem } from "../steward-types";
+import type { Bill, Budget, Goal, Project as LegacyProject, StewardState, StoredAllocation, WishlistItem } from "../steward-types";
 import type {
-  Allocation,
   Bucket,
   Claim,
   Cycle,
@@ -283,9 +282,27 @@ export function toModel(state: StewardState): Workspace {
     };
   }
 
+  const storedAllocations = state.allocations ?? [];
+  const confirmedByClaim = new Map<string, number>();
+  for (const row of storedAllocations) {
+    if (row.status !== "confirmed") continue;
+    confirmedByClaim.set(row.claimId, (confirmedByClaim.get(row.claimId) ?? 0) + row.amount);
+  }
+
+  // A claim's funding is its stored base plus every CONFIRMED allocation.
+  // Proposed rows are deliberately excluded: a payday plan the user never
+  // confirmed must leave funding untouched.
+  const withConfirmed = (claim: Claim): Claim => ({
+    ...claim,
+    fundedAmount:
+      Math.round((claim.fundedAmount + (confirmedByClaim.get(claim.id) ?? 0)) * 100) / 100,
+  });
+
   const storedClaims: Claim[] = [
-    ...state.goals.map((goal, index) => claimFromGoal(goal, index)),
-    ...state.wishlist.map((item, index) => claimFromWish(item, state.goals.length + index)),
+    ...state.goals.map((goal, index) => withConfirmed(claimFromGoal(goal, index))),
+    ...state.wishlist.map((item, index) =>
+      withConfirmed(claimFromWish(item, state.goals.length + index)),
+    ),
   ];
 
   const legacy: LegacyRemnant = {
@@ -335,7 +352,15 @@ export function toModel(state: StewardState): Workspace {
     ],
     claims: [...storedClaims, ...derivedPayoffClaims(state, storedClaims.length)],
     projects: state.projects.map(projectFrom),
-    allocations: [] as Allocation[],
+    allocations: storedAllocations.map((row) => ({
+      id: row.id,
+      cycleId: row.cycleId,
+      targetType: "claim" as const,
+      targetId: row.claimId,
+      amount: row.amount,
+      status: row.status,
+      createdAt: row.createdAt,
+    })),
     rules: derivedRules(state),
     legacy,
   };
@@ -365,6 +390,14 @@ function compact<T extends object>(value: T): T {
 
 export function toLegacy(workspace: Workspace): StewardState {
   const { legacy } = workspace;
+
+  const confirmedByClaim = new Map<string, number>();
+  for (const row of workspace.allocations) {
+    if (row.status !== "confirmed" || row.targetType !== "claim") continue;
+    confirmedByClaim.set(row.targetId, (confirmedByClaim.get(row.targetId) ?? 0) + row.amount);
+  }
+  const baseFunded = (claim: { id: string; fundedAmount: number }) =>
+    Math.round((claim.fundedAmount - (confirmedByClaim.get(claim.id) ?? 0)) * 100) / 100;
 
   const bucketById = new Map(workspace.buckets.map((bucket) => [bucket.id, bucket]));
   const claimById = new Map(workspace.claims.map((claim) => [claim.id, claim]));
@@ -422,7 +455,7 @@ export function toLegacy(workspace: Workspace): StewardState {
       name: claim.name,
       type: meta.type ?? "Custom",
       target: claim.targetAmount,
-      current: claim.fundedAmount,
+      current: baseFunded(claim),
       targetDate: meta.targetDate ?? "",
       priority: meta.priority ?? "Medium",
       status: meta.status ?? "Active",
@@ -497,6 +530,20 @@ export function toLegacy(workspace: Workspace): StewardState {
     reviews: legacy.reviews as StewardState["reviews"],
     notifications: legacy.notifications as StewardState["notifications"],
     notificationPreferences: legacy.notificationPreferences,
+    ...(workspace.allocations.length
+      ? {
+          allocations: workspace.allocations
+            .filter((row) => row.targetType === "claim")
+            .map<StoredAllocation>((row) => ({
+              id: row.id,
+              cycleId: row.cycleId,
+              claimId: row.targetId,
+              amount: row.amount,
+              status: row.status,
+              createdAt: row.createdAt,
+            })),
+        }
+      : {}),
   };
 }
 
