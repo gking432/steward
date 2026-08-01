@@ -274,6 +274,99 @@ h2 {
   }
 }
 
+@media (max-width: 767px) {
+  .native-budget-block {
+    overflow: hidden;
+    border: 1px solid rgba(247, 251, 247, 0.13);
+    border-radius: 19px;
+    background: rgba(18, 68, 47, 0.3);
+  }
+
+  .native-budget-block > header {
+    padding: 12px 13px 9px;
+  }
+
+  .native-budget-block > header span,
+  .native-budget-block > header strong {
+    display: block;
+  }
+
+  .native-budget-block > header span {
+    color: #aac5b2;
+    font-size: 7px;
+    font-weight: 780;
+    letter-spacing: 0.1em;
+  }
+
+  .native-budget-block > header strong {
+    margin-top: 2px;
+    color: #fff;
+    font-size: 14px;
+    letter-spacing: -0.03em;
+  }
+
+  .native-budget-row {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 12px;
+    border-top: 1px solid rgba(247, 251, 247, 0.1);
+    background: transparent;
+    color: #fff;
+    padding: 10px 13px;
+    text-align: left;
+  }
+
+  .native-budget-row span b,
+  .native-budget-row span small {
+    display: block;
+  }
+
+  .native-budget-row span b {
+    font-size: 12px;
+    font-weight: 660;
+  }
+
+  .native-budget-row span small {
+    margin-top: 2px;
+    color: #b6cebc;
+    font-size: 9px;
+  }
+
+  .native-budget-row > strong {
+    color: #dce9df;
+    font-size: 9px;
+  }
+
+  .native-budget-row .progress {
+    grid-column: 1 / -1;
+    height: 4px;
+    background: rgba(247, 251, 247, 0.14);
+  }
+
+  .native-budget-row .progress-fill { background: #cfe4d5; }
+  .native-budget-row .progress-fill.amber { background: #efc778; }
+
+  .native-budget-empty {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 30px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: 9px;
+    border-top: 1px solid rgba(247, 251, 247, 0.1);
+    background: transparent;
+    color: #edf5ef;
+    padding: 12px 13px;
+    text-align: left;
+  }
+
+  .native-budget-empty b,
+  .native-budget-empty small { display: block; }
+  .native-budget-empty b { font-size: 11px; }
+  .native-budget-empty small { margin-top: 2px; color: #b6cebc; font-size: 9px; }
+}
+
 .sync-banner {
   position: fixed;
   right: 20px;
@@ -4597,6 +4690,416 @@ input[type="checkbox"] {
     to {
       transform: translateY(0);
     }
+  }
+}
+
+/* Mobile Plan home: the financial system stays visible; Steward explains it. */
+@media (max-width: 767px) {
+  .mobile-plan-home {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    background: #2f654d;
+    color: #f7faf7;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+
+  .plan-home-heading {
+    display: flex;
+    min-height: 55px;
+    flex: 0 0 55px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 15px 7px;
+  }
+
+  .plan-home-heading > div > span,
+  .plan-home-heading > div > small {
+    display: block;
+  }
+
+  .plan-home-heading > div > span {
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    font-size: 27px;
+    font-weight: 740;
+    letter-spacing: -0.055em;
+    line-height: 1;
+  }
+
+  .plan-home-heading > div > small {
+    margin-top: 4px;
+    color: #bcd2c2;
+    font-size: 9px;
+  }
+
+  .plan-health {
+    display: inline-flex;
+    max-width: 145px;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    background: rgba(18, 67, 47, 0.38);
+    color: #edf6ef;
+    padding: 6px 9px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .plan-health i {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: #8ed2a5;
+  }
+
+  .plan-health.watch i { background: #efc778; }
+  .plan-health.attention i { background: #f39c92; }
+  .plan-health i.is-syncing { animation: mobile-pulse 1s ease-in-out infinite; }
+
+  .plan-home-scroll {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    align-content: start;
+    gap: 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 2px 13px 22px;
+    scrollbar-width: none;
+  }
+
+  .plan-home-scroll::-webkit-scrollbar { display: none; }
+
+  .executive-layer {
+    display: grid;
+    gap: 9px;
+  }
+
+  .plan-cash {
+    position: relative;
+    display: flex;
+    min-height: 142px;
+    width: 100%;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(247, 251, 247, 0.13);
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at 102% 0%, rgba(213, 238, 221, 0.19), transparent 40%),
+      linear-gradient(145deg, #1d4e39, #143a2a);
+    box-shadow: 0 14px 30px rgba(14, 49, 34, 0.2);
+    color: #fff;
+    padding: 17px 18px;
+    text-align: left;
+  }
+
+  .plan-cash > span {
+    color: #b7d0bd;
+    font-size: 8px;
+    font-weight: 780;
+    letter-spacing: 0.12em;
+  }
+
+  .plan-cash > strong {
+    margin-top: 5px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    font-size: 45px;
+    font-weight: 720;
+    letter-spacing: -0.075em;
+    line-height: 1;
+  }
+
+  .plan-cash > small {
+    max-width: calc(100% - 35px);
+    margin-top: auto;
+    color: #c5d9ca;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+
+  .plan-cash > svg {
+    position: absolute;
+    right: 17px;
+    bottom: 17px;
+    color: #c6dacf;
+  }
+
+  .plan-vitals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .plan-vitals > button {
+    min-height: 86px;
+    overflow: hidden;
+    border: 1px solid rgba(247, 251, 247, 0.11);
+    border-radius: 18px;
+    background: rgba(20, 69, 49, 0.34);
+    color: #fff;
+    padding: 12px 13px;
+    text-align: left;
+  }
+
+  .plan-vitals small,
+  .plan-vitals strong,
+  .plan-vitals em {
+    display: block;
+  }
+
+  .plan-vitals small {
+    color: #adc8b5;
+    font-size: 7px;
+    font-weight: 780;
+    letter-spacing: 0.11em;
+  }
+
+  .plan-vitals strong {
+    margin-top: 5px;
+    color: #fff;
+    font-size: 19px;
+    font-weight: 710;
+    letter-spacing: -0.045em;
+  }
+
+  .plan-vitals em {
+    overflow: hidden;
+    margin-top: 3px;
+    color: #b9d0bf;
+    font-size: 9px;
+    font-style: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .plan-recommendation {
+    display: grid;
+    min-height: 112px;
+    width: 100%;
+    grid-template-columns: 34px minmax(0, 1fr) 18px;
+    align-items: start;
+    gap: 10px;
+    border-radius: 21px;
+    background: #f1f5ef;
+    box-shadow: 0 10px 24px rgba(16, 50, 35, 0.16);
+    color: #1e4935;
+    padding: 14px;
+    text-align: left;
+  }
+
+  .plan-recommendation > span {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border-radius: 11px;
+    background: #dbe9de;
+    color: #2d6449;
+  }
+
+  .plan-recommendation > div { min-width: 0; }
+  .plan-recommendation small,
+  .plan-recommendation strong,
+  .plan-recommendation p,
+  .plan-recommendation em { display: block; }
+
+  .plan-recommendation small {
+    color: #6a8674;
+    font-size: 7px;
+    font-weight: 780;
+    letter-spacing: 0.08em;
+  }
+
+  .plan-recommendation strong {
+    margin-top: 4px;
+    color: #173e2c;
+    font-size: 15px;
+    font-weight: 730;
+    letter-spacing: -0.035em;
+  }
+
+  .plan-recommendation p {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 3px;
+    color: #61786a;
+    font-size: 9px;
+    line-height: 1.3;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .plan-recommendation em {
+    overflow: hidden;
+    margin-top: 6px;
+    color: #365f49;
+    font-size: 8px;
+    font-style: normal;
+    font-weight: 680;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .plan-recommendation > svg {
+    align-self: center;
+    color: #467159;
+  }
+
+  .budget-layer {
+    overflow: hidden;
+    border: 1px solid rgba(247, 251, 247, 0.12);
+    border-radius: 22px;
+    background: rgba(19, 66, 47, 0.34);
+  }
+
+  .budget-layer > header {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 15px 12px;
+  }
+
+  .budget-layer > header span {
+    color: #a9c5b1;
+    font-size: 7px;
+    font-weight: 780;
+    letter-spacing: 0.11em;
+  }
+
+  .budget-layer > header h2 {
+    margin-top: 3px;
+    color: #fff;
+    font-size: 17px;
+    font-weight: 710;
+    letter-spacing: -0.04em;
+  }
+
+  .budget-layer > header button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    color: #c8dccd;
+    font-size: 8px;
+    font-weight: 650;
+  }
+
+  .plan-buckets {
+    border-top: 1px solid rgba(247, 251, 247, 0.1);
+  }
+
+  .plan-buckets > button {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) 84px;
+    align-items: center;
+    gap: 5px 12px;
+    border-bottom: 1px solid rgba(247, 251, 247, 0.09);
+    background: transparent;
+    color: #fff;
+    padding: 10px 15px;
+    text-align: left;
+  }
+
+  .plan-buckets > button:last-child { border-bottom: 0; }
+
+  .plan-buckets > button > span {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .plan-buckets b {
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 660;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .plan-buckets em {
+    color: #bad1c0;
+    font-size: 9px;
+    font-style: normal;
+  }
+
+  .plan-buckets .progress {
+    grid-column: 1;
+    height: 5px;
+    background: rgba(247, 251, 247, 0.13);
+  }
+
+  .plan-buckets .progress-fill { background: #cfe4d5; }
+  .plan-buckets .progress-fill.amber { background: #efc778; }
+
+  .plan-buckets > button > small {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    color: #d6e4d9;
+    font-size: 9px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .empty-plan-buckets {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 30px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid rgba(247, 251, 247, 0.1);
+    background: transparent;
+    color: #edf6ef;
+    padding: 15px;
+    text-align: left;
+  }
+
+  .empty-plan-buckets b,
+  .empty-plan-buckets small { display: block; }
+  .empty-plan-buckets b { font-size: 12px; }
+  .empty-plan-buckets small { margin-top: 2px; color: #b7cdbd; font-size: 9px; line-height: 1.3; }
+
+  .insight-layer {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 30px;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid rgba(247, 251, 247, 0.12);
+    border-radius: 19px;
+    background: rgba(240, 247, 241, 0.09);
+    padding: 13px;
+  }
+
+  .insight-layer > span,
+  .insight-layer > button {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: 10px;
+    background: rgba(244, 249, 245, 0.11);
+    color: #e2eee5;
+  }
+
+  .insight-layer small {
+    color: #a9c5b1;
+    font-size: 7px;
+    font-weight: 780;
+    letter-spacing: 0.11em;
+  }
+
+  .insight-layer p {
+    margin-top: 3px;
+    color: #e1ebe4;
+    font-size: 10px;
+    line-height: 1.38;
   }
 }
 

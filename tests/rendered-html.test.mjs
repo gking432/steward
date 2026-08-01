@@ -4,7 +4,7 @@ import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 
-test("build contains Steward's decision briefing", async () => {
+test("build contains Steward's plan-first financial briefing", async () => {
   const [layout, app, page, css, engine, manifest] = await Promise.all([
     readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/steward-app.tsx", root), "utf8"),
@@ -30,12 +30,13 @@ test("build contains Steward's decision briefing", async () => {
   assert.match(app, /Let’s get started/);
   assert.match(app, /function MobileOverview/);
   assert.match(app, /AVAILABLE CASH/);
-  assert.match(app, /BIGGEST PRESSURE/);
-  assert.match(app, /TODAY’S MOVE/);
-  assert.match(app, /CAN I BUY THIS\?/);
-assert.match(engine, /verdict: "BUY"/);
-assert.match(engine, /verdict: "WAIT"/);
-assert.match(engine, /verdict: "DO NOT BUY"/);
+  assert.match(app, /THIS PAYCHECK/);
+  assert.match(app, /Your spending plan/);
+  assert.match(app, /SPENDING BUCKETS/);
+  assert.match(app, /WHAT STEWARD SEES/);
+  assert.match(engine, /verdict: "BUY"/);
+  assert.match(engine, /verdict: "WAIT"/);
+  assert.match(engine, /verdict: "DO NOT BUY"/);
   assert.match(css, /\.mobile-home-view/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(layout, /manifest\.webmanifest/);

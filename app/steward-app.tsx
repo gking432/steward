@@ -1031,8 +1031,8 @@ export function StewardApp({
     label: string;
     icon: typeof Home;
   }[] = [
-    { id: "home", label: "Today", icon: Home },
-    { id: "plan", label: "Plan", icon: ListChecks },
+    { id: "home", label: "Plan", icon: ListChecks },
+    { id: "transactions", label: "Activity", icon: WalletCards },
     { id: "projects", label: "Projects", icon: BriefcaseBusiness },
     { id: "advisor", label: "Advisor", icon: Sparkles },
     { id: "more", label: "More", icon: MoreHorizontal },
@@ -1320,7 +1320,7 @@ export function StewardApp({
             {navItems
               .filter(
                 (item) =>
-                  !["home", "plan", "projects", "advisor"].includes(
+                  !["home", "plan", "transactions", "projects", "advisor"].includes(
                     item.id,
                   ),
               )
@@ -1405,69 +1405,105 @@ function MobileOverview({
     month: "short",
     day: "numeric",
   }).format(new Date());
-  const purchase = [...state.wishlist]
-    .filter((item) => !["Purchased", "Rejected"].includes(item.status))
-    .sort((a, b) => {
-      const priority = { High: 0, Medium: 1, Low: 2 };
-      return priority[a.priority] - priority[b.priority] || a.price - b.price;
-    })[0];
-  const purchaseDecision = purchase
-    ? affordabilityDecision(state, purchase.price)
-    : null;
   const connected = state.accounts.some((account) => !account.archived);
+  const allocation = paycheckAllocation(state);
+  const payoff = debtPayoffPlan(state);
+  const budgets = [...state.budgets]
+    .sort((a, b) => {
+      const aUse = a.planned ? a.actual / a.planned : 0;
+      const bUse = b.planned ? b.actual / b.planned : 0;
+      return Number(b.essential) - Number(a.essential) || bUse - aUse;
+    })
+    .slice(0, 5);
+  const budgetPlanned = state.budgets.reduce((sum, item) => sum + item.planned, 0);
+  const budgetSpent = state.budgets.reduce((sum, item) => sum + item.actual, 0);
+  const hottestBudget = [...state.budgets]
+    .filter((item) => item.planned > 0)
+    .sort((a, b) => b.actual / b.planned - a.actual / a.planned)[0];
+  const insight = hottestBudget
+    ? hottestBudget.actual > hottestBudget.planned
+      ? `${hottestBudget.category} is ${money(hottestBudget.actual - hottestBudget.planned)} over plan. Steward will account for that before recommending another purchase.`
+      : `${hottestBudget.category} has used ${Math.round((hottestBudget.actual / hottestBudget.planned) * 100)}% of its plan. You still have ${money(Math.max(0, hottestBudget.planned - hottestBudget.actual))} available there.`
+    : "Connect your bank and Steward will explain what changed—not just list transactions.";
 
   return (
-    <section className="mobile-chief" aria-label="Today decision center">
-      <header className="mobile-chief-heading">
+    <section className="mobile-plan-home" aria-label="Plan overview">
+      <header className="plan-home-heading">
         <div>
-          <span>Today</span>
+          <span>Your plan</span>
           <small>{today}</small>
         </div>
-        <p className={`health-status ${health.tone}`}>
+        <p className={`plan-health ${health.tone}`}>
           <i className={syncState === "Syncing" ? "is-syncing" : ""} />
           {health.status}
         </p>
       </header>
 
-      <button className="available-cash-hero" onClick={() => connected ? go("plan") : connect()}>
-        <span>AVAILABLE CASH</span>
-        <strong>{money(tradeoffs.availableCash)}</strong>
-        <p>{health.summary}</p>
-        <small>
-          After bills · debt minimums · savings · {money(state.profile.minimumBuffer)} buffer
-        </small>
-        <ArrowRight size={18} />
-      </button>
+      <div className="plan-home-scroll">
+        <section className="executive-layer" aria-label="Executive summary">
+          <button className="plan-cash" onClick={() => connected ? go("accounts") : connect()}>
+            <span>AVAILABLE CASH</span>
+            <strong>{money(tradeoffs.availableCash)}</strong>
+            <small>{health.summary}</small>
+            <ArrowRight size={18} />
+          </button>
+          <div className="plan-vitals">
+            <button onClick={() => go("debt")}>
+              <small>DEBT</small>
+              <strong>{money(payoff.totalBalance)}</strong>
+              <em>{payoff.estimatedMonths ? `${payoff.estimatedMonths} months on plan` : "Add terms for payoff date"}</em>
+            </button>
+            <button onClick={() => go("plan")}>
+              <small>NEXT PAYCHECK</small>
+              <strong>{money(allocation.income)}</strong>
+              <em>{state.paycheckPlan.date || "Add your payday"}</em>
+            </button>
+          </div>
+          <button className="plan-recommendation" onClick={() => connected ? go("advisor") : connect()}>
+            <span><Sparkles size={17} /></span>
+            <div>
+              <small>STEWARD’S RECOMMENDATION · {Math.round(decision.confidence * 100)}%</small>
+              <strong>{decision.title}</strong>
+              <p>{decision.reason}</p>
+              <em>{decision.expectedOutcome}</em>
+            </div>
+            <ArrowRight size={17} />
+          </button>
+        </section>
 
-      <button
-        className={`financial-bottleneck ${bottleneck.type}`}
-        onClick={() => go(bottleneck.type === "debt" ? "debt" : "advisor")}
-      >
-        <span className="chief-icon"><Gauge size={18} /></span>
-        <span>
-          <small>BIGGEST PRESSURE</small>
-          <strong>{bottleneck.title}</strong>
-          <em>{bottleneck.reason}</em>
-        </span>
-        <ArrowRight size={17} />
-      </button>
+        <section className="budget-layer" aria-label="This paycheck budget">
+          <header>
+            <div><span>THIS PAYCHECK</span><h2>Your spending plan</h2></div>
+            <button onClick={() => go("plan")}>{money(budgetSpent)} of {money(budgetPlanned)} <ArrowRight size={14} /></button>
+          </header>
+          {budgets.length ? (
+            <div className="plan-buckets">
+              {budgets.map((budget) => {
+                const percent = budget.planned ? (budget.actual / budget.planned) * 100 : 0;
+                return (
+                  <button key={budget.id} onClick={() => go("plan")}>
+                    <span><b>{budget.category}</b><em>{Math.round(percent)}%</em></span>
+                    <Progress value={percent} tone={percent > 90 ? "amber" : "green"} />
+                    <small>{money(budget.actual)} of {money(budget.planned)}</small>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <button className="empty-plan-buckets" onClick={() => connected ? go("plan") : connect()}>
+              <ListChecks size={20} />
+              <span><b>Build your spending plan</b><small>Steward can suggest editable amounts from your income, bills, and activity.</small></span>
+              <ArrowRight size={16} />
+            </button>
+          )}
+        </section>
 
-      <button className="today-move" onClick={() => connected ? go("advisor") : connect()}>
-        <span className="today-move-top"><small>TODAY’S MOVE</small><b>{Math.round(decision.confidence * 100)}% confident</b></span>
-        <strong>{decision.title}</strong>
-        <p>{decision.reason}</p>
-        <span className="today-move-foot"><b>{decision.timing}</b><em>{decision.expectedOutcome}</em><ArrowRight size={17} /></span>
-      </button>
-
-      <button className="affordability-entry" onClick={() => go(purchase ? "wishlist" : "advisor")}>
-        <span className="chief-icon"><ShoppingBag size={18} /></span>
-        <span>
-          <small>CAN I BUY THIS?</small>
-          <strong>{purchase ? purchase.name : "Ask about a purchase"}</strong>
-          <em>{purchaseDecision ? `${purchaseDecision.verdict} · ${purchaseDecision.reason}` : "Get a clear buy, wait, or do-not-buy answer."}</em>
-        </span>
-        <ArrowRight size={17} />
-      </button>
+        <section className="insight-layer" aria-label="Steward insight">
+          <span><Sparkles size={18} /></span>
+          <div><small>WHAT STEWARD SEES</small><p>{insight}</p></div>
+          <button onClick={() => go(bottleneck.type === "debt" ? "debt" : "advisor")} aria-label="Explain this insight"><ArrowRight size={16} /></button>
+        </section>
+      </div>
     </section>
   );
 }
@@ -1622,6 +1658,25 @@ function MobileNativeView({
               <span><b>Debt payoff</b><small>Extra payment this cycle</small></span>
               <strong>{money(state.paycheckPlan.debt)}</strong><ArrowRight size={16} />
             </button>
+          </section>
+          <section className="native-budget-block">
+            <header><span>SPENDING BUCKETS</span><strong>This paycheck</strong></header>
+            {state.budgets.length ? state.budgets.slice(0, 8).map((budget) => {
+              const percent = budget.planned ? (budget.actual / budget.planned) * 100 : 0;
+              return (
+                <button className="native-budget-row" key={budget.id} onClick={() => go("transactions")}>
+                  <span><b>{budget.category}</b><small>{money(Math.max(0, budget.planned - budget.actual))} left</small></span>
+                  <strong>{money(budget.actual)} / {money(budget.planned)}</strong>
+                  <Progress value={percent} tone={percent > 90 ? "amber" : "green"} />
+                </button>
+              );
+            }) : (
+              <button className="native-budget-empty" onClick={connectPlaid}>
+                <ListChecks size={18} />
+                <span><b>Your categories will appear here</b><small>Connect activity to build an editable plan.</small></span>
+                <ArrowRight size={16} />
+              </button>
+            )}
           </section>
           <button className="native-advice-card" onClick={() => go("advisor")}>
             <Sparkles size={18} />
