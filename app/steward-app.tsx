@@ -40,8 +40,10 @@ import {
   X,
 } from "lucide-react";
 import {
+  CSSProperties,
   FormEvent,
   ReactNode,
+  TouchEvent as ReactTouchEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -453,6 +455,9 @@ export function StewardApp({
   const [onboardingStep, setOnboardingStep] = useState(0);
   const loadedRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pullStartY = useRef<number | null>(null);
+  const pullAllowed = useRef(false);
+  const [pullDistance, setPullDistance] = useState(0);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -811,6 +816,30 @@ export function StewardApp({
     }
   };
 
+  const startPullSync = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (!mobileAppPreview || modal || bankStatus === "syncing") return;
+    const target = event.target as HTMLElement;
+    const scrollable = target.closest<HTMLElement>(
+      ".native-route-scroll, .settings-mobile-scroll, .plan-home-scroll",
+    );
+    pullAllowed.current = (scrollable?.scrollTop ?? window.scrollY) <= 0;
+    pullStartY.current = pullAllowed.current ? event.touches[0]?.clientY ?? null : null;
+  };
+
+  const movePullSync = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (!pullAllowed.current || pullStartY.current === null || bankStatus === "syncing") return;
+    const distance = (event.touches[0]?.clientY ?? pullStartY.current) - pullStartY.current;
+    setPullDistance(distance > 0 ? Math.min(72, distance * 0.42) : 0);
+  };
+
+  const finishPullSync = () => {
+    const shouldSync = pullDistance >= 52 && bankStatus !== "syncing";
+    pullStartY.current = null;
+    pullAllowed.current = false;
+    setPullDistance(0);
+    if (shouldSync) void syncBank();
+  };
+
   const results = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
@@ -1024,7 +1053,13 @@ export function StewardApp({
   ];
 
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      onTouchStart={startPullSync}
+      onTouchMove={movePullSync}
+      onTouchEnd={finishPullSync}
+      onTouchCancel={finishPullSync}
+    >
       <header className="mobile-header">
         <button className="mobile-brand" onClick={() => go("home")}>
           <div className="brand-mark" aria-hidden="true">
@@ -1036,15 +1071,11 @@ export function StewardApp({
         </button>
         <div>
           <button
-            className="icon-button"
-            onClick={() => void syncBank()}
-            aria-label="Sync bank data"
-            disabled={bankStatus === "syncing"}
+            className="mobile-steward-take"
+            onClick={() => go("advisor")}
           >
-            <RefreshCw
-              className={bankStatus === "syncing" ? "spin" : ""}
-              size={19}
-            />
+            <Sparkles size={14} />
+            <span>Steward’s take</span>
           </button>
           <button
             className="avatar"
@@ -1055,6 +1086,26 @@ export function StewardApp({
           </button>
         </div>
       </header>
+      <div
+        className={cx(
+          "pull-sync-indicator",
+          pullDistance > 0 && "visible",
+          pullDistance >= 52 && "ready",
+          bankStatus === "syncing" && "syncing",
+        )}
+        style={{ "--pull-distance": `${bankStatus === "syncing" ? 40 : pullDistance}px` } as CSSProperties}
+        role="status"
+        aria-live="polite"
+      >
+        <RefreshCw className={bankStatus === "syncing" ? "spin" : ""} size={15} />
+        <span>
+          {bankStatus === "syncing"
+            ? "Syncing accounts"
+            : pullDistance >= 52
+              ? "Release to sync"
+              : "Pull to refresh"}
+        </span>
+      </div>
       <aside className={cx("sidebar", mobileNav && "open")}>
         <div className="brand">
           <div className="brand-mark">

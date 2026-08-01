@@ -10,6 +10,8 @@
   goals, and projects before constructing the plan.
 - Added current-pay-period spending calculations so category percentages use
   activity from the active paycheck cycle rather than generic monthly totals.
+- Replaced the mobile header refresh icon with Steward’s take and moved account
+  syncing to a native-style pull-to-refresh gesture.
 
 ## 2026-07-30
 

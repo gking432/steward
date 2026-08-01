@@ -34,6 +34,10 @@ test("build contains Steward's decision briefing", async () => {
   assert.match(app, /What must this paycheck cover\?/);
   assert.match(app, /What do you spend between paychecks\?/);
   assert.match(app, /What are you building toward\?/);
+  assert.match(app, /Steward’s take/);
+  assert.match(app, /Pull to refresh/);
+  assert.match(app, /Release to sync/);
+  assert.doesNotMatch(app, /aria-label="Sync bank data"/);
   assert.match(css, /\.mobile-home-view/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(layout, /manifest\.webmanifest/);
