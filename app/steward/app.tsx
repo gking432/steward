@@ -50,6 +50,7 @@ import {
   type PaydayProposal,
   type Verdict,
 } from "../../lib/model/decide";
+import { fallbackIntent, type IntentDraft } from "../../lib/model/ai";
 import type { Bucket, Claim, Workspace } from "../../lib/model/types";
 import type { StewardState } from "../../lib/steward-types";
 import { useWorkspace } from "./workspace-store";
@@ -233,10 +234,12 @@ function PathScreen({
   workspace,
   today,
   update,
+  onAdd,
 }: {
   workspace: Workspace;
   today: string;
   update: (next: (current: Workspace) => Workspace) => void;
+  onAdd: () => void;
 }) {
   const plan = planCycle(workspace, today);
   const arrivals = useMemo(() => projectArrivals(workspace, today), [workspace, today]);
@@ -359,6 +362,12 @@ function PathScreen({
             focused on fewer. That&apos;s your call to make.
           </p>
         )}
+      </section>
+
+      <section className="sw-block">
+        <button className="sw-primary sw-add" onClick={onAdd}>
+          <Plus size={16} /> Add something
+        </button>
       </section>
 
       <section className="sw-block">
@@ -625,6 +634,142 @@ function BuySheet({
 }
 
 
+
+/* ------------------------------------------------- ADD SOMETHING -------- */
+
+/**
+ * Explicit claim creation (amendment A4).
+ *
+ * Harvesting from "Can I buy this?" is the default path, but a user who
+ * already knows what they want must be able to just say it. One field, plain
+ * language, and a draft they confirm — never a multi-step goal wizard.
+ *
+ * Parsing runs deterministically first and is only enhanced by the model, so
+ * this works with no API key configured.
+ */
+function AddClaimSheet({
+  workspace,
+  today,
+  onClose,
+  update,
+}: {
+  workspace: Workspace;
+  today: string;
+  onClose: () => void;
+  update: (next: (current: Workspace) => Workspace) => void;
+}) {
+  const [text, setText] = useState("");
+  const [draft, setDraft] = useState<IntentDraft | null>(null);
+  const [thinking, setThinking] = useState(false);
+
+  const parse = async () => {
+    if (!text.trim()) return;
+    setThinking(true);
+    // Deterministic result first; the model may only refine it.
+    let result = fallbackIntent(text, today);
+    try {
+      const response = await fetch("/api/steward-ai", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "intent", utterance: text, today }),
+      });
+      const payload = await response.json();
+      if (payload?.draft) result = payload.draft;
+    } catch {
+      // Deterministic parse stands.
+    }
+    setDraft(result);
+    setThinking(false);
+  };
+
+  const create = () => {
+    if (!draft) return;
+    const rank = workspace.claims.filter((claim) => claim.status === "active").length;
+    update((current) => ({
+      ...current,
+      claims: [
+        ...current.claims,
+        {
+          ...claimFromPurchase({
+            item: draft.name,
+            price: draft.amount ?? 0,
+            wantBy: draft.wantBy ?? undefined,
+            rank,
+          }),
+          kind: draft.kind,
+          divisible: draft.kind !== "purchase",
+          horizon: draft.kind === "commitment" ? ("commitment" as const) : ("arrival" as const),
+          status: draft.amount ? ("active" as const) : ("someday" as const),
+        },
+      ],
+    }));
+    onClose();
+  };
+
+  return (
+    <div className="sw-sheet-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="sw-sheet" role="dialog" aria-modal="true" aria-label="Add something"
+        onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <h2>What do you want?</h2>
+          <button onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </header>
+
+        {!draft ? (
+          <form className="sw-buy-form" onSubmit={(event) => { event.preventDefault(); void parse(); }}>
+            <label>
+              <span>Say it however you like</span>
+              <input
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder="I want $5,000 in emergency savings"
+                autoFocus
+              />
+            </label>
+            <p className="sw-muted">
+              &ldquo;I want this credit card gone&rdquo; · &ldquo;a golf net&rdquo; ·
+              &ldquo;save $20,000 for a house&rdquo;
+            </p>
+            <button type="submit" className="sw-primary" disabled={thinking}>
+              {thinking ? "Reading that…" : "Continue"}
+            </button>
+          </form>
+        ) : (
+          <div className="sw-verdict">
+            <span className="sw-eyebrow">Is this right?</span>
+            <div className="sw-draft">
+              <label>
+                <span>Name</span>
+                <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+              </label>
+              <label>
+                <span>Amount</span>
+                <input
+                  value={draft.amount ?? ""}
+                  inputMode="decimal"
+                  placeholder="How much?"
+                  onChange={(e) =>
+                    setDraft({ ...draft, amount: e.target.value ? Number(e.target.value) : null })
+                  }
+                />
+              </label>
+              {draft.wantBy && (
+                <p className="sw-muted">Target date: {formatDate(draft.wantBy)}</p>
+              )}
+            </div>
+            <div className="sw-verdict-actions">
+              <button className="sw-primary" onClick={create} disabled={!draft.amount}>
+                {draft.amount ? "Add to Path" : "Add an amount to continue"}
+              </button>
+              <button className="sw-secondary" onClick={() => setDraft(null)}>Start over</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- PAYDAY -- */
 
 /**
@@ -785,6 +930,7 @@ export function StewardApp({
   const [buyOpen, setBuyOpen] = useState(false);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
   const [paydayDismissed, setPaydayDismissed] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const today = todayISO(fixedToday);
 
   const proposal = useMemo(
@@ -856,7 +1002,14 @@ export function StewardApp({
             onGoLedger={() => { setFocusBucket(null); setTab("ledger"); }}
           />
         )}
-        {tab === "path" && <PathScreen workspace={workspace} today={today} update={update} />}
+        {tab === "path" && (
+          <PathScreen
+            workspace={workspace}
+            today={today}
+            update={update}
+            onAdd={() => setAddOpen(true)}
+          />
+        )}
         {tab === "ledger" && (
           <LedgerScreen
             workspace={workspace}
@@ -884,6 +1037,10 @@ export function StewardApp({
 
       {buyOpen && (
         <BuySheet workspace={workspace} today={today} update={update} onClose={() => setBuyOpen(false)} />
+      )}
+
+      {addOpen && (
+        <AddClaimSheet workspace={workspace} today={today} update={update} onClose={() => setAddOpen(false)} />
       )}
 
       {paydayDue && proposal && (

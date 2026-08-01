@@ -159,3 +159,53 @@ test("legacy fields with no model home survive untouched", () => {
   state.recommendations = [{ id: "r", title: "T", description: "D", type: "protect", priority: "now", impact: 1, confidence: 1, reason: "R", action: "A", status: "active" }];
   assert.deepEqual(roundTrip(state), state);
 });
+
+test("a claim created after load is given a legacy home rather than dropped", () => {
+  const state = goldenWorkspace();
+  const model = toModel(state);
+  const withNew = {
+    ...model,
+    claims: [
+      ...model.claims,
+      {
+        id: "claim:new-cushion",
+        name: "Emergency savings",
+        kind: "fund" as const,
+        targetAmount: 5000,
+        fundedAmount: 0,
+        rank: 9,
+        status: "active" as const,
+        horizon: "arrival" as const,
+        divisible: true,
+        delayCost: { type: "none" as const },
+        protected: false,
+      },
+      {
+        id: "claim:new-desk",
+        name: "Standing desk",
+        kind: "purchase" as const,
+        targetAmount: 320,
+        fundedAmount: 0,
+        rank: 10,
+        status: "active" as const,
+        horizon: "arrival" as const,
+        divisible: false,
+        delayCost: { type: "none" as const },
+        protected: false,
+      },
+    ],
+  };
+
+  const written = toLegacy(withNew);
+  assert.ok(written.goals.some((goal) => goal.name === "Emergency savings"), "fund became a goal");
+  assert.ok(written.wishlist.some((item) => item.name === "Standing desk"), "purchase became a wishlist item");
+
+  // And they survive the next read, which is what the UI depends on.
+  const reread = toModel(written);
+  const names = reread.claims.map((claim) => claim.name);
+  assert.ok(names.includes("Emergency savings"));
+  assert.ok(names.includes("Standing desk"));
+
+  // Round-trip is still stable once they have a home.
+  assert.deepEqual(toLegacy(toModel(written)), written);
+});

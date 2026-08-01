@@ -502,6 +502,51 @@ export function toLegacy(workspace: Workspace): StewardState {
     });
   });
 
+  // Claims created after load have no entry in the recorded order, so they
+  // would otherwise be dropped on write. Give each one a legacy home: a
+  // purchase becomes a wishlist item, anything else becomes a goal. On the
+  // next read they arrive through the normal path.
+  const known = new Set([
+    ...legacy.order.goals.map((id) => `claim:${id}`),
+    ...legacy.order.wishlist.map((id) => `claim:${id}`),
+  ]);
+  for (const claim of workspace.claims) {
+    if (isDerived(claim.id) || known.has(claim.id)) continue;
+    const id = stripPrefix(claim.id, "claim:");
+    if (claim.kind === "purchase") {
+      wishlist.push(
+        compact({
+          id,
+          name: claim.name,
+          projectId: claim.projectId ? stripPrefix(claim.projectId, "project:") : undefined,
+          category: "Uncategorized",
+          priority: "Medium",
+          price: claim.targetAmount,
+          desiredDate: claim.wantBy ?? "",
+          safeDate: "",
+          status: claim.status === "someday" ? "Considering" : "Planned",
+          reason: "Added in Steward.",
+          url: claim.url,
+        }) as WishlistItem,
+      );
+    } else {
+      goals.push(
+        compact({
+          id,
+          name: claim.name,
+          type: claim.kind === "payoff" ? "Debt payoff" : "Custom",
+          target: claim.targetAmount,
+          current: baseFunded(claim),
+          targetDate: claim.wantBy ?? "",
+          priority: "Medium",
+          status: claim.status === "paused" ? "Paused" : claim.status === "complete" ? "Complete" : "Active",
+          recommendedContribution: 0,
+          paycheckContribution: claim.pinned,
+        }) as Goal,
+      );
+    }
+  }
+
   return {
     version: legacy.version,
     profile: {
