@@ -11,6 +11,7 @@ import {
   debtPayoffPlan,
   deterministicCategory,
   paycheckAllocation,
+  paycheckBuckets,
   splitIsValid,
   spendingByCategory,
 } from "../lib/engine";
@@ -85,6 +86,66 @@ test("paycheck allocation reconciles editable allocations", () => {
   const result = paycheckAllocation(state);
   assert.equal(result.remaining, result.income - result.assigned);
   assert.ok(result.percentAssigned > 0);
+});
+
+test("paycheck buckets unify real obligations, spending, goals, projects, and protection", () => {
+  const state = connectedState();
+  state.budgets = [{
+    id: "groceries",
+    category: "Groceries",
+    planned: 300,
+    actual: 0,
+    cadence: "Monthly",
+    essential: true,
+    source: "manual",
+    paycheckAmount: 150,
+  }];
+  state.transactions = [{
+    id: "groceries-spend",
+    accountId: "checking",
+    merchant: "Market",
+    description: "Food",
+    amount: 75,
+    date: new Date().toISOString().slice(0, 10),
+    category: "Groceries",
+    type: "expense",
+  }];
+  state.goals = [{
+    id: "emergency",
+    name: "Emergency fund",
+    type: "Emergency fund",
+    target: 1_000,
+    current: 250,
+    targetDate: state.profile.nextPayday,
+    priority: "High",
+    status: "Active",
+    recommendedContribution: 100,
+    paycheckContribution: 125,
+  }];
+  state.projects = [{
+    id: "apartment",
+    name: "Apartment",
+    description: "Home project",
+    category: "Home",
+    priority: "Medium",
+    status: "Active",
+    targetDate: state.profile.nextPayday,
+    estimatedCost: 500,
+    actualCost: 100,
+    paycheckContribution: 50,
+    progress: 20,
+    nextAction: "Choose the next item",
+    tasks: [],
+  }];
+  const buckets = paycheckBuckets(state);
+  assert.ok(buckets.some((bucket) => bucket.kind === "bill"));
+  assert.ok(buckets.some((bucket) => bucket.kind === "goal"));
+  assert.ok(buckets.some((bucket) => bucket.kind === "project"));
+  assert.ok(buckets.some((bucket) => bucket.kind === "buffer"));
+  const groceries = buckets.find((bucket) => bucket.name === "Groceries");
+  assert.equal(groceries?.assigned, 150);
+  assert.equal(groceries?.progressCurrent, 75);
+  assert.equal(groceries?.percent, 50);
 });
 
 test("debt payoff plan uses minimums plus the planned extra on highest APR first", () => {

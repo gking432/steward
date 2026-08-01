@@ -16,6 +16,8 @@ rules, affordability checks, and recommendations are deterministic.
   support
 - Preserved desktop application shell and primary navigation
 - Paycheck allocation planner with live reconciliation
+- Personalized paycheck buckets spanning bills, spending, debt, goals,
+  projects, and the protected cash buffer
 - Safe-to-spend and affordability engine
 - Accounts, transactions, categories, bills, budgets, and goals
 - Projects with tasks, progress, cost context, and next actions
@@ -30,6 +32,8 @@ rules, affordability checks, and recommendations are deterministic.
   sync, account refresh, and real workspace ingestion
 - Derived bills, budgets, payday details, reviews, and recommendations from
   connected activity
+- Onboarding that asks what belongs in the user’s plan before creating or
+  assigning discretionary buckets
 
 ## Stack
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unified paycheck buckets
+
+- Added one mobile Plan view for bills, everyday spending, debt, goals,
+  projects, and the protected cash buffer.
+- Added editable per-paycheck assignments and source-specific progress labels
+  and percentages.
+- Reworked onboarding to ask about income, bills, real spending categories,
+  goals, and projects before constructing the plan.
+- Added current-pay-period spending calculations so category percentages use
+  activity from the active paycheck cycle rather than generic monthly totals.
+
 ## 2026-07-30
 
 - Initialized Steward as a new full-stack financial operating system.

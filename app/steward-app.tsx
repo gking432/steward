@@ -57,6 +57,7 @@ import {
   deterministicCategory,
   money,
   paycheckAllocation,
+  paycheckBuckets,
   spendingByCategory,
 } from "../lib/engine";
 import { suggestBudgets } from "../lib/financial-import";
@@ -870,6 +871,7 @@ export function StewardApp({
           go={go}
           sendAdvisor={sendAdvisor}
           openModal={setModal}
+          update={update}
           connectPlaid={connectPlaid}
           syncBank={syncBank}
           syncing={bankStatus === "syncing"}
@@ -1483,6 +1485,7 @@ function MobileNativeView({
   go,
   sendAdvisor,
   openModal,
+  update,
   connectPlaid,
   syncBank,
   syncing,
@@ -1499,10 +1502,57 @@ function MobileNativeView({
   go: (view: NavView) => void;
   sendAdvisor: (prompt?: string) => Promise<void>;
   openModal: (modal: ModalName) => void;
+  update: <K extends keyof StewardState>(key: K, value: StewardState[K]) => void;
   connectPlaid: () => void;
   syncBank: () => void;
   syncing: boolean;
 }) {
+  const [planMode, setPlanMode] = useState<"paycheck" | "buckets">("paycheck");
+  const [newBucketCategory, setNewBucketCategory] = useState("Groceries");
+  const [newBucketAmount, setNewBucketAmount] = useState(0);
+  const buckets = paycheckBuckets(state);
+  const bucketGroups = ["Must cover", "Everyday", "Future", "Protection"] as const;
+  const assignedToBuckets = buckets.reduce((sum, bucket) => sum + bucket.assigned, 0);
+
+  const setBucketAssignment = (
+    bucket: ReturnType<typeof paycheckBuckets>[number],
+    assigned: number,
+  ) => {
+    const value = Math.max(0, assigned);
+    if (bucket.kind === "bill") {
+      update("bills", state.bills.map((bill) => bill.id === bucket.sourceId ? { ...bill, amount: value } : bill));
+    } else if (bucket.kind === "spending") {
+      update("budgets", state.budgets.map((budget) => budget.id === bucket.sourceId ? { ...budget, paycheckAmount: value, source: "manual" } : budget));
+    } else if (bucket.kind === "debt") {
+      const minimums = state.accounts
+        .filter((account) => ["Credit card", "Loan"].includes(account.type))
+        .reduce((sum, account) => sum + (account.minimumPayment ?? 0), 0);
+      update("paycheckPlan", { ...state.paycheckPlan, debt: Math.max(0, value - minimums) });
+    } else if (bucket.kind === "goal") {
+      update("goals", state.goals.map((goal) => goal.id === bucket.sourceId ? { ...goal, paycheckContribution: value } : goal));
+    } else if (bucket.kind === "project") {
+      update("projects", state.projects.map((project) => project.id === bucket.sourceId ? { ...project, paycheckContribution: value } : project));
+    } else if (bucket.kind === "buffer") {
+      update("profile", { ...state.profile, minimumBuffer: value });
+    }
+  };
+
+  const addSpendingBucket = () => {
+    const category = newBucketCategory.trim();
+    if (!category || state.budgets.some((budget) => budget.category === category)) return;
+    update("budgets", [...state.budgets, {
+      id: uid("budget"),
+      category,
+      planned: 0,
+      actual: 0,
+      cadence: state.profile.payFrequency === "Biweekly" ? "Biweekly" : "Monthly",
+      essential: ["Groceries", "Transportation", "Healthcare"].includes(category),
+      source: "manual",
+      paycheckAmount: Math.max(0, newBucketAmount),
+    }]);
+    setNewBucketAmount(0);
+  };
+
   const title =
     route === "plan" ? "Your plan" :
     route === "transactions" ? "Activity" :
@@ -1598,6 +1648,11 @@ function MobileNativeView({
 
       <div className="native-route-scroll">
         {route === "plan" && <>
+          <div className="native-plan-switch" role="tablist" aria-label="Plan view">
+            <button role="tab" aria-selected={planMode === "paycheck"} className={planMode === "paycheck" ? "active" : ""} onClick={() => setPlanMode("paycheck")}>Paycheck</button>
+            <button role="tab" aria-selected={planMode === "buckets"} className={planMode === "buckets" ? "active" : ""} onClick={() => setPlanMode("buckets")}>All buckets</button>
+          </div>
+          {planMode === "paycheck" ? <>
           <button className="native-amount-card" onClick={() => go("accounts")}>
             <span>NEXT PAYCHECK · {state.paycheckPlan.date}</span>
             <strong>{money(allocation.income)}</strong>
@@ -1626,6 +1681,54 @@ function MobileNativeView({
             <span><b>Steward’s take</b><small>{allocation.remaining < 0 ? "Your plan needs a small adjustment." : "Your next paycheck has room to direct."}</small></span>
             <ArrowRight size={17} />
           </button>
+          </> : <>
+            <section className="native-bucket-summary">
+              <span>ASSIGNED THIS PAYCHECK</span>
+              <strong>{money(assignedToBuckets)}</strong>
+              <p>{money(Math.max(0, allocation.income - assignedToBuckets))} remains unassigned</p>
+              <Progress value={allocation.income > 0 ? (assignedToBuckets / allocation.income) * 100 : 0} tone={assignedToBuckets > allocation.income ? "amber" : "green"} />
+            </section>
+
+            {bucketGroups.map((group) => {
+              const groupBuckets = buckets.filter((bucket) => bucket.group === group);
+              if (!groupBuckets.length) return null;
+              return (
+                <section className="native-bucket-group" key={group}>
+                  <header><span>{group}</span><small>{money(groupBuckets.reduce((sum, bucket) => sum + bucket.assigned, 0))} assigned</small></header>
+                  {groupBuckets.map((bucket) => (
+                    <article className={`native-bucket-row ${bucket.kind}`} key={bucket.id}>
+                      <div className="native-bucket-row-top">
+                        <span><b>{bucket.name}</b><small>{money(bucket.progressCurrent)} of {money(bucket.progressTarget)} · {bucket.progressLabel}</small></span>
+                        <label>
+                          <span>$</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={Math.round(bucket.assigned)}
+                            onChange={(event) => setBucketAssignment(bucket, Number(event.target.value))}
+                            aria-label={`${bucket.name} assigned this paycheck`}
+                          />
+                        </label>
+                      </div>
+                      <Progress value={bucket.percent} tone={bucket.percent > 90 && bucket.kind === "spending" ? "amber" : "green"} />
+                      <div className="native-bucket-row-foot"><span>{Math.round(bucket.percent)}%</span><small>{money(Math.max(0, bucket.progressTarget - bucket.progressCurrent))} remaining</small></div>
+                    </article>
+                  ))}
+                </section>
+              );
+            })}
+
+            <section className="native-add-bucket">
+              <header><span>ADD A SPENDING BUCKET</span><small>Only add what belongs in your plan.</small></header>
+              <div>
+                <select value={newBucketCategory} onChange={(event) => setNewBucketCategory(event.target.value)} aria-label="New bucket category">
+                  {categories.filter((category) => !["Transfers", "Uncategorized"].includes(category)).map((category) => <option key={category}>{category}</option>)}
+                </select>
+                <label><span>$</span><input type="number" min={0} value={newBucketAmount} onChange={(event) => setNewBucketAmount(Number(event.target.value))} aria-label="Amount assigned each paycheck" /></label>
+                <button onClick={addSpendingBucket} disabled={state.budgets.some((budget) => budget.category === newBucketCategory)}><Plus size={16} /> Add</button>
+              </div>
+            </section>
+          </>}
         </>}
 
         {route === "transactions" && <>
@@ -3972,6 +4075,17 @@ function EntityModal({
   onboardingStep: number;
   setOnboardingStep: (step: number) => void;
 }) {
+  const [setupBillName, setSetupBillName] = useState("");
+  const [setupBillAmount, setSetupBillAmount] = useState(0);
+  const [setupBillDate, setSetupBillDate] = useState(state.profile.nextPayday);
+  const [setupCategory, setSetupCategory] = useState("Groceries");
+  const [setupCategoryAmount, setSetupCategoryAmount] = useState(0);
+  const [setupGoalName, setSetupGoalName] = useState("");
+  const [setupGoalTarget, setSetupGoalTarget] = useState(0);
+  const [setupGoalAmount, setSetupGoalAmount] = useState(0);
+  const [setupProjectName, setSetupProjectName] = useState("");
+  const [setupProjectCost, setSetupProjectCost] = useState(0);
+  const [setupProjectAmount, setSetupProjectAmount] = useState(0);
   const form = (event: FormEvent<HTMLFormElement>) =>
     new FormData(event.currentTarget);
 
@@ -3999,22 +4113,112 @@ function EntityModal({
   }
 
   if (modal === "onboarding") {
+    const setupBuckets = paycheckBuckets(state);
+    const addSetupBill = () => {
+      if (!setupBillName.trim() || setupBillAmount <= 0 || !setupBillDate) return;
+      setState((current) => ({
+        ...current,
+        bills: [...current.bills, {
+          id: uid("bill"),
+          name: setupBillName.trim(),
+          amount: setupBillAmount,
+          dueDate: setupBillDate,
+          frequency: "monthly",
+          autopay: false,
+          essential: true,
+          accountId: current.accounts.find((account) => account.type === "Checking")?.id ?? "",
+        }],
+      }));
+      setSetupBillName("");
+      setSetupBillAmount(0);
+    };
+    const addSetupBudget = () => {
+      const category = setupCategory.trim();
+      if (!category || setupCategoryAmount <= 0 || state.budgets.some((budget) => budget.category === category)) return;
+      setState((current) => ({
+        ...current,
+        budgets: [...current.budgets, {
+          id: uid("budget"),
+          category,
+          planned: 0,
+          actual: 0,
+          cadence: current.profile.payFrequency === "Biweekly" ? "Biweekly" : "Monthly",
+          essential: ["Groceries", "Transportation", "Healthcare"].includes(category),
+          source: "manual",
+          paycheckAmount: setupCategoryAmount,
+        }],
+      }));
+      setSetupCategoryAmount(0);
+    };
+    const addSetupGoal = () => {
+      if (!setupGoalName.trim() || setupGoalTarget <= 0 || setupGoalAmount <= 0) return;
+      const targetDate = new Date();
+      targetDate.setFullYear(targetDate.getFullYear() + 1);
+      setState((current) => ({
+        ...current,
+        goals: [...current.goals, {
+          id: uid("goal"),
+          name: setupGoalName.trim(),
+          type: "Custom",
+          target: setupGoalTarget,
+          current: 0,
+          targetDate: targetDate.toISOString().slice(0, 10),
+          priority: "Medium",
+          status: "Active",
+          recommendedContribution: setupGoalAmount,
+          paycheckContribution: setupGoalAmount,
+        }],
+      }));
+      setSetupGoalName("");
+      setSetupGoalTarget(0);
+      setSetupGoalAmount(0);
+    };
+    const addSetupProject = () => {
+      if (!setupProjectName.trim() || setupProjectCost <= 0 || setupProjectAmount <= 0) return;
+      const targetDate = new Date();
+      targetDate.setMonth(targetDate.getMonth() + 6);
+      setState((current) => ({
+        ...current,
+        projects: [...current.projects, {
+          id: uid("project"),
+          name: setupProjectName.trim(),
+          description: "Created during Steward setup",
+          category: "Personal",
+          priority: "Medium",
+          status: "Planned",
+          targetDate: targetDate.toISOString().slice(0, 10),
+          estimatedCost: setupProjectCost,
+          actualCost: 0,
+          paycheckContribution: setupProjectAmount,
+          progress: 0,
+          nextAction: "Choose the first purchase or task",
+          tasks: [],
+        }],
+      }));
+      setSetupProjectName("");
+      setSetupProjectCost(0);
+      setSetupProjectAmount(0);
+    };
     const steps = [
       {
-        title: "Let’s start with your rhythm",
-        body: "Steward uses your pay cycle as the primary planning unit.",
+        title: "How does money arrive?",
+        body: "Your paycheck—not the calendar month—is the planning unit.",
       },
       {
-        title: "Protect your foundation",
-        body: "Set the balance Steward should preserve before recommending purchases.",
+        title: "What must this paycheck cover?",
+        body: "Confirm real bills and the cash floor you never want Steward to spend.",
       },
       {
-        title: "Choose what matters now",
-        body: "Your priorities shape every recommendation.",
+        title: "What do you spend between paychecks?",
+        body: "Choose only the everyday categories that belong in your life.",
       },
       {
-        title: "Your first plan is ready",
-        body: "You can adjust every assumption later.",
+        title: "What are you building toward?",
+        body: "Goals and projects are buckets too, with their own paycheck assignments.",
+      },
+      {
+        title: "Your paycheck has a plan",
+        body: "Review every job assigned to this paycheck in one place.",
       },
     ];
     return (
@@ -4091,122 +4295,67 @@ function EntityModal({
             </div>
           )}
           {onboardingStep === 1 && (
-            <div className="form-grid">
-              <Field label="Checking balance">
-                <input
-                  type="number"
-                  value={
-                    state.accounts.find(
-                      (account) => account.type === "Checking",
-                    )?.balance ?? 0
-                  }
-                  onChange={(event) =>
-                    setState((current) => ({
-                      ...current,
-                      accounts: current.accounts.map((account) =>
-                        account.type === "Checking"
-                          ? {
-                              ...account,
-                              balance: Number(event.target.value),
-                              available: Number(event.target.value),
-                            }
-                          : account,
-                      ),
-                    }))
-                  }
-                />
+            <div className="setup-builder">
+              <Field label="Protected cash buffer" hint="This stays outside every spending bucket.">
+                <input type="number" min={0} value={state.profile.minimumBuffer} onChange={(event) => setState((current) => ({ ...current, profile: { ...current.profile, minimumBuffer: Number(event.target.value) } }))} />
               </Field>
-              <Field label="Savings balance">
-                <input
-                  type="number"
-                  value={
-                    state.accounts.find(
-                      (account) => account.type === "Savings",
-                    )?.balance ?? 0
-                  }
-                  onChange={(event) =>
-                    setState((current) => ({
-                      ...current,
-                      accounts: current.accounts.map((account) =>
-                        account.type === "Savings"
-                          ? {
-                              ...account,
-                              balance: Number(event.target.value),
-                              available: Number(event.target.value),
-                            }
-                          : account,
-                      ),
-                    }))
-                  }
-                />
-              </Field>
-              <Field
-                label="Minimum checking buffer"
-                hint="A comfortable floor, not a spending target."
-              >
-                <input
-                  type="number"
-                  value={state.profile.minimumBuffer}
-                  onChange={(event) =>
-                    setState((current) => ({
-                      ...current,
-                      profile: {
-                        ...current.profile,
-                        minimumBuffer: Number(event.target.value),
-                      },
-                    }))
-                  }
-                />
-              </Field>
-              <Field label="Financial confidence">
-                <select
-                  value={state.profile.riskTolerance}
-                  onChange={(event) =>
-                    setState((current) => ({
-                      ...current,
-                      profile: {
-                        ...current.profile,
-                        riskTolerance: event.target
-                          .value as typeof current.profile.riskTolerance,
-                      },
-                    }))
-                  }
-                >
-                  <option>Cautious</option>
-                  <option>Balanced</option>
-                  <option>Flexible</option>
-                </select>
-              </Field>
+              <div className="setup-existing">
+                <span>Detected or added bills</span>
+                {state.bills.length ? state.bills.map((bill) => (
+                  <div key={bill.id}><b>{bill.name}</b><small>{money(bill.amount)} · due {bill.dueDate}</small></div>
+                )) : <p>No bills detected yet. Add only the ones this plan must protect.</p>}
+              </div>
+              <div className="setup-add-row bill">
+                <input placeholder="Bill name" value={setupBillName} onChange={(event) => setSetupBillName(event.target.value)} aria-label="Bill name" />
+                <label><span>$</span><input type="number" min={0} value={setupBillAmount} onChange={(event) => setSetupBillAmount(Number(event.target.value))} aria-label="Bill amount" /></label>
+                <input type="date" value={setupBillDate} onChange={(event) => setSetupBillDate(event.target.value)} aria-label="Bill due date" />
+                <button type="button" onClick={addSetupBill}><Plus size={15} /> Add bill</button>
+              </div>
             </div>
           )}
           {onboardingStep === 2 && (
-            <div className="priority-options">
-              {["Build emergency savings", "Pay down debt", "Improve my home", "Invest in career", "Plan travel"].map(
-                (priority, index) => (
-                  <button
-                    key={priority}
-                    className={index < 2 ? "selected" : ""}
-                    type="button"
-                  >
-                    <span>{index < 2 && <Check size={14} />}</span>
-                    {priority}
-                  </button>
-                ),
-              )}
+            <div className="setup-builder">
+              <div className="setup-existing editable">
+                <span>Your everyday buckets</span>
+                {state.budgets.length ? state.budgets.map((budget) => (
+                  <label key={budget.id}>
+                    <b>{budget.category}</b>
+                    <span>$</span>
+                    <input type="number" min={0} value={Math.round(setupBuckets.find((bucket) => bucket.kind === "spending" && bucket.sourceId === budget.id)?.assigned ?? 0)} onChange={(event) => setState((current) => ({ ...current, budgets: current.budgets.map((item) => item.id === budget.id ? { ...item, paycheckAmount: Number(event.target.value), source: "manual" } : item) }))} aria-label={`${budget.category} per paycheck`} />
+                  </label>
+                )) : <p>None yet. Add the categories you actually use between paychecks.</p>}
+              </div>
+              <div className="setup-add-row category">
+                <select value={setupCategory} onChange={(event) => setSetupCategory(event.target.value)} aria-label="Spending category">
+                  {categories.filter((category) => !["Transfers", "Uncategorized", "Debt payments", "Savings", "Projects"].includes(category)).map((category) => <option key={category}>{category}</option>)}
+                </select>
+                <label><span>$</span><input type="number" min={0} value={setupCategoryAmount} onChange={(event) => setSetupCategoryAmount(Number(event.target.value))} aria-label="Amount per paycheck" /></label>
+                <button type="button" onClick={addSetupBudget} disabled={state.budgets.some((budget) => budget.category === setupCategory)}><Plus size={15} /> Add bucket</button>
+              </div>
             </div>
           )}
           {onboardingStep === 3 && (
-            <div className="onboarding-result">
-              <span><Sparkles size={22} /></span>
-              <h3>{money(calculateTradeoffs(state).safeToSpend)} is safely available today</h3>
-              <p>
-                Steward has reserved upcoming bills, required payments,
-                savings, and your {money(state.profile.minimumBuffer)} buffer.
-              </p>
+            <div className="setup-builder future">
+              <div className="setup-future-card">
+                <span>GOAL</span><h3>What are you saving toward?</h3>
+                <div><input placeholder="Emergency fund, trip…" value={setupGoalName} onChange={(event) => setSetupGoalName(event.target.value)} aria-label="Goal name" /><label><small>Target</small><input type="number" min={0} value={setupGoalTarget} onChange={(event) => setSetupGoalTarget(Number(event.target.value))} /></label><label><small>Each paycheck</small><input type="number" min={0} value={setupGoalAmount} onChange={(event) => setSetupGoalAmount(Number(event.target.value))} /></label><button type="button" onClick={addSetupGoal}><Plus size={15} /> Add goal</button></div>
+              </div>
+              <div className="setup-future-card">
+                <span>PROJECT</span><h3>What are you actively funding?</h3>
+                <div><input placeholder="Apartment, golf setup…" value={setupProjectName} onChange={(event) => setSetupProjectName(event.target.value)} aria-label="Project name" /><label><small>Estimated cost</small><input type="number" min={0} value={setupProjectCost} onChange={(event) => setSetupProjectCost(Number(event.target.value))} /></label><label><small>Each paycheck</small><input type="number" min={0} value={setupProjectAmount} onChange={(event) => setSetupProjectAmount(Number(event.target.value))} /></label><button type="button" onClick={addSetupProject}><Plus size={15} /> Add project</button></div>
+              </div>
+              {(state.goals.length > 0 || state.projects.length > 0) && <div className="setup-existing"><span>Added priorities</span>{state.goals.map((goal) => <div key={goal.id}><b>{goal.name}</b><small>{money(goal.paycheckContribution ?? goal.recommendedContribution)} each paycheck · goal</small></div>)}{state.projects.map((project) => <div key={project.id}><b>{project.name}</b><small>{money(project.paycheckContribution ?? 0)} each paycheck · project</small></div>)}</div>}
+            </div>
+          )}
+          {onboardingStep === 4 && (
+            <div className="onboarding-result bucket-review">
+              <span><ListChecks size={22} /></span>
+              <h3>{money(setupBuckets.reduce((sum, bucket) => sum + bucket.assigned, 0))} assigned each paycheck</h3>
+              <p>These are the buckets you chose. Bills, debt, goals, projects, spending, and your buffer now live together in Plan.</p>
               <div>
-                <span>Bills protected <b>{money(calculateTradeoffs(state).billsBeforePayday)}</b></span>
-                <span>Suggested debt payment <b>{money(state.paycheckPlan.debt)}</b></span>
-                <span>Suggested savings <b>{money(state.paycheckPlan.savings)}</b></span>
+                {setupBuckets.map((bucket) => (
+                  <span key={bucket.id}>{bucket.name}<b>{money(bucket.assigned)}</b></span>
+                ))}
               </div>
             </div>
           )}

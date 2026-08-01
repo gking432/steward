@@ -1,5 +1,6 @@
 import type {
   Bill,
+  PaycheckBucket,
   StewardState,
   TradeoffResult,
   Transaction,
@@ -93,6 +94,171 @@ export function spendingByCategory(transactions: Transaction[], days = 30) {
         (result[transaction.category] ?? 0) + transaction.amount;
       return result;
     }, {});
+}
+
+function shiftPayday(date: Date, frequency: StewardState["profile"]["payFrequency"], direction: 1 | -1) {
+  const shifted = new Date(date);
+  if (frequency === "Weekly") shifted.setDate(shifted.getDate() + 7 * direction);
+  else if (frequency === "Biweekly") shifted.setDate(shifted.getDate() + 14 * direction);
+  else shifted.setMonth(shifted.getMonth() + direction);
+  return shifted;
+}
+
+export function currentPayPeriod(state: StewardState, today = new Date()) {
+  const parsed = new Date(`${state.profile.nextPayday}T12:00:00`);
+  let next = Number.isNaN(parsed.getTime()) ? new Date(today) : parsed;
+  next.setHours(12, 0, 0, 0);
+  const now = new Date(today);
+  now.setHours(12, 0, 0, 0);
+  while (next <= now) next = shiftPayday(next, state.profile.payFrequency, 1);
+  const start = shiftPayday(next, state.profile.payFrequency, -1);
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: next.toISOString().slice(0, 10),
+  };
+}
+
+function paychecksPerMonth(state: StewardState) {
+  if (state.profile.payFrequency === "Weekly") return 52 / 12;
+  if (state.profile.payFrequency === "Biweekly") return 26 / 12;
+  return 1;
+}
+
+function bucketPercent(current: number, target: number) {
+  return target > 0 ? (current / target) * 100 : 0;
+}
+
+export function paycheckBuckets(state: StewardState, today = new Date()): PaycheckBucket[] {
+  const period = currentPayPeriod(state, today);
+  const cycleTransactions = state.transactions.filter(
+    (transaction) =>
+      transaction.date >= period.start &&
+      transaction.date < period.end &&
+      !transaction.excluded &&
+      !transaction.pending,
+  );
+  const spending = cycleTransactions
+    .filter((transaction) => transaction.type === "expense")
+    .reduce<Record<string, number>>((totals, transaction) => {
+      totals[transaction.category] = (totals[transaction.category] ?? 0) + transaction.amount;
+      return totals;
+    }, {});
+  const perMonth = paychecksPerMonth(state);
+  const buckets: PaycheckBucket[] = [];
+  const hasDebt = state.accounts.some((account) => ["Credit card", "Loan"].includes(account.type) && account.balance > 0);
+  const hasBills = state.bills.length > 0;
+
+  for (const bill of state.bills.filter((item) => item.dueDate >= period.start && item.dueDate <= period.end)) {
+    const paid = bill.paid ? bill.amount : 0;
+    buckets.push({
+      id: `bill-${bill.id}`,
+      sourceId: bill.id,
+      kind: "bill",
+      group: "Must cover",
+      name: bill.name,
+      assigned: bill.amount,
+      progressCurrent: paid,
+      progressTarget: bill.amount,
+      percent: bucketPercent(paid, bill.amount),
+      progressLabel: bill.paid ? "paid" : `due ${bill.dueDate}`,
+      editable: true,
+    });
+  }
+
+  for (const budget of state.budgets) {
+    if (budget.category === "Debt payments" && hasDebt) continue;
+    if (hasBills && ["Housing", "Utilities", "Insurance"].includes(budget.category)) continue;
+    const assigned = budget.paycheckAmount ?? budget.planned / perMonth;
+    const actual = spending[budget.category] ?? 0;
+    buckets.push({
+      id: `spending-${budget.id}`,
+      sourceId: budget.id,
+      kind: "spending",
+      group: budget.essential ? "Must cover" : "Everyday",
+      name: budget.category,
+      assigned,
+      progressCurrent: actual,
+      progressTarget: assigned,
+      percent: bucketPercent(actual, assigned),
+      progressLabel: "spent this paycheck",
+      editable: true,
+    });
+  }
+
+  const debts = state.accounts.filter((account) => ["Credit card", "Loan"].includes(account.type) && account.balance > 0);
+  const debtMinimums = debts.reduce((sum, debt) => sum + (debt.minimumPayment ?? 0), 0);
+  if (debts.length) {
+    const assigned = debtMinimums + state.paycheckPlan.debt;
+    const actual = spending["Debt payments"] ?? 0;
+    buckets.push({
+      id: "debt-payoff",
+      sourceId: "debt-payoff",
+      kind: "debt",
+      group: "Must cover",
+      name: debts.length === 1 ? debts[0].name : "Debt payments",
+      assigned,
+      progressCurrent: actual,
+      progressTarget: assigned,
+      percent: bucketPercent(actual, assigned),
+      progressLabel: "paid this paycheck",
+      editable: true,
+    });
+  }
+
+  for (const goal of state.goals.filter((item) => item.status === "Active")) {
+    const assigned = goal.paycheckContribution ?? goal.recommendedContribution;
+    buckets.push({
+      id: `goal-${goal.id}`,
+      sourceId: goal.id,
+      kind: "goal",
+      group: "Future",
+      name: goal.name,
+      assigned,
+      progressCurrent: goal.current,
+      progressTarget: goal.target,
+      percent: bucketPercent(goal.current, goal.target),
+      progressLabel: "funded overall",
+      editable: true,
+    });
+  }
+
+  const activeProjects = state.projects.filter((item) => ["Active", "Planned"].includes(item.status));
+  for (const project of activeProjects) {
+    const fallback = activeProjects.length ? state.paycheckPlan.projects / activeProjects.length : 0;
+    const assigned = project.paycheckContribution ?? fallback;
+    buckets.push({
+      id: `project-${project.id}`,
+      sourceId: project.id,
+      kind: "project",
+      group: "Future",
+      name: project.name,
+      assigned,
+      progressCurrent: project.actualCost,
+      progressTarget: project.estimatedCost,
+      percent: project.progress || bucketPercent(project.actualCost, project.estimatedCost),
+      progressLabel: "project completed",
+      editable: true,
+    });
+  }
+
+  const liquid = state.accounts
+    .filter((account) => ["Checking", "Cash"].includes(account.type))
+    .reduce((sum, account) => sum + Math.max(0, account.available), 0);
+  buckets.push({
+    id: "protected-buffer",
+    sourceId: "protected-buffer",
+    kind: "buffer",
+    group: "Protection",
+    name: "Cash buffer",
+    assigned: state.profile.minimumBuffer,
+    progressCurrent: Math.min(liquid, state.profile.minimumBuffer),
+    progressTarget: state.profile.minimumBuffer,
+    percent: bucketPercent(Math.min(liquid, state.profile.minimumBuffer), state.profile.minimumBuffer),
+    progressLabel: "currently protected",
+    editable: true,
+  });
+
+  return buckets;
 }
 
 export function paycheckAllocation(state: StewardState) {

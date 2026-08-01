@@ -5,6 +5,8 @@
 - Installable mobile-first PWA and preserved desktop application shell
 - Action-first daily briefing
 - Deterministic safe-to-spend and paycheck calculations
+- Unified, editable paycheck buckets with progress for obligations, spending,
+  debt, goals, projects, and cash protection
 - Accounts, transactions, category correction, bulk categorization
 - Bills, budgets, goals, projects, tasks, and wishlist
 - Affordability questions and direct advisor answers

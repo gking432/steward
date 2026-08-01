@@ -81,6 +81,7 @@ export type Goal = {
   priority: "High" | "Medium" | "Low";
   status: "Active" | "Paused" | "Complete";
   recommendedContribution: number;
+  paycheckContribution?: number;
 };
 
 export type Project = {
@@ -93,6 +94,7 @@ export type Project = {
   targetDate: string;
   estimatedCost: number;
   actualCost: number;
+  paycheckContribution?: number;
   progress: number;
   nextAction: string;
   tasks: { id: string; title: string; complete: boolean }[];
@@ -152,6 +154,21 @@ export type Budget = {
   cadence: "Monthly" | "Biweekly";
   essential: boolean;
   source?: "suggested" | "manual";
+  paycheckAmount?: number;
+};
+
+export type PaycheckBucket = {
+  id: string;
+  sourceId: string;
+  kind: "bill" | "spending" | "debt" | "goal" | "project" | "buffer";
+  group: "Must cover" | "Everyday" | "Future" | "Protection";
+  name: string;
+  assigned: number;
+  progressCurrent: number;
+  progressTarget: number;
+  percent: number;
+  progressLabel: string;
+  editable: boolean;
 };
 
 export type Memory = {
