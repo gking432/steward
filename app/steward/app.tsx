@@ -81,17 +81,18 @@ function NowScreen({
   today,
   onOpenBucket,
   onGoPath,
+  onGoLedger,
 }: {
   workspace: Workspace;
   today: string;
   onOpenBucket: (bucket: Bucket) => void;
   onGoPath: () => void;
+  onGoLedger: () => void;
 }) {
   const plan = planCycle(workspace, today);
   const cycle = currentCycle(workspace, today);
   const insights = useMemo(() => dailyInsights(workspace, today), [workspace, today]);
   const progress = useMemo(() => progressSummary(workspace, today), [workspace, today]);
-  const [showMath, setShowMath] = useState(false);
 
   if (!plan || !cycle) {
     return (
@@ -109,14 +110,24 @@ function NowScreen({
   const spentEveryday = activity.reduce((sum, entry) => sum + entry.spent, 0);
   const plannedEveryday = activity.reduce((sum, entry) => sum + entry.planned, 0);
 
+  // The overview must fit a viewport, so each region shows a bounded number of
+  // rows and hands off to a scrollable screen for the rest. Nothing is clipped:
+  // whatever is cut is reachable by tapping the region it belongs to.
+  const SHOWN_BUCKETS = 4;
+  const shownBuckets = activity.slice(0, SHOWN_BUCKETS);
+  const hiddenBuckets = activity.length - shownBuckets.length;
+  const shownProgress = progress.slice(0, 2);
+  const hiddenProgress = progress.length - shownProgress.length;
+
   const nextReserve = [...plan.reserves]
     .filter((entry) => entry.bucket.dueDate)
     .sort((a, b) => (a.bucket.dueDate! < b.bucket.dueDate! ? -1 : 1))[0];
+  const insight = insights[0];
 
   return (
-    <div className="sw-screen">
-      {/* 1 — cycle position. A ledger figure the user can reconstruct, not a verdict. */}
-      <section className="sw-position">
+    <div className="sw-overview">
+      {/* Cycle position. Taps through to the full breakdown in Ledger. */}
+      <button className="sw-position tappable" onClick={onGoLedger}>
         <span className="sw-eyebrow">Left for everyday spending</span>
         <strong className="sw-huge">{formatMoney(leftEveryday)}</strong>
         <p className="sw-sub">
@@ -124,67 +135,53 @@ function NowScreen({
           {formatMoney(plannedEveryday)} used
         </p>
         <Bar percent={plannedEveryday > 0 ? (spentEveryday / plannedEveryday) * 100 : 0} />
-        <button className="sw-link" onClick={() => setShowMath((open) => !open)}>
-          {showMath ? "Hide the math" : "Where the rest went"} {showMath ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-        </button>
-        {showMath && (
-          <dl className="sw-math">
-            <div><dt>Paycheck</dt><dd>{formatMoney(plan.income)}</dd></div>
-            <div><dt>Bills &amp; minimums reserved</dt><dd>−{formatMoney(plan.reservesTotal)}</dd></div>
-            <div><dt>Everyday buckets</dt><dd>−{formatMoney(plan.spendTotal)}</dd></div>
-            {plan.bufferTopUp > 0 && <div><dt>Buffer top-up</dt><dd>−{formatMoney(plan.bufferTopUp)}</dd></div>}
-            <div className="sw-math-total"><dt>Free for your goals</dt><dd>{formatMoney(plan.freeCapacity)}</dd></div>
-          </dl>
-        )}
-      </section>
+        <span className="sw-tap-hint">
+          {formatMoney(plan.reservesTotal)} reserved · {formatMoney(plan.freeCapacity)} free
+          <ArrowRight size={13} />
+        </span>
+      </button>
 
-      {/* 2 — at risk. Absent when nothing is wrong; silence is the default. */}
       {plan.shortfall && (
-        <section className="sw-alert">
+        <button className="sw-alert tappable" onClick={onGoLedger}>
           <strong>{formatMoney(plan.shortfall.amount)} short this cycle</strong>
-          <p>
-            {plan.shortfall.largestDriver} is the biggest driver. Steward will not reduce an
-            obligation — trim a bucket, pause a goal, or dip into the buffer.
-          </p>
-        </section>
+          <p>{plan.shortfall.largestDriver} is the biggest driver.</p>
+        </button>
       )}
 
-      {/* 3 — buckets. Budgeting stays visible on the most-viewed screen. */}
-      <section className="sw-block">
+      <section className="sw-block tight">
         <header className="sw-block-head">
-          <h2>Your buckets</h2>
-          <span>{formatMoney(leftEveryday)} left</span>
+          <h2>Buckets</h2>
+          <button className="sw-link" onClick={onGoLedger}>
+            {hiddenBuckets > 0 ? `+${hiddenBuckets} more` : "All"} <ArrowRight size={12} />
+          </button>
         </header>
         <div className="sw-bucket-strip">
-          {activity.map((entry) => (
+          {shownBuckets.map((entry) => (
             <button key={entry.bucket.id} className="sw-chip" onClick={() => onOpenBucket(entry.bucket)}>
               <span className="sw-chip-name">{entry.bucket.name}</span>
               <strong>{formatMoney(Math.max(0, entry.remaining))}</strong>
-              <Bar percent={entry.percent} tone={entry.percent > 100 ? "amber" : entry.hot ? "amber" : "green"} />
-              <small>{Math.round(entry.percent)}% used</small>
+              <Bar percent={entry.percent} tone={entry.percent > 100 || entry.hot ? "amber" : "green"} />
             </button>
           ))}
-          {!activity.length && <Empty title="No buckets yet" body="Add everyday categories in Ledger." />}
+          {!activity.length && <p className="sw-muted">No everyday buckets yet.</p>}
         </div>
       </section>
 
-      {/* 4 — progress. The emotional payload the previous build had none of. */}
-      <section className="sw-block">
+      <section className="sw-block tight">
         <header className="sw-block-head">
-          <h2>Progress</h2>
+          <h2>Working toward</h2>
           <button className="sw-link" onClick={onGoPath}>
-            Path <ArrowRight size={13} />
+            {hiddenProgress > 0 ? `+${hiddenProgress} more` : "Path"} <ArrowRight size={12} />
           </button>
         </header>
-        {progress.length ? (
+        {shownProgress.length ? (
           <ul className="sw-progress">
-            {progress.map((entry) => (
+            {shownProgress.map((entry) => (
               <li key={entry.claim.id}>
                 <div>
                   <strong>{entry.claim.name}</strong>
                   <small>
-                    {formatMoney(entry.claim.fundedAmount)} of {formatMoney(entry.claim.targetAmount)}
-                    {entry.arrivalDate ? ` · ${formatDate(entry.arrivalDate)}` : " · more than a year out"}
+                    {entry.arrivalDate ? formatDate(entry.arrivalDate) : "over a year out"}
                   </small>
                 </div>
                 <Bar percent={entry.percent} />
@@ -192,38 +189,36 @@ function NowScreen({
             ))}
           </ul>
         ) : (
-          <Empty title="Nothing funded yet" body="Add something you're working toward and Steward will start funding it." />
+          <p className="sw-muted">Nothing funded yet — ask “Can I buy this?” to start something.</p>
         )}
       </section>
 
-      {/* 5 — next obligation, with its reserve state. */}
-      {nextReserve && (
-        <section className="sw-block">
-          <header className="sw-block-head"><h2>Coming up</h2></header>
-          <div className="sw-row">
-            <div>
-              <strong>{nextReserve.bucket.name}</strong>
-              <small>
-                {formatMoney(nextReserve.bucket.reserved ?? 0)} of {formatMoney(nextReserve.bucket.amountDue ?? 0)} reserved ·
-                due {formatDate(nextReserve.bucket.dueDate ?? null)}
-              </small>
-            </div>
-            <b>{formatMoney(nextReserve.required)}<em>this cycle</em></b>
-          </div>
-        </section>
-      )}
-
-      {/* 6 — at most one insight, and only with evidence behind it. */}
-      {insights.slice(0, 1).map((insight) => (
-        <section className={`sw-insight ${insight.tone}`} key={insight.id}>
-          <Sparkles size={15} />
-          <div>
+      <div className="sw-overview-foot">
+        {nextReserve && (
+          <button className="sw-mini" onClick={onGoLedger}>
+            <span>Next up</span>
+            <strong>{nextReserve.bucket.name}</strong>
+            <small>
+              {formatMoney(nextReserve.bucket.reserved ?? 0)} of{" "}
+              {formatMoney(nextReserve.bucket.amountDue ?? 0)} · {formatDate(nextReserve.bucket.dueDate ?? null)}
+            </small>
+          </button>
+        )}
+        {insight && (
+          <button
+            className={`sw-mini insight ${insight.tone}`}
+            onClick={() => {
+              const target = activity.find((entry) => insight.id.endsWith(entry.bucket.id));
+              if (target) onOpenBucket(target.bucket);
+              else onGoLedger();
+            }}
+          >
+            <span><Sparkles size={12} /> Worth noticing</span>
             <strong>{insight.headline}</strong>
-            <p>{insight.detail}</p>
-            <ul>{insight.evidence.map((row) => <li key={row}>{row}</li>)}</ul>
-          </div>
-        </section>
-      ))}
+            <small>{insight.detail}</small>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -425,6 +420,19 @@ function LedgerScreen({
           <X size={13} /> Showing {focusBucket.name}
         </button>
       )}
+
+      <section className="sw-block">
+        <header className="sw-block-head"><h2>How this paycheck breaks down</h2></header>
+        <dl className="sw-math">
+          <div><dt>Paycheck</dt><dd>{formatMoney(plan.income)}</dd></div>
+          <div><dt>Bills &amp; minimums reserved</dt><dd>−{formatMoney(plan.reservesTotal)}</dd></div>
+          <div><dt>Everyday buckets</dt><dd>−{formatMoney(plan.spendTotal)}</dd></div>
+          {plan.bufferTopUp > 0 && (
+            <div><dt>Buffer top-up</dt><dd>−{formatMoney(plan.bufferTopUp)}</dd></div>
+          )}
+          <div className="sw-math-total"><dt>Free for what you&apos;re working toward</dt><dd>{formatMoney(plan.freeCapacity)}</dd></div>
+        </dl>
+      </section>
 
       <section className="sw-block">
         <header className="sw-block-head"><h2>Everyday buckets</h2></header>
@@ -676,7 +684,7 @@ export function StewardApp({
         </span>
       </header>
 
-      <main className="sw-main">
+      <main className={tab === "now" ? "sw-main sw-main-fixed" : "sw-main"}>
         {tab === "now" && (
           <NowScreen
             workspace={workspace}
@@ -686,6 +694,7 @@ export function StewardApp({
               setTab("ledger");
             }}
             onGoPath={() => setTab("path")}
+            onGoLedger={() => { setFocusBucket(null); setTab("ledger"); }}
           />
         )}
         {tab === "path" && <PathScreen workspace={workspace} today={today} update={update} />}

@@ -530,3 +530,128 @@
 .sw-onboard h1 { font-size: clamp(26px, 7vw, 34px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.12; }
 .sw-onboard p { color: var(--text-soft); font-size: 14px; }
 .sw-onboard small { color: var(--text-faint); font-size: 11.5px; }
+
+/* ------------------------------------------------------- fixed overview */
+
+/*
+ * Now is a landing screen: everything at a glance, no scrolling. Detail lives
+ * one tap away on a screen that does scroll.
+ *
+ * This is NOT the previous build's mistake. That screen clamped a list that was
+ * too tall and silently clipped it. Here the content is bounded — a fixed
+ * number of buckets and goals, with the remainder reachable by tapping the
+ * region it belongs to — and short viewports fall back to scrolling rather than
+ * losing anything.
+ */
+.sw-main-fixed {
+  display: flex;
+  height: calc(100dvh - 56px - 76px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow: hidden;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.sw-overview {
+  display: grid;
+  width: 100%;
+  gap: 12px;
+  /* The goals block absorbs spare height so the overview never shows a gap
+     that reads as a rendering fault. */
+  grid-template-rows: auto auto 1fr auto;
+  min-height: 0;
+}
+
+.sw-overview > .sw-block.tight:last-of-type { overflow: hidden; }
+
+.sw-overview .sw-position { padding: 16px 18px; }
+.sw-overview .sw-huge { margin: 4px 0 2px; font-size: clamp(32px, 9.5vw, 46px); }
+.sw-overview .sw-bar { margin-top: 10px; }
+.sw-block.tight { padding: 13px 14px; }
+.sw-block.tight .sw-block-head { margin-bottom: 9px; }
+
+.tappable {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  text-align: left;
+}
+
+.sw-tap-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--green);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.sw-overview .sw-bucket-strip { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sw-overview .sw-chip { gap: 4px; padding: 9px 9px 10px; }
+.sw-overview .sw-chip-name {
+  overflow: hidden;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sw-overview .sw-chip strong { font-size: 14px; }
+
+.sw-overview .sw-progress { gap: 9px; }
+.sw-overview .sw-progress strong { font-size: 12.5px; }
+.sw-overview .sw-progress small { font-size: 11px; }
+
+.sw-overview-foot {
+  display: grid;
+  align-content: end;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  min-height: 0;
+}
+@media (min-width: 520px) { .sw-overview-foot { grid-template-columns: 1fr 1fr; } }
+
+.sw-mini {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 11px 13px;
+  text-align: left;
+}
+.sw-mini > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.sw-mini strong { display: block; margin-top: 3px; font-size: 13px; }
+.sw-mini small {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--text-soft);
+  font-size: 11px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.sw-mini.insight { border-color: color-mix(in srgb, var(--green) 22%, var(--line)); }
+.sw-mini.insight.watch { border-color: color-mix(in srgb, var(--amber) 32%, var(--line)); }
+.sw-mini.insight > span { color: var(--green); }
+
+/* Short viewports scroll rather than lose content. */
+@media (max-height: 700px) {
+  .sw-main-fixed { height: auto; overflow-y: auto; }
+  .sw-overview { grid-template-rows: none; }
+}
+
+/* Wide screens: the overview fills rather than stretches. */
+@media (min-width: 900px) {
+  .sw-main-fixed { align-items: start; }
+  .sw-overview { grid-template-columns: 1.05fr 1fr; grid-template-rows: auto 1fr auto; }
+  .sw-overview > .sw-position { grid-column: 1 / -1; }
+}
