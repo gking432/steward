@@ -47,12 +47,12 @@ the whole redesign, so `/` can be replaced without ever losing access to it:
 
 | Route | Serves |
 |---|---|
-| `/` | The application under redesign |
-| `/legacy` | The pre-redesign application, with full workspace persistence |
+| `/` | Steward |
 | `/fixture` | The golden fixture, server sync disabled — the visual-regression harness |
 
-`/legacy` is removed only at Phase 10, in a single deliberate commit, after the
-new experience reaches parity.
+`/legacy` was removed at Phase 10, once the new experience reached parity. The
+pre-redesign application remains available in full at `baseline/pre-redesign`
+and can be run from a checkout of that branch.
 
 ## Golden fixture
 

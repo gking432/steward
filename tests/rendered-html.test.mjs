@@ -3,67 +3,54 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
+const read = (path) => readFile(new URL(path, root), "utf8");
 
-test("build contains Steward's decision briefing", async () => {
-  const [layout, app, page, css, manifest] = await Promise.all([
-    readFile(new URL("app/layout.tsx", root), "utf8"),
-    readFile(new URL("app/steward-app.tsx", root), "utf8"),
-    readFile(new URL("app/page.tsx", root), "utf8"),
-    readFile(new URL("app/globals.css", root), "utf8"),
-    readFile(new URL("dist/server/vinext-server.json", root), "utf8").catch(
-      () => "",
-    ),
-  ]);
+/**
+ * Build-shape checks.
+ *
+ * These deliberately do NOT assert on copy. The previous version of this file
+ * matched nineteen marketing strings in the source, which meant it passed while
+ * the bucket screen was visually clipped and failed whenever a word changed. It
+ * was a change-detector, not a test.
+ *
+ * What is worth asserting here is structural: that the app builds, that the
+ * legacy tree is really gone, and that the invariants which are easy to
+ * regress by accident still hold.
+ */
 
-  assert.match(layout, /Steward — Your financial operating system/);
-  assert.match(layout, /og\.png/);
-  assert.match(app, /Your live financial briefing/);
-  assert.match(app, /Your next best move/);
-  assert.match(app, /Safe to spend today/);
-  assert.match(app, /Today’s decisions/);
-  assert.match(app, /Upcoming obligations/);
-  assert.match(page, /<StewardApp initialState=\{initialState\}/);
-  assert.match(css, /\.decision-hero/);
-  assert.match(css, /\.mobile-bottom-nav/);
-  assert.match(app, /native-connect/);
-  assert.match(app, /Let’s get started/);
-  assert.match(app, /function MobileOverview/);
-  assert.match(app, /SAFE TO SPEND/);
-  assert.match(app, /All buckets/);
-  assert.match(app, /ASSIGNED THIS PAYCHECK/);
-  assert.match(app, /What must this paycheck cover\?/);
-  assert.match(app, /What do you spend between paychecks\?/);
-  assert.match(app, /What are you building toward\?/);
-  assert.match(app, /Steward’s take/);
-  assert.match(app, /Pull to refresh/);
-  assert.match(app, /Release to sync/);
-  assert.doesNotMatch(app, /aria-label="Sync bank data"/);
-  assert.match(css, /\.mobile-home-view/);
-  assert.match(css, /env\(safe-area-inset-bottom\)/);
-  assert.match(layout, /manifest\.webmanifest/);
-  assert.doesNotMatch(`${layout}\n${app}\n${page}`, /createDemoState|demo-data/);
-  assert.doesNotMatch(
-    `${layout}\n${app}\n${page}`,
-    /codex-preview|react-loading-skeleton/i,
-  );
-  assert.ok(manifest.length > 0, "production manifest should exist after build");
+test("the production worker builds", async () => {
+  const manifest = await read("dist/server/vinext-server.json").catch(() => "");
+  assert.ok(manifest.length > 0, "run `npm run build` before this test");
 });
 
-test("includes every primary navigation destination", async () => {
-  const app = await readFile(new URL("app/steward-app.tsx", root), "utf8");
-  for (const label of [
-    "Today",
-    "Plan",
-    "Debt",
-    "Transactions",
-    "Projects",
-    "Wishlist",
-    "Advisor",
-    "Reviews",
-    "Accounts",
-    "Settings",
-  ]) {
-    assert.match(app, new RegExp(`label: "${label}"`));
+test("the legacy application tree is gone", async () => {
+  for (const path of ["app/steward-app.tsx", "app/legacy/page.tsx", "app/legacy-fixture/page.tsx"]) {
+    await assert.rejects(read(path), `${path} should no longer exist`);
   }
-  assert.match(app, /aria-label="Main navigation"/);
+});
+
+test("global CSS is a base layer, not a component stylesheet", async () => {
+  const css = await read("app/globals.css");
+  const lines = css.split("\n").length;
+  assert.ok(lines < 300, `globals.css is ${lines} lines; component styles belong with components`);
+  // The override that repainted the palette green below 767px is what made the
+  // old app look like two products. It must not come back.
+  assert.doesNotMatch(css, /max-width:\s*767px/);
+});
+
+test("there is exactly one application tree", async () => {
+  const app = await read("app/steward/app.tsx");
+  assert.doesNotMatch(app, /desktop-route-view|mobile-route-view|MobileNativeView/);
+  assert.match(app, /No mobile fork|one responsive tree/i);
+});
+
+test("the app renders through the domain model, never the legacy state shape", async () => {
+  const app = await read("app/steward/app.tsx");
+  assert.match(app, /lib\/model\/engine/);
+  assert.doesNotMatch(app, /paycheckPlan/);
+});
+
+test("routes resolve to the new tree", async () => {
+  assert.match(await read("app/page.tsx"), /steward\/app/);
+  assert.match(await read("app/fixture/page.tsx"), /steward\/app/);
 });
