@@ -441,3 +441,14 @@ test("a correction is recorded as a reusable rule", async () => {
   const after = toModel(toLegacy(recategorise(workspace, circleK.id, "Groceries", true)));
   assert.ok(after.rules.some((rule) => rule.merchantKey === "circlek" && rule.category === "Groceries"));
 });
+
+test("the most severe insight is surfaced, not the first bucket in the array", async () => {
+  const { dailyInsights } = await import("../lib/model/decide");
+  const insights = dailyInsights(ws(), FIXTURE_TODAY);
+  assert.ok(insights.length > 1, "the fixture has more than one thing worth saying");
+  // Shopping is at 171%, Dining at 85%. Bucket order puts Dining first.
+  assert.match(insights[0].headline, /Shopping/);
+  for (let i = 1; i < insights.length; i += 1) {
+    assert.ok(insights[i - 1].severity >= insights[i].severity, "sorted by severity");
+  }
+});

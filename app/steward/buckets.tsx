@@ -1,0 +1,285 @@
+"use client";
+
+/**
+ * ALL BUCKETS — every claim on this paycheck, in one place.
+ *
+ * This screen exists twice over:
+ *
+ *   review mode  — straight after import, showing what Steward worked out from
+ *                  the user's transactions, for them to approve or change
+ *   plan mode    — the permanent home of the full picture
+ *
+ * They are the same component because they are the same information. The
+ * previous rebuild scattered this across three tabs and never showed everything
+ * at once, which failed the requirement outright.
+ *
+ * Grouping is Bills / Everyday / Goals / Projects / Debt — the user's language,
+ * not the model's. Every row carries an assigned amount and a share of the
+ * paycheck, because "what percentage of my money is this" is the question the
+ * grouping exists to answer.
+ */
+
+import { Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { formatMoney, planCycle, allocate } from "../../lib/model/engine";
+import type { Workspace } from "../../lib/model/types";
+import "./buckets.css";
+
+type Row = {
+  id: string;
+  name: string;
+  amount: number;
+  detail: string;
+  kind: "bill" | "everyday" | "goal" | "project" | "debt";
+  editable: boolean;
+};
+
+const GROUPS: { key: Row["kind"]; label: string; note: string }[] = [
+  { key: "bill", label: "Bills", note: "Set aside before anything else" },
+  { key: "debt", label: "Debt", note: "Minimums, plus what you're paying down" },
+  { key: "everyday", label: "Everyday", note: "What you spend between paychecks" },
+  { key: "goal", label: "Goals", note: "What you're saving toward" },
+  { key: "project", label: "Projects", note: "Things you're building" },
+];
+
+export function BucketsScreen({
+  workspace,
+  today,
+  mode,
+  onApprove,
+  update,
+}: {
+  workspace: Workspace;
+  today: string;
+  mode: "review" | "plan";
+  onApprove?: () => void;
+  update: (next: (current: Workspace) => Workspace) => void;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+
+  const { rows, income } = useMemo(() => {
+    const plan = planCycle(workspace, today);
+    if (!plan) return { rows: [] as Row[], income: 0 };
+    const allocation = allocate(workspace, plan.freeCapacity, today);
+    const amountFor = (claimId: string) =>
+      allocation.allocations.find((entry) => entry.claim.id === claimId)?.amount ?? 0;
+
+    const result: Row[] = [];
+
+    for (const entry of plan.reserves) {
+      const isDebt = Boolean(entry.bucket.linkedDebtAccountId);
+      result.push({
+        id: entry.bucket.id,
+        name: entry.bucket.name,
+        amount: entry.required,
+        detail:
+          entry.cyclesRemaining > 1
+            ? `${formatMoney(entry.bucket.amountDue ?? 0)} due ${entry.bucket.dueDate} · split over ${entry.cyclesRemaining} paychecks`
+            : `${formatMoney(entry.bucket.amountDue ?? 0)} due ${entry.bucket.dueDate ?? "this cycle"}`,
+        kind: isDebt ? "debt" : "bill",
+        editable: !isDebt,
+      });
+    }
+
+    for (const entry of plan.spend) {
+      result.push({
+        id: entry.bucket.id,
+        name: entry.bucket.name,
+        amount: entry.amount,
+        detail: "each paycheck",
+        kind: "everyday",
+        editable: true,
+      });
+    }
+
+    for (const claim of workspace.claims.filter((c) => c.status === "active")) {
+      const amount = amountFor(claim.id);
+      result.push({
+        id: claim.id,
+        name: claim.name,
+        amount,
+        detail:
+          amount > 0
+            ? `${formatMoney(claim.fundedAmount)} of ${formatMoney(claim.targetAmount)} so far`
+            : "starts a later paycheck",
+        kind: claim.kind === "payoff" ? "debt" : claim.projectId ? "project" : "goal",
+        editable: true,
+      });
+    }
+
+    return { rows: result, income: plan.income };
+  }, [workspace, today]);
+
+  const assigned = rows.reduce((sum, row) => sum + row.amount, 0);
+  const share = (amount: number) => (income > 0 ? (amount / income) * 100 : 0);
+
+  const rename = (row: Row, name: string) => {
+    update((current) => ({
+      ...current,
+      buckets: current.buckets.map((b) => (b.id === row.id ? { ...b, name } : b)),
+      claims: current.claims.map((c) => (c.id === row.id ? { ...c, name } : c)),
+    }));
+  };
+
+  const resize = (row: Row, amount: number) => {
+    update((current) => ({
+      ...current,
+      buckets: current.buckets.map((b) =>
+        b.id === row.id
+          ? b.kind === "spend"
+            ? { ...b, perCycle: amount }
+            : { ...b, amountDue: amount }
+          : b,
+      ),
+      claims: current.claims.map((c) => (c.id === row.id ? { ...c, pinned: amount } : c)),
+    }));
+  };
+
+  const remove = (row: Row) => {
+    update((current) => ({
+      ...current,
+      buckets: current.buckets.filter((b) => b.id !== row.id),
+      claims: current.claims.map((c) =>
+        c.id === row.id ? { ...c, status: "someday" as const } : c,
+      ),
+    }));
+  };
+
+  return (
+    <div className={mode === "review" ? "bk-screen review" : "bk-screen"}>
+      <header className="bk-head">
+        {mode === "review" ? (
+          <>
+            <span className="bk-eyebrow">From your last few months</span>
+            <h1>Here&apos;s what Steward found.</h1>
+            <p>
+              Every paycheck has to cover these. Change anything that looks wrong — this is a
+              starting point, not a verdict.
+            </p>
+          </>
+        ) : (
+          <>
+            <span className="bk-eyebrow">Every paycheck</span>
+            <h1>Your plan</h1>
+          </>
+        )}
+        <div className="bk-total">
+          <div>
+            <small>Paycheck</small>
+            <strong>{formatMoney(income)}</strong>
+          </div>
+          <div>
+            <small>Assigned</small>
+            <strong>{formatMoney(assigned)}</strong>
+          </div>
+          <div>
+            <small>Left over</small>
+            <strong className={income - assigned < 0 ? "over" : ""}>
+              {formatMoney(income - assigned)}
+            </strong>
+          </div>
+        </div>
+      </header>
+
+      <div className="bk-groups">
+        {GROUPS.map((group) => {
+          const groupRows = rows.filter((row) => row.kind === group.key);
+          if (!groupRows.length) return null;
+          const groupTotal = groupRows.reduce((sum, row) => sum + row.amount, 0);
+          return (
+            <section className="bk-group" key={group.key}>
+              <header>
+                <div>
+                  <h2>{group.label}</h2>
+                  <small>{group.note}</small>
+                </div>
+                <div className="bk-group-total">
+                  <strong>{formatMoney(groupTotal)}</strong>
+                  <small>{Math.round(share(groupTotal))}% of your pay</small>
+                </div>
+              </header>
+
+              {groupRows.map((row) => (
+                <article className="bk-row" key={row.id}>
+                  {editing === row.id ? (
+                    <div className="bk-edit">
+                      <input
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        aria-label={`Rename ${row.name}`}
+                      />
+                      <label>
+                        <span>$</span>
+                        <input
+                          type="number"
+                          defaultValue={Math.round(row.amount)}
+                          onBlur={(event) => resize(row, Number(event.target.value))}
+                          aria-label={`Amount for ${row.name}`}
+                        />
+                      </label>
+                      <button
+                        className="bk-icon confirm"
+                        onClick={() => {
+                          if (draft.trim()) rename(row, draft.trim());
+                          setEditing(null);
+                        }}
+                        aria-label="Save"
+                      >
+                        <Check size={15} />
+                      </button>
+                      <button className="bk-icon" onClick={() => remove(row)} aria-label={`Remove ${row.name}`}>
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="bk-row-main">
+                        <strong>{row.name}</strong>
+                        <small>{row.detail}</small>
+                      </div>
+                      <div className="bk-row-amount">
+                        <strong>{formatMoney(row.amount)}</strong>
+                        <small>{Math.round(share(row.amount))}%</small>
+                      </div>
+                      {row.editable && (
+                        <button
+                          className="bk-icon"
+                          onClick={() => {
+                            setEditing(row.id);
+                            setDraft(row.name);
+                          }}
+                          aria-label={`Edit ${row.name}`}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <div className="bk-bar">
+                    <span style={{ width: `${Math.min(100, share(row.amount) * 2)}%` }} />
+                  </div>
+                </article>
+              ))}
+            </section>
+          );
+        })}
+      </div>
+
+      {mode === "review" && (
+        <footer className="bk-approve">
+          <button className="bk-primary" onClick={onApprove}>
+            Looks right <ChevronDown size={16} style={{ transform: "rotate(-90deg)" }} />
+          </button>
+          <small>You can change any of it later.</small>
+        </footer>
+      )}
+
+      {mode === "plan" && (
+        <button className="bk-add">
+          <Plus size={15} /> Add a bucket
+        </button>
+      )}
+    </div>
+  );
+}

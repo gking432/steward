@@ -1,0 +1,259 @@
+/**
+ * All buckets.
+ *
+ * Immersive green like the rest of the mobile language, not white cards on
+ * grey. Rows sit on tinted panels rather than bordered boxes, so the screen
+ * reads as one surface instead of a stack of widgets.
+ */
+
+.bk-screen {
+  min-height: 100dvh;
+  background: linear-gradient(180deg, #2f654d 0%, #27573f 100%);
+  padding:
+    calc(20px + env(safe-area-inset-top)) 16px
+    calc(24px + env(safe-area-inset-bottom));
+  color: #f6f8f4;
+}
+
+.bk-head {
+  padding: 4px 4px 18px;
+}
+
+.bk-eyebrow {
+  color: rgba(246, 248, 244, 0.62);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bk-head h1 {
+  margin-top: 6px;
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+  font-size: clamp(30px, 8.5vw, 40px);
+  font-weight: 530;
+  letter-spacing: -0.05em;
+  line-height: 1.02;
+}
+
+.bk-head p {
+  margin-top: 11px;
+  max-width: 330px;
+  color: rgba(246, 248, 244, 0.72);
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
+.bk-total {
+  display: grid;
+  margin-top: 18px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.09);
+  padding: 14px 16px;
+}
+.bk-total small {
+  display: block;
+  color: rgba(246, 248, 244, 0.6);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.bk-total strong {
+  font-size: 19px;
+  letter-spacing: -0.03em;
+}
+.bk-total strong.over {
+  color: #f0c08a;
+}
+
+.bk-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.bk-group {
+  overflow: hidden;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 14px 15px 15px;
+}
+
+.bk-group > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.bk-group h2 {
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+.bk-group header small {
+  display: block;
+  margin-top: 2px;
+  color: rgba(246, 248, 244, 0.58);
+  font-size: 11.5px;
+}
+.bk-group-total {
+  text-align: right;
+}
+.bk-group-total strong {
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.bk-row {
+  display: grid;
+  align-items: center;
+  gap: 4px 10px;
+  grid-template-columns: 1fr auto auto;
+  border-top: 1px solid rgba(246, 248, 244, 0.1);
+  padding: 11px 0 9px;
+}
+.bk-row:first-of-type {
+  border-top: none;
+}
+
+.bk-row-main strong {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.bk-row-main small {
+  color: rgba(246, 248, 244, 0.58);
+  font-size: 11.5px;
+}
+
+.bk-row-amount {
+  text-align: right;
+}
+.bk-row-amount strong {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.bk-row-amount small {
+  display: block;
+  color: rgba(246, 248, 244, 0.55);
+  font-size: 11px;
+}
+
+.bk-icon {
+  display: grid;
+  /* 44px minimum — the previous rebuild shipped 18px targets. */
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(246, 248, 244, 0.8);
+}
+.bk-icon.confirm {
+  background: #f6f8f4;
+  color: #27563f;
+}
+
+.bk-bar {
+  overflow: hidden;
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.11);
+}
+.bk-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(246, 248, 244, 0.85);
+}
+
+.bk-edit {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr 106px 44px 44px;
+}
+.bk-edit input {
+  min-height: 44px;
+  border: 1px solid rgba(246, 248, 244, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.09);
+  padding: 0 11px;
+  color: #f6f8f4;
+  font-size: 14.5px;
+}
+.bk-edit label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(246, 248, 244, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.09);
+  padding-left: 10px;
+}
+.bk-edit label span {
+  color: rgba(246, 248, 244, 0.6);
+  font-size: 14px;
+}
+.bk-edit label input {
+  border: none;
+  background: none;
+  padding-left: 0;
+}
+
+.bk-approve {
+  display: grid;
+  gap: 9px;
+  margin-top: 20px;
+}
+.bk-primary,
+.bk-add {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 18px;
+  background: #f6f8f4;
+  color: #27563f;
+  font-size: 16px;
+  font-weight: 700;
+}
+.bk-add {
+  width: 100%;
+  margin-top: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #f6f8f4;
+  font-size: 14.5px;
+}
+.bk-approve small {
+  color: rgba(246, 248, 244, 0.55);
+  text-align: center;
+  font-size: 11.5px;
+}
+
+/* Desktop is a wider composition, not a phone column in a window. */
+@media (min-width: 900px) {
+  .bk-screen {
+    padding: 40px 48px 56px;
+  }
+  .bk-head {
+    max-width: 700px;
+  }
+  .bk-total {
+    max-width: 560px;
+  }
+  .bk-groups {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+  .bk-approve {
+    max-width: 380px;
+  }
+}

@@ -258,6 +258,8 @@ export type Insight = {
   /** Transactions proving the claim. An insight with no evidence is not shown. */
   evidence: string[];
   tone: "neutral" | "watch";
+  /** How far past pace, or how repeated. Higher shows first. */
+  severity: number;
 };
 
 /**
@@ -281,6 +283,8 @@ export function dailyInsights(workspace: Workspace, today: string): Insight[] {
     if (fraction > expectedFraction + 0.25) {
       const projected = round2(activity.spent / Math.max(0.01, expectedFraction));
       insights.push({
+        // How far over pace, so 171% outranks 85%.
+        severity: round2((fraction - expectedFraction) * 100),
         id: `pace:${bucket.id}`,
         headline: `${bucket.name} is running hot`,
         detail: `${formatMoney(activity.spent)} of ${formatMoney(activity.planned)} with ${daysBetween(today, cycle.end)} days left. At this pace you'd finish around ${formatMoney(projected)}.`,
@@ -305,6 +309,8 @@ export function dailyInsights(workspace: Workspace, today: string): Insight[] {
   for (const [merchant, entry] of counts) {
     if (entry.rows.length >= 3) {
       insights.push({
+        // Repetition matters less than blowing a bucket, so it scores lower.
+        severity: round2(entry.rows.length),
         id: `repeat:${merchant}`,
         headline: `${merchant} × ${entry.rows.length} this cycle`,
         detail: `${formatMoney(entry.total)} across ${entry.rows.length} visits.`,
@@ -314,7 +320,13 @@ export function dailyInsights(workspace: Workspace, today: string): Insight[] {
     }
   }
 
-  return insights.slice(0, 3);
+  // Severity order, not bucket order.
+  //
+  // Iterating buckets and taking the first match meant a category at 85% could
+  // outrank one at 171% purely because it sat earlier in the array. Since Now
+  // shows exactly one insight, that surfaced the wrong problem and cost trust
+  // the moment the user noticed.
+  return insights.sort((a, b) => b.severity - a.severity).slice(0, 3);
 }
 
 /** Progress since the start of this cycle, for the Now screen. */

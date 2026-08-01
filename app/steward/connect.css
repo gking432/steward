@@ -1,0 +1,139 @@
+/**
+ * The immersive first screen.
+ *
+ * Full-bleed green, edge to edge, no card. This is the one place the product
+ * gets to feel like something rather than report something.
+ */
+
+.cx-screen {
+  display: grid;
+  min-height: 100dvh;
+  grid-template-rows: auto 1fr auto;
+  background:
+    radial-gradient(120% 80% at 50% 0%, #37704f 0%, transparent 60%),
+    linear-gradient(180deg, #2f654d 0%, #21503c 100%);
+  padding:
+    calc(22px + env(safe-area-inset-top)) 22px
+    calc(26px + env(safe-area-inset-bottom));
+  color: #f9faf7;
+}
+
+.cx-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cx-top strong {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.05em;
+}
+
+.cx-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  background: #f9faf7;
+}
+
+.cx-copy {
+  align-self: center;
+  max-width: 320px;
+  padding-bottom: 6vh;
+}
+
+.cx-copy h1 {
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+  font-size: clamp(38px, 11.5vw, 52px);
+  font-weight: 530;
+  letter-spacing: -0.06em;
+  line-height: 0.99;
+}
+
+.cx-copy p {
+  margin-top: 16px;
+  max-width: 300px;
+  color: rgba(249, 250, 247, 0.74);
+  font-size: 15.5px;
+  line-height: 1.45;
+}
+
+.cx-action {
+  display: grid;
+  gap: 11px;
+}
+
+.cx-action > button {
+  display: flex;
+  /* 56px keeps the primary action comfortably above the 44pt minimum the
+     previous rebuild dropped below. */
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 18px;
+  background: #f9faf7;
+  color: #27563f;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.cx-action > button:disabled {
+  opacity: 0.75;
+}
+
+.cx-secondary {
+  background: transparent !important;
+  color: rgba(249, 250, 247, 0.82) !important;
+  font-size: 14.5px !important;
+  font-weight: 600 !important;
+  min-height: 48px !important;
+}
+
+.cx-error {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.13);
+  padding: 11px 13px;
+  color: #fff;
+  font-size: 12.5px;
+}
+
+.cx-action > small {
+  color: rgba(249, 250, 247, 0.58);
+  text-align: center;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.cx-spin {
+  animation: cx-rotate 900ms linear infinite;
+}
+
+@keyframes cx-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Desktop keeps the same immersion rather than floating a phone in a window. */
+@media (min-width: 768px) {
+  .cx-screen {
+    grid-template-rows: auto 1fr auto;
+    padding: 40px 48px;
+  }
+  .cx-copy {
+    max-width: 620px;
+  }
+  .cx-copy h1 {
+    font-size: clamp(52px, 6vw, 76px);
+  }
+  .cx-copy p {
+    max-width: 460px;
+    font-size: 17px;
+  }
+  .cx-action {
+    justify-content: start;
+    width: min(420px, 100%);
+  }
+}
