@@ -30,6 +30,7 @@ import {
 } from "./observations";
 import type { Workspace } from "./types";
 import { formatMoney } from "./engine";
+import { promoteClaim } from "./decide";
 
 /** Most questions Steward will ask in one phase before moving on. */
 const MAX_INCOME_QUESTIONS = 2;
@@ -101,6 +102,19 @@ export type IntakeStep =
       choices: string[];
       multi: false;
     }
+  /**
+   * Phase 4b. "I want to change something" is a negotiation, not a dead end.
+   * The options are built from the workspace, so Steward only offers changes
+   * that would actually do something.
+   */
+  | {
+      id: string;
+      phase: "plan";
+      kind: "tweak";
+      prompt: string;
+      choices: string[];
+      multi: false;
+    }
   /** Phase 5. The handoff to the rest of the app. */
   | {
       id: string;
@@ -120,6 +134,48 @@ export type IntakeAnswer = {
   /** What the user actually typed, kept verbatim for later reference. */
   text?: string;
 };
+
+/* -------------------------------------------------------- negotiation -- */
+
+export const CHANGE_CHOICE = "I want to change something";
+export const KEEP_AS_IS = "Leave it as it is";
+
+/** How many rounds of tweaking have been accepted so far. */
+export const tweakRound = (answers: IntakeAnswer[]) =>
+  answers.filter((answer) => answer.stepId.startsWith("tweak#")).length;
+
+const wantsChange = (answers: IntakeAnswer[], planId: string) =>
+  answers.some((answer) => answer.stepId === planId && answer.choice === CHANGE_CHOICE);
+
+/** Prefix identifying a "spend less here" choice, and the bucket it names. */
+export const CUT_PREFIX = "Spend less on ";
+export const SOONER_PREFIX = "Get ";
+
+/**
+ * The changes worth offering, built from this workspace.
+ *
+ * Only real levers appear: a bucket with nothing in it cannot be cut, and a
+ * claim already arriving this cycle cannot be brought forward. Offering a
+ * change that does nothing is worse than offering fewer changes.
+ */
+export function tweakChoices(workspace: Workspace): string[] {
+  const choices: string[] = [];
+
+  const cuttable = workspace.buckets
+    .filter((bucket) => bucket.kind === "spend" && !bucket.essential && (bucket.perCycle ?? 0) > 0)
+    .sort((a, b) => (b.perCycle ?? 0) - (a.perCycle ?? 0))
+    .slice(0, 2);
+  for (const bucket of cuttable) choices.push(`${CUT_PREFIX}${bucket.name}`);
+
+  const waiting = workspace.claims
+    .filter((claim) => claim.status === "active")
+    .sort((a, b) => a.rank - b.rank)
+    .slice(1, 3);
+  for (const claim of waiting) choices.push(`${SOONER_PREFIX}${claim.name} sooner`);
+
+  choices.push(KEEP_AS_IS);
+  return choices;
+}
 
 /* ------------------------------------------------------------- phase 1 -- */
 
@@ -254,14 +310,32 @@ export function nextStep(
     };
   }
 
-  /* --- phase 4: the plan --- */
-  if (!answered(answers, "plan")) {
+  /* --- phase 4: the plan, and the negotiation over it --- */
+  //
+  // Presenting the plan is not a one-shot. Each accepted tweak reshapes the
+  // workspace and Steward shows the result again, so the user is agreeing to
+  // the plan they actually end up with rather than to the first draft.
+  const round = tweakRound(answers);
+  const planId = round === 0 ? "plan" : `plan#${round}`;
+
+  if (!answered(answers, planId)) {
     return {
-      id: "plan",
+      id: planId,
       phase: "plan",
       kind: "plan",
-      prompt: "Here's what I've got for you.",
-      choices: ["That works", "I want to change something"],
+      prompt: round === 0 ? "Here's what I've got for you." : "Here's how that changes things.",
+      choices: ["That works", CHANGE_CHOICE],
+      multi: false,
+    };
+  }
+
+  if (wantsChange(answers, planId)) {
+    return {
+      id: `tweak#${round}`,
+      phase: "plan",
+      kind: "tweak",
+      prompt: "What would you like to change?",
+      choices: tweakChoices(workspace),
       multi: false,
     };
   }
@@ -399,6 +473,70 @@ export function applyIntake(
     },
     claims: [...workspace.claims, ...claims],
   };
+}
+
+/**
+ * Carry out a tweak the user chose, returning the reshaped workspace and a
+ * plain sentence describing what moved.
+ *
+ * The engine does the work — `accelerate` prices a cut, `promoteClaim` reorders
+ * and reports what slipped. This only translates a choice into the right call,
+ * and returns null when the choice changes nothing.
+ */
+export function applyTweak(
+  workspace: Workspace,
+  today: string,
+  choice: string,
+): { workspace: Workspace; summary: string } | null {
+  if (choice === KEEP_AS_IS) return null;
+
+  if (choice.startsWith(CUT_PREFIX)) {
+    const name = choice.slice(CUT_PREFIX.length);
+    const bucket = workspace.buckets.find(
+      (entry) => entry.kind === "spend" && entry.name === name,
+    );
+    if (!bucket) return null;
+
+    // A quarter off, rounded to whole dollars. Deliberately a starting
+    // position rather than a maximum — the user can cut again, and Steward
+    // re-presents the plan after each round.
+    const current = bucket.perCycle ?? 0;
+    const cut = Math.max(1, Math.round(current * 0.25));
+    const next = Math.max(0, current - cut);
+
+    return {
+      workspace: {
+        ...workspace,
+        buckets: workspace.buckets.map((entry) =>
+          entry.id === bucket.id ? { ...entry, perCycle: next } : entry,
+        ),
+      },
+      summary: `${bucket.name} drops to ${formatMoney(next)} a paycheck, freeing ${formatMoney(cut)}.`,
+    };
+  }
+
+  if (choice.startsWith(SOONER_PREFIX)) {
+    const name = choice.slice(SOONER_PREFIX.length).replace(/ sooner$/, "");
+    const claim = workspace.claims.find((entry) => entry.name === name);
+    if (!claim) return null;
+
+    const promoted = promoteClaim(workspace, claim.id, today);
+    if (!promoted) return null;
+
+    const slipped = promoted.changes
+      .filter((change) => change.direction === "later")
+      .slice(0, 2)
+      .map((change) => change.name);
+
+    return {
+      workspace: promoted.workspace,
+      summary: slipped.length
+        ? `${claim.name} moves to the top. ${slipped.join(" and ")} ${slipped.length > 1 ? "move" : "moves"} back.`
+        : `${claim.name} moves to the top. Nothing else shifted.`,
+    };
+  }
+
+  return null;
 }
 
 /** Subscriptions the user said they wanted to cancel, for the plan to reflect. */

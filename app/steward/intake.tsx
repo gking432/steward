@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { allocate, formatMoney, planCycle } from "../../lib/model/engine";
 import {
   applyIntake,
+  applyTweak,
   cancelledSubscriptions,
   intakeProgress,
   nextStep,
@@ -94,13 +95,25 @@ export function IntakeScreen({
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * The workspace as the conversation has reshaped it. Negotiating the plan
+   * changes real numbers, and the user has to see the result before agreeing —
+   * so tweaks are held here and only committed when they accept.
+   */
+  // Derived, not synced: until a tweak exists the live workspace IS the draft,
+  // so a scan landing mid-conversation is picked up for free. Once the user
+  // changes something, their version takes over. Tweaking only unlocks at the
+  // plan phase — after the scan — so the two never race.
+  const [tweakedDraft, setTweakedDraft] = useState<Workspace | null>(null);
+  const draft = tweakedDraft ?? workspace;
+
   const step = useMemo(
-    () => nextStep(workspace, today, answers, scanComplete),
-    [workspace, today, answers, scanComplete],
+    () => nextStep(draft, today, answers, scanComplete),
+    [draft, today, answers, scanComplete],
   );
   const progress = useMemo(
-    () => intakeProgress(workspace, today, answers),
-    [workspace, today, answers],
+    () => intakeProgress(draft, today, answers),
+    [draft, today, answers],
   );
 
   // Push each new question into the thread as Steward "says" it.
@@ -114,10 +127,10 @@ export function IntakeScreen({
         id: nextId(),
         from: "steward",
         text: step.prompt,
-        plan: step.kind === "plan" ? (buildPlanView(workspace, today, answers) ?? undefined) : undefined,
+        plan: step.kind === "plan" ? (buildPlanView(draft, today, answers) ?? undefined) : undefined,
       },
     ]);
-  }, [step, workspace, today, answers]);
+  }, [step, draft, today, answers]);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
@@ -126,12 +139,27 @@ export function IntakeScreen({
   // The conversation is over: fold it in and hand off to the app.
   useEffect(() => {
     if (step === null && scanComplete && answers.length > 0) {
-      onDone(applyIntake(workspace, today, answers));
+      onDone(applyIntake(draft, today, answers));
     }
-  }, [step, scanComplete, answers, workspace, today, onDone]);
+  }, [step, scanComplete, answers, draft, today, onDone]);
 
   const answer = (current: IntakeStep, choice: string, text?: string) => {
     setBubbles((existing) => [...existing, { id: nextId(), from: "you", text: text ?? choice }]);
+
+    // A tweak actually reshapes the plan. Carry it out, then say what moved —
+    // the next plan card is rendered from the reshaped workspace, so the user
+    // agrees to what they'll actually get rather than to the first draft.
+    if (current.kind === "tweak") {
+      const result = applyTweak(draft, today, choice);
+      if (result) {
+        setTweakedDraft(result.workspace);
+        setBubbles((existing) => [
+          ...existing,
+          { id: nextId(), from: "steward", text: result.summary },
+        ]);
+      }
+    }
+
     setAnswers((existing) => [
       ...existing,
       {

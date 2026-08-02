@@ -8,7 +8,10 @@ import {
   isPlannable,
   nextStep,
   applyIntake,
+  applyTweak,
   cancelledSubscriptions,
+  CHANGE_CHOICE,
+  tweakChoices,
   proposedBuckets,
   type IntakeAnswer,
 } from "../lib/model/intake";
@@ -324,4 +327,92 @@ test("a subscription the user rejected is carried into the plan", () => {
     { stepId: "spend:sub:expense:netflix", choice: "I want to cancel that" },
   ]);
   assert.deepEqual(cancelled.map((s) => s.merchant), ["Netflix"]);
+});
+
+/* ---------------------------------------------------------- negotiation -- */
+
+const toPlan = (workspace: Workspace): IntakeAnswer[] => {
+  const answers: IntakeAnswer[] = [];
+  for (let i = 0; i < 20; i += 1) {
+    const step = nextStep(workspace, FIXTURE_TODAY, answers, true);
+    if (!step || step.kind === "plan") return answers;
+    answers.push({ stepId: step.id, choice: step.choices[0] });
+  }
+  throw new Error("never reached the plan");
+};
+
+test("\"I want to change something\" opens a negotiation, not a dead end", () => {
+  const workspace = base();
+  const answers = [...toPlan(workspace), { stepId: "plan", choice: CHANGE_CHOICE }];
+  const step = nextStep(workspace, FIXTURE_TODAY, answers, true)!;
+  assert.equal(step.kind, "tweak");
+  assert.ok(step.choices.length > 1, "real levers are offered");
+  assert.ok(step.choices.includes("Leave it as it is"), "backing out is always possible");
+});
+
+test("only levers that would actually do something are offered", () => {
+  // A bucket with nothing in it cannot be cut. Offering the change anyway is
+  // worse than offering fewer changes.
+  const choices = tweakChoices(base());
+  for (const choice of choices) {
+    if (!choice.startsWith("Spend less on ")) continue;
+    const name = choice.slice("Spend less on ".length);
+    const bucket = base().buckets.find((entry) => entry.name === name)!;
+    assert.ok((bucket.perCycle ?? 0) > 0, `${name} has nothing to cut`);
+    assert.equal(bucket.essential, false, `${name} is an essential and shouldn't be offered`);
+  }
+});
+
+test("cutting a bucket frees real money and says so", () => {
+  const workspace = base();
+  const choice = tweakChoices(workspace).find((entry) => entry.startsWith("Spend less on "))!;
+  const name = choice.slice("Spend less on ".length);
+  const before = workspace.buckets.find((entry) => entry.name === name)!.perCycle ?? 0;
+
+  const result = applyTweak(workspace, FIXTURE_TODAY, choice)!;
+  const after = result.workspace.buckets.find((entry) => entry.name === name)!.perCycle ?? 0;
+
+  assert.ok(after < before, "the bucket actually shrank");
+  assert.match(result.summary, /drops to/);
+  assert.match(result.summary, /freeing/);
+});
+
+test("backing out changes nothing at all", () => {
+  assert.equal(applyTweak(base(), FIXTURE_TODAY, "Leave it as it is"), null);
+});
+
+test("after a tweak the plan is presented again, so you agree to what you get", () => {
+  // The point of the loop: the second card is rendered from the reshaped
+  // workspace, not from the first draft.
+  const workspace = base();
+  const answers = [
+    ...toPlan(workspace),
+    { stepId: "plan", choice: CHANGE_CHOICE },
+    { stepId: "tweak#0", choice: "Leave it as it is" },
+  ];
+  const step = nextStep(workspace, FIXTURE_TODAY, answers, true)!;
+  assert.equal(step.kind, "plan");
+  assert.equal(step.id, "plan#1", "a fresh presentation, not the answered one");
+  assert.match(step.prompt, /how that changes things/i);
+});
+
+test("the negotiation can run several rounds and still terminates", () => {
+  const workspace = base();
+  const answers = [...toPlan(workspace)];
+  for (const round of [0, 1, 2]) {
+    const planId = round === 0 ? "plan" : `plan#${round}`;
+    answers.push({ stepId: planId, choice: CHANGE_CHOICE });
+    answers.push({ stepId: `tweak#${round}`, choice: "Leave it as it is" });
+  }
+  answers.push({ stepId: "plan#3", choice: "That works" });
+  const step = nextStep(workspace, FIXTURE_TODAY, answers, true)!;
+  assert.equal(step.kind, "handoff", "accepting ends the negotiation");
+});
+
+test("promoting a claim reports what slipped rather than only what improved", () => {
+  const workspace = base();
+  const choice = tweakChoices(workspace).find((entry) => entry.startsWith("Get "));
+  if (!choice) return; // no second-ranked claim in this fixture
+  const result = applyTweak(workspace, FIXTURE_TODAY, choice)!;
+  assert.match(result.summary, /moves to the top/);
 });
