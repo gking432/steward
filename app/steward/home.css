@@ -8,17 +8,48 @@
  */
 
 .hm-screen {
+  /* Type color for the white tiles. Deep enough to stay legible at 11px
+     without going black, which on this green reads as a different product. */
+  --hm-ink: #1e4a35;
+  --hm-ink-soft: rgba(30, 74, 53, 0.66);
+
   display: grid;
-  height: 100dvh;
+
+  /* The fixed nav is reserved by .sw-main-full's bottom padding, which sits
+     OUTSIDE this element. Taking a full 100dvh here therefore overflowed the
+     page by exactly the nav's height on every device, which is the scrolling
+     this screen is supposed to never do. */
+  height: calc(100dvh - var(--sw-nav-height));
   overflow: hidden;
   align-content: start;
   gap: 12px;
   grid-template-rows: auto auto auto auto 1fr auto;
   background: linear-gradient(180deg, #2f654d 0%, #26563e 100%);
-  padding:
-    calc(16px + env(safe-area-inset-top)) 16px
-    calc(14px + env(safe-area-inset-bottom));
+  /* No bottom safe-area inset: the nav below already owns it. */
+  padding: calc(16px + env(safe-area-inset-top)) 16px 14px;
   color: #f6f8f4;
+}
+
+/*
+ * steward.css sets `.sw-app h1, h2, strong, b { color: var(--text) }` for the
+ * legacy tree. That is specificity (0,1,1) and it was silently winning over
+ * every heading and figure on this screen, painting them near-black on the
+ * green — including the ones this file believed it had made light.
+ *
+ * Home states its own two surfaces explicitly, at (0,2,1) so it wins outright:
+ * light type on the green, ink on the white tiles. Deleted with that legacy
+ * rule at Phase 10.
+ */
+.hm-screen .hm-block h2,
+.hm-screen .hm-bucket b,
+.hm-screen .hm-goal b,
+.hm-screen .hm-insight b,
+.hm-screen .hm-top strong {
+  color: #f6f8f4;
+}
+.hm-screen .hm-take strong,
+.hm-screen .hm-figures strong {
+  color: var(--hm-ink);
 }
 
 .hm-top {
@@ -46,30 +77,40 @@
 
 /* ---------------------------------------------------------- the take --- */
 
+/*
+ * Solid white, green type — the card reads as paper laid on the green rather
+ * than another wash of it.
+ *
+ * Tone lives in the badge, not the background. Tinting the whole card gave the
+ * screen a second, slightly-off green that looked like a rendering fault rather
+ * than a signal, and the tint was doing no work the words weren't already
+ * doing.
+ */
 .hm-take {
   display: grid;
   gap: 7px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.1);
+  background: #f7f9f5;
   padding: 14px 16px 13px;
+  color: var(--hm-ink);
   text-align: left;
-}
-.hm-take.watch {
-  background: rgba(240, 192, 138, 0.16);
-}
-.hm-take.alert {
-  background: rgba(240, 160, 138, 0.2);
 }
 
 .hm-take-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: rgba(246, 248, 244, 0.66);
+  color: var(--hm-ink-soft);
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+.hm-take.watch .hm-take-badge {
+  color: #a86a16;
+}
+.hm-take.alert .hm-take-badge {
+  color: #a83f24;
 }
 .hm-take strong {
   font-family: var(--font-dm-sans), system-ui, sans-serif;
@@ -79,7 +120,7 @@
   line-height: 1.08;
 }
 .hm-take p {
-  color: rgba(246, 248, 244, 0.76);
+  color: var(--hm-ink-soft);
   font-size: 13.5px;
   line-height: 1.4;
 }
@@ -88,7 +129,7 @@
   align-items: center;
   gap: 5px;
   margin-top: 3px;
-  color: rgba(246, 248, 244, 0.82);
+  color: var(--hm-ink);
   font-size: 12.5px;
   font-weight: 650;
 }
@@ -103,13 +144,14 @@
 .hm-figures button {
   min-height: 70px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #f7f9f5;
   padding: 12px 14px;
+  color: var(--hm-ink);
   text-align: left;
 }
 .hm-figures small {
   display: block;
-  color: rgba(246, 248, 244, 0.6);
+  color: var(--hm-ink-soft);
   font-size: 11px;
   font-weight: 650;
 }
@@ -120,7 +162,7 @@
   letter-spacing: -0.035em;
 }
 .hm-figures em {
-  color: rgba(246, 248, 244, 0.6);
+  color: var(--hm-ink-soft);
   font-size: 11px;
   font-style: normal;
 }
@@ -238,12 +280,94 @@
 }
 
 /* Short devices scroll rather than lose the recommendation. */
+/*
+ * Standard phones (844-class). Natural content runs ~77px over the no-scroll
+ * budget here, so spacing tightens across the board. Nothing is dropped at this
+ * tier — the recommendation is the most actionable thing on the screen and is
+ * worth more than the whitespace it costs.
+ */
+@media (max-height: 880px) {
+  .hm-screen {
+    gap: 9px;
+    padding-bottom: 11px;
+  }
+  .hm-take {
+    padding: 12px 15px 11px;
+  }
+  .hm-take strong {
+    font-size: clamp(20px, 5.6vw, 23px);
+  }
+  .hm-figures button {
+    min-height: 62px;
+    padding: 10px 13px;
+  }
+  .hm-block {
+    padding: 11px 13px;
+  }
+  .hm-bucket,
+  .hm-goal {
+    min-height: 38px;
+    padding: 4px 0;
+  }
+  .hm-grow {
+    min-height: 84px;
+  }
+  .hm-insight {
+    padding: 10px 13px;
+  }
+}
+
+/*
+ * Short phones (SE-class) tighten up rather than scroll. The previous rule here
+ * let the screen grow and scroll instead, which is the one thing Home must not
+ * do — so the fix is to spend less height, not more.
+ *
+ * What gives, in order of least loss: spacing, then type, then the third bucket
+ * and the recommendation. Both are reachable one tap away, and neither is worth
+ * turning the home screen into a scrolling page for.
+ */
 @media (max-height: 720px) {
   .hm-screen {
-    height: auto;
-    min-height: 100dvh;
-    overflow-y: auto;
-    grid-template-rows: none;
+    gap: 8px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    padding-bottom: 10px;
+  }
+  .hm-take {
+    gap: 5px;
+    padding: 11px 14px 10px;
+  }
+  .hm-take strong {
+    font-size: clamp(18px, 5.2vw, 21px);
+  }
+  .hm-take p {
+    font-size: 12.5px;
+  }
+  .hm-figures button {
+    min-height: 58px;
+    padding: 9px 12px;
+  }
+  .hm-figures strong {
+    font-size: 20px;
+  }
+  .hm-block {
+    padding: 10px 13px;
+  }
+  .hm-bucket,
+  .hm-goal {
+    min-height: 38px;
+    padding: 4px 0;
+  }
+  /* One row per list. At this height two did not fit, and a list whose second
+     row is sliced through the middle looks broken in a way that a list of one
+     does not. */
+  .hm-bucket:nth-of-type(2) {
+    display: none;
+  }
+  .hm-grow {
+    min-height: 70px;
+  }
+  .hm-insight {
+    display: none;
   }
 }
 

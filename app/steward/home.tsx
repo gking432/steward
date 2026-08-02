@@ -119,12 +119,19 @@ export function HomeScreen({
   }
 
   const days = Math.max(0, daysBetween(today, cycle.end));
-  const activity = workspace.buckets
+  const allSpend = workspace.buckets
     .filter((bucket) => bucket.kind === "spend")
-    .map((bucket) => bucketActivity(workspace, bucket, cycle))
-    .sort((a, b) => b.percent - a.percent)
-    .slice(0, 3);
-  const left = activity.reduce((sum, entry) => sum + Math.max(0, entry.remaining), 0);
+    .map((bucket) => bucketActivity(workspace, bucket, cycle));
+
+  // Every spend bucket, not the displayed ones. This was summing the slice, so
+  // "Left to spend" silently changed with how many rows the list happened to
+  // render — a headline figure that disagreed with the drilldown below it.
+  const left = allSpend.reduce((sum, entry) => sum + Math.max(0, entry.remaining), 0);
+
+  // Two rows, not three. Three did not fit the no-scroll budget on any phone —
+  // it clipped the last row in half on all of them, which reads as a rendering
+  // fault rather than as a list continuing. "All" is one tap away.
+  const activity = [...allSpend].sort((a, b) => b.percent - a.percent).slice(0, 2);
 
   return (
     <div className="hm-screen">
@@ -189,7 +196,7 @@ export function HomeScreen({
           <h2>Working toward</h2>
           <button onClick={onOpenBuckets}>Plan</button>
         </header>
-        {progress.slice(0, 2).map((entry) => (
+        {progress.slice(0, 1).map((entry) => (
           <div className="hm-goal" key={entry.claim.id}>
             <span>
               <b>{entry.claim.name}</b>

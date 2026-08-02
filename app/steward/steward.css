@@ -62,6 +62,10 @@
 }
 
 .sw-app {
+  /* Single source of truth for the fixed nav's footprint. Full-height screens
+     subtract this; padded screens reserve it. They must not disagree. */
+  --sw-nav-height: calc(72px + env(safe-area-inset-bottom));
+
   min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
@@ -840,7 +844,7 @@
 
 /* The immersive screens paint their own full surface, so the shell only
    reserves room for the tab bar. */
-.sw-main-full { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+.sw-main-full { padding-bottom: var(--sw-nav-height); }
 .sw-app:has(.sw-main-full) { background: #2f654d; padding-bottom: 0; }
 .sw-nav { background: rgba(31, 74, 54, 0.94); border-top-color: rgba(246, 248, 244, 0.12); }
 .sw-nav button { color: rgba(246, 248, 244, 0.6); }
