@@ -99,16 +99,16 @@ Eight objects. Everything the product does maps onto these.
 | 5 | **Claim** | Something being built toward across cycles | Yes — "what you're working toward" |
 | 6 | **Project** | A named group of Claims | Yes, thin |
 | 7 | **Allocation** | `(cycle → bucket|claim → amount)`; the audit record | Mostly internal |
-| 8 | **Rule** | A remembered categorisation | Barely ("Steward remembers this") |
+| 8 | **Rule** | A remembered categorization | Barely ("Steward remembers this") |
 
 ### Bucket and Claim: two objects, one allocation contract
 
 Both receive money in a cycle, both have planned-vs-actual, both drill to
-transactions. They differ because their behaviour differs.
+transactions. They differ because their behavior differs.
 
 | | `spend` bucket | `reserve` bucket | Claim |
 |---|---|---|---|
-| Behaviour | Refills each cycle | Accumulates → discharges on due date → repeats | Accumulates → completes |
+| Behavior | Refills each cycle | Accumulates → discharges on due date → repeats | Accumulates → completes |
 | Example | Groceries, Dining | Rent, electric, card minimum | Card payoff, cushion, golf net |
 | Ranked | No | No — obligations don't compete | **Yes** |
 | Arrival date | No | Next due date | **Yes** |
@@ -180,7 +180,7 @@ every date in the product would stop meaning anything.
 | fundedAmount, perCycle, arrivalDate | Engine | **Yes — the payload** |
 | rank | User (drag) | Yes, as position |
 | status, pinned | User | Yes |
-| kind, horizon, divisible, delayCost, protected | Inferred | **No** — behaviour only |
+| kind, horizon, divisible, delayCost, protected | Inferred | **No** — behavior only |
 
 Six visible fields, eight inferred. Nothing in creation asks about divisibility,
 horizon, or delay cost.
@@ -307,9 +307,9 @@ type DebtAccelerationPolicy = {
 | 8–15% | 25% |
 | < 8% | 0% |
 
-Required behaviour, independent of policy version:
+Required behavior, independent of policy version:
 
-- Steward **recognises** the cost of high-interest debt.
+- Steward **recognizes** the cost of high-interest debt.
 - Steward **recommends meaningful acceleration**.
 - Steward **shows the opportunity cost** of choosing other Claims instead.
 - The user **retains final control**, always, in one tap.
@@ -436,7 +436,7 @@ Payday → full-screen takeover, not a tab
 | **PATH** | What I'm working toward, ordered, with dates | Can I see what I'm choosing and what it costs? |
 | **LEDGER** | Where the money actually went | Any transaction behind any number in ≤2 taps? |
 
-*Can I buy this?* is a centre action on every screen — the wedge is never more
+*Can I buy this?* is a center action on every screen — the wedge is never more
 than one tap away and never inside a menu.
 
 **Debt is deliberately not a tab.** It appears as progress on Now, a ranked
@@ -459,7 +459,7 @@ Reassurance → orientation → progress. Not a dashboard. **It scrolls.**
    to the full derivation. *(This replaces "safe to spend": a ledger position the
    user can reconstruct, not a verdict they must trust.)*
 2. **At risk** — conditional. Absent when nothing is wrong. Silence is a feature.
-3. **Bucket strip** — horizontally scrollable mini-bars, colour-coded, each
+3. **Bucket strip** — horizontally scrollable mini-bars, color-coded, each
    tapping through to Ledger filtered. *This is how budgeting stays visible on
    the most-viewed screen.*
 4. **Progress** — *"Card −$178 · payoff Jan 7 · Cushion +$150 · Apartment 62%."*
@@ -500,7 +500,7 @@ Active at 5–7.
 
 **`+ Add something`** — permanent *(A4)*.
 
-**Behaviours** — drag to rerank with live dates and Save/Revert · Projects
+**Behaviors** — drag to rerank with live dates and Save/Revert · Projects
 expand to children and move as a unit · Debt detail carries balance, APR, *"the
 $78 minimum is already handled in your bills,"* payoff date, interest, and the
 **scenario control** (*"$350/paycheck → Nov 26, saves $86 and 6 weeks"*).
@@ -525,7 +525,7 @@ wizards · any date beyond 12 months.
    Groceries   $82 of $150    55%  ████████░░░░░░  $68 left
    Dining      $62 of $75     82%  ██████████████  $13 left  ⚠ running hot
    ```
-   Planned · spent · remaining · percentage · bar · state colour.
+   Planned · spent · remaining · percentage · bar · state color.
    Tap → the transactions **summing visibly to the number shown**.
 4. **Reserves** — accumulation state per obligation
 5. **Needs review** — surfaced only when non-empty
@@ -576,7 +576,7 @@ the next cycle supersedes it.
 
 # I. "CAN I BUY THIS?"
 
-Persistent centre action. Inputs: item · price · *optional* project · *optional*
+Persistent center action. Inputs: item · price · *optional* project · *optional*
 by-when.
 
 Three verdicts: **Yes · Yes, but · Wait until [date]**. Never a bare "No" —
@@ -678,7 +678,7 @@ tool access are mature enough to make it genuinely useful.
 # L. Migration map
 
 **KEEP** — Plaid pipeline (link/exchange/sync/cursor/encryption) · learned
-merchant categorisation · Plaid PFC mapping and deterministic fallback rules ·
+merchant categorization · Plaid PFC mapping and deterministic fallback rules ·
 the debt payoff simulation and its honest refusal on missing terms · the
 determinism pattern itself · the desktop visual system · empty first-run ·
 workspace persistence, audit, export, delete.
@@ -714,7 +714,7 @@ engine invariant tests + golden fixture.
 
 **Hypothesis under test:** *do people reorder the list and react to the dates?*
 
-**In** — Accounts (Plaid + manual) · Transactions with categorisation,
+**In** — Accounts (Plaid + manual) · Transactions with categorization,
 correction, rules, splits · Cycles · the waterfall with reserve pro-rating ·
 buffer · spend buckets with full budget display · reserve buckets · bucket
 drilldown · needs-review · Claims (all four kinds) · Projects · ranking ·

@@ -5,8 +5,8 @@
  * no hard-coded percentages. Everything opinionated lives here so the policy can
  * evolve — or be replaced per user — without touching the engine.
  *
- * The behaviour that must hold regardless of policy version:
- *   - Steward recognises the cost of high-interest debt.
+ * The behavior that must hold regardless of policy version:
+ *   - Steward recognizes the cost of high-interest debt.
  *   - Steward recommends meaningful acceleration.
  *   - Steward shows the opportunity cost of choosing something else.
  *   - The user retains final control.

@@ -128,7 +128,7 @@ export type Claim = {
   protected: boolean;
 
   /**
-   * The user's desired date. An INPUT to prioritisation.
+   * The user's desired date. An INPUT to prioritization.
    * Never confuse this with `arrivalDate`, which the engine owns. §B1.
    */
   wantBy?: string;
@@ -175,10 +175,10 @@ export type Allocation = {
 
 /* ------------------------------------------------------------------- Rule */
 
-/** A remembered categorisation. Surfaced only as "Steward remembers this". */
+/** A remembered categorization. Surfaced only as "Steward remembers this". */
 export type Rule = {
   id: string;
-  /** Normalised merchant key. */
+  /** Normalized merchant key. */
   merchantKey: string;
   category: string;
   createdAt: string;

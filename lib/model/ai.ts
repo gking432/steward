@@ -11,7 +11,7 @@
  *   1. The model never computes money. It receives computed values.
  *   2. It may not state a number that was not in its input. Every numeral in
  *      the output is checked against an allowlist built from the context; a
- *      single unrecognised figure discards the whole response.
+ *      single unrecognized figure discards the whole response.
  *   3. Every AI sentence is backed by a deterministic object the user can open.
  *   4. The product is fully functional with the model disabled — every entry
  *      point here has a deterministic fallback that is always used on any
@@ -25,13 +25,13 @@
 
 /* ------------------------------------------------------------- numerals -- */
 
-/** Every number in a string, normalised: "$1,388.00" → "1388". */
+/** Every number in a string, normalized: "$1,388.00" → "1388". */
 export function numeralsIn(text: string): string[] {
   const matches = text.match(/-?\d[\d,]*(\.\d+)?/g) ?? [];
-  return matches.map(normaliseNumeral);
+  return matches.map(normalizeNumeral);
 }
 
-function normaliseNumeral(raw: string) {
+function normalizeNumeral(raw: string) {
   const cleaned = raw.replace(/,/g, "");
   const value = Number(cleaned);
   if (!Number.isFinite(value)) return cleaned;

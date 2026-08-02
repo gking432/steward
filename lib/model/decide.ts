@@ -587,13 +587,13 @@ function simulatePayoff(
 /* ---------------------------------------------------- category correction */
 
 /**
- * Recategorise a transaction, and optionally remember it.
+ * Recategorize a transaction, and optionally remember it.
  *
  * Remembering writes a Rule and applies it to every other transaction from the
  * same merchant, so the correction is visibly worth making. The user sees every
  * affected number move at once, which is the point.
  */
-export function recategorise(
+export function recategorize(
   workspace: Workspace,
   transactionId: string,
   category: string,
@@ -873,7 +873,7 @@ export function promoteClaim(
   };
   // Re-index so ranks stay contiguous from zero.
   const ordered = [...promoted.claims].sort((a, b) => a.rank - b.rank);
-  const normalised: Workspace = {
+  const normalized: Workspace = {
     ...promoted,
     claims: promoted.claims.map((entry) => ({
       ...entry,
@@ -881,9 +881,9 @@ export function promoteClaim(
     })),
   };
 
-  const after = projectArrivals(normalised, today, policy);
+  const after = projectArrivals(normalized, today, policy);
   return {
-    workspace: normalised,
+    workspace: normalized,
     arrival: after.find((entry) => entry.claimId === claimId)?.arrivalDate ?? null,
     changes: diffArrivals(before, after).filter((change) => change.claimId !== claimId),
   };

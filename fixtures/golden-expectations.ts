@@ -1,6 +1,6 @@
 /**
- * GOLDEN EXPECTATIONS — the measured behaviour of the pre-redesign engine, and
- * the target behaviour of the redesigned engine, for `goldenWorkspace()`.
+ * GOLDEN EXPECTATIONS — the measured behavior of the pre-redesign engine, and
+ * the target behavior of the redesigned engine, for `goldenWorkspace()`.
  *
  * BASELINE_V0 was produced by running the v0-baseline engine against the golden
  * fixture on 2026-08-01. It is a record of fact, not an endorsement: several of

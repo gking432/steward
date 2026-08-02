@@ -83,7 +83,7 @@ export function AskScreen({
     setMessages((current) => [...current, { ...message, id: nextId() }]);
 
   /** Optional rewording. Never allowed to change or add a number. */
-  const humanise = async (headline: string, detail: string) => {
+  const humanize = async (headline: string, detail: string) => {
     try {
       const response = await fetch("/api/steward-ai", {
         method: "POST",
@@ -121,7 +121,7 @@ export function AskScreen({
       say({ from: "steward", text: "I need your pay schedule before I can answer that." });
       return;
     }
-    const text = await humanise(verdict.headline, verdict.tradeoff);
+    const text = await humanize(verdict.headline, verdict.tradeoff);
     say({
       from: "steward",
       text,

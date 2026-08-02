@@ -11,7 +11,7 @@
 /*
  * The new tree declares its own palette.
  *
- * globals.css repaints every colour variable green below 767px, which is why
+ * globals.css repaints every color variable green below 767px, which is why
  * the previous build looked like two different products either side of that
  * breakpoint. Redeclaring here makes this tree immune to that override, so one
  * design holds at every width. The legacy block is deleted in Phase 10, at
@@ -775,7 +775,7 @@
 
 /*
  * globals.css styles bare h1/h2/dd for the legacy tree. Until that file is cut
- * back in Phase 10, the new tree states its own text colours explicitly rather
+ * back in Phase 10, the new tree states its own text color explicitly rather
  * than inheriting whatever the old design left behind.
  */
 .sw-onboard-card h1,

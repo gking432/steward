@@ -135,7 +135,7 @@ test("claims carry funded amounts that ranking cannot disturb", () => {
   );
 });
 
-test("rules are recovered from confirmed manual categorisations", () => {
+test("rules are recovered from confirmed manual categorizations", () => {
   const state = goldenWorkspace();
   state.transactions = [
     { ...state.transactions[0], id: "m1", merchant: "Circle K", category: "Groceries", categorySource: "manual", date: "2026-07-31" },

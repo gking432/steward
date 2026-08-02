@@ -16,7 +16,7 @@ import {
  * and every path must degrade to a deterministic answer.
  */
 
-test("numerals are normalised across formatting", () => {
+test("numerals are normalized across formatting", () => {
   assert.deepEqual(numeralsIn("$1,388.00 and 99.40 and 90"), ["1388", "99.4", "90"]);
 });
 
@@ -67,7 +67,7 @@ test("an explicit goal with an amount is parsed without a model", () => {
   assert.equal(draft.kind, "fund");
 });
 
-test("a payoff intent is recognised", () => {
+test("a payoff intent is recognized", () => {
   const draft = fallbackIntent("I want this credit card gone", "2026-08-01")!;
   assert.equal(draft.kind, "payoff");
   assert.equal(draft.amount, null, "no amount is invented");

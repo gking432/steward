@@ -99,7 +99,7 @@ test("the waterfall reproduces TARGET_V1 exactly", () => {
   assert.equal(result.shortfall, null);
 });
 
-test("every obligation is recognised, including the loan minimum", () => {
+test("every obligation is recognized, including the loan minimum", () => {
   const names = plan().reserves.map((entry) => entry.bucket.name);
   assert.ok(names.some((name) => name.includes("Auto Loan")), "loan minimum counted");
   assert.ok(names.some((name) => name.includes("Travel Rewards Card")), "card minimum counted");
@@ -191,7 +191,7 @@ test("the debt policy is swappable without touching the allocator", () => {
   };
   const result = allocate(ws(), 440, FIXTURE_TODAY, noDebtPush);
   const card = result.allocations.find((entry) => entry.claim.name === "Travel Rewards Card");
-  assert.ok(!card || card.amount === 0, "no engine change needed to alter debt behaviour");
+  assert.ok(!card || card.amount === 0, "no engine change needed to alter debt behavior");
 });
 
 test("a debt with no APR on file is never guessed at", () => {
@@ -404,7 +404,7 @@ test("a debt with no rate on file gets no projected date", async () => {
 });
 
 test("correcting a category updates the bucket it belongs to", async () => {
-  const { recategorise } = await import("../lib/model/decide");
+  const { recategorize } = await import("../lib/model/decide");
   const workspace = ws();
   const cycle = currentCycle(workspace, FIXTURE_TODAY)!;
   const dining = workspace.buckets.find((bucket) => bucket.name === "Dining")!;
@@ -413,7 +413,7 @@ test("correcting a category updates the bucket it belongs to", async () => {
   const circleK = workspace.transactions.find(
     (row) => row.merchant === "Circle K" && row.date >= cycle.start,
   )!;
-  const after = recategorise(workspace, circleK.id, "Groceries", false);
+  const after = recategorize(workspace, circleK.id, "Groceries", false);
 
   assert.equal(
     bucketActivity(after, dining, cycle).spent,
@@ -423,10 +423,10 @@ test("correcting a category updates the bucket it belongs to", async () => {
 });
 
 test("remembering a correction applies it to that merchant's other rows", async () => {
-  const { recategorise } = await import("../lib/model/decide");
+  const { recategorize } = await import("../lib/model/decide");
   const workspace = ws();
   const circleK = workspace.transactions.find((row) => row.merchant === "Circle K")!;
-  const after = recategorise(workspace, circleK.id, "Groceries", true);
+  const after = recategorize(workspace, circleK.id, "Groceries", true);
   const remaining = after.transactions.filter(
     (row) => row.merchant === "Circle K" && row.category !== "Groceries",
   );
@@ -434,11 +434,11 @@ test("remembering a correction applies it to that merchant's other rows", async 
 });
 
 test("a correction is recorded as a reusable rule", async () => {
-  const { recategorise } = await import("../lib/model/decide");
+  const { recategorize } = await import("../lib/model/decide");
   const { toLegacy, toModel } = await import("../lib/model/convert");
   const workspace = ws();
   const circleK = workspace.transactions.find((row) => row.merchant === "Circle K")!;
-  const after = toModel(toLegacy(recategorise(workspace, circleK.id, "Groceries", true)));
+  const after = toModel(toLegacy(recategorize(workspace, circleK.id, "Groceries", true)));
   assert.ok(after.rules.some((rule) => rule.merchantKey === "circlek" && rule.category === "Groceries"));
 });
 

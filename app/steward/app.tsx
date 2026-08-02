@@ -39,7 +39,7 @@ import {
   confirmProposal,
   debtDetail,
   evaluatePurchase,
-  recategorise,
+  recategorize,
   supersedeStaleProposals,
   type PaydayProposal,
   type Verdict,
@@ -116,7 +116,7 @@ function LedgerScreen({
    * move at once and the correction is visibly worth making.
    */
   const correct = (transactionId: string, category: string, remember: boolean) => {
-    update((current) => recategorise(current, transactionId, category, remember));
+    update((current) => recategorize(current, transactionId, category, remember));
     setEditing(null);
   };
 
@@ -335,7 +335,7 @@ function BuySheet({
               <input
                 value={item}
                 onChange={(event) => setItem(event.target.value)}
-                placeholder="New tyres, a flight home, a laptop…"
+                placeholder="New tires, a flight home, a laptop…"
                 autoFocus
               />
             </label>

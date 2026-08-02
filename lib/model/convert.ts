@@ -210,7 +210,7 @@ function derivedCurrentCycle(state: StewardState): Cycle[] {
   ];
 }
 
-/** Rules are re-derivable from confirmed manual categorisations. */
+/** Rules are re-derivable from confirmed manual categorizations. */
 function derivedRules(state: StewardState): Rule[] {
   const seen = new Map<string, Rule>();
   for (const transaction of [...state.transactions].sort((a, b) =>
