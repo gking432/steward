@@ -21,7 +21,7 @@
 
 import { Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { formatMoney, planCycle, allocate } from "../../lib/model/engine";
+import { formatDate, formatMoney, planCycle, allocate } from "../../lib/model/engine";
 import type { Workspace } from "../../lib/model/types";
 import "./buckets.css";
 
@@ -75,8 +75,8 @@ export function BucketsScreen({
         amount: entry.required,
         detail:
           entry.cyclesRemaining > 1
-            ? `${formatMoney(entry.bucket.amountDue ?? 0)} due ${entry.bucket.dueDate} · split over ${entry.cyclesRemaining} paychecks`
-            : `${formatMoney(entry.bucket.amountDue ?? 0)} due ${entry.bucket.dueDate ?? "this cycle"}`,
+            ? `${formatMoney(entry.bucket.amountDue ?? 0)} due ${formatDate(entry.bucket.dueDate!)} · split over ${entry.cyclesRemaining} paychecks`
+            : `${formatMoney(entry.bucket.amountDue ?? 0)} due ${entry.bucket.dueDate ? formatDate(entry.bucket.dueDate) : "this cycle"}`,
         kind: isDebt ? "debt" : "bill",
         editable: !isDebt,
       });
@@ -110,6 +110,9 @@ export function BucketsScreen({
 
     return { rows: result, income: plan.income };
   }, [workspace, today]);
+
+  /** A connected account is the only evidence Steward actually read anything. */
+  const fromBank = workspace.accounts.length > 0;
 
   const assigned = rows.reduce((sum, row) => sum + row.amount, 0);
   const share = (amount: number) => (income > 0 ? (amount / income) * 100 : 0);
@@ -150,14 +153,28 @@ export function BucketsScreen({
     <div className={mode === "review" ? "bk-screen review" : "bk-screen"}>
       <header className="bk-head">
         {mode === "review" ? (
-          <>
-            <span className="bk-eyebrow">From your last few months</span>
-            <h1>Here&apos;s what Steward found.</h1>
-            <p>
-              Every paycheck has to cover these. Change anything that looks wrong — this is a
-              starting point, not a verdict.
-            </p>
-          </>
+          // Only claim to have read transactions when transactions were read.
+          // On the manual path the user typed these numbers a moment ago, and
+          // saying "here's what Steward found" would be a lie they can see.
+          fromBank ? (
+            <>
+              <span className="bk-eyebrow">From your last few months</span>
+              <h1>Here&apos;s what Steward found.</h1>
+              <p>
+                Every paycheck has to cover these. Change anything that looks wrong — this is a
+                starting point, not a verdict.
+              </p>
+            </>
+          ) : (
+            <>
+              <span className="bk-eyebrow">From what you told me</span>
+              <h1>Here&apos;s your starting plan.</h1>
+              <p>
+                Every paycheck has to cover these. Add anything that&apos;s missing — connecting a
+                bank later fills in the rest from what you actually spend.
+              </p>
+            </>
+          )
         ) : (
           <>
             <span className="bk-eyebrow">Every paycheck</span>

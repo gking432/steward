@@ -818,7 +818,9 @@ function applyOnboarding(
     buckets.push({
       id: "reserve:onboard-bills",
       kind: "reserve",
-      name: "Bills",
+      // Not "Bills" — these rows render under a "Bills" heading, and a bucket
+      // called Bills inside a group called Bills tells the user nothing.
+      name: "Utilities and other bills",
       essential: true,
       source: "manual",
       amountDue: input.otherBills,
@@ -835,7 +837,9 @@ function applyOnboarding(
     buckets.push({
       id: "spend:onboard-everyday",
       kind: "spend",
-      name: "Everyday",
+      // Named for what it holds, not for the group it sits in — and the name
+      // is the invitation to split it up.
+      name: "Groceries, gas and the rest",
       category: "Everyday",
       essential: true,
       source: "manual",

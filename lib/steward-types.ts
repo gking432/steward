@@ -149,6 +149,17 @@ export type PaycheckPlan = {
 export type Budget = {
   id: string;
   category: string;
+  /**
+   * Display name, when the user has renamed the bucket away from its category.
+   * Absent on every workspace saved before renaming existed, and absent
+   * whenever the name still equals the category — so the stored shape is
+   * unchanged for anyone who has not renamed anything.
+   *
+   * Kept separate from `category` because the category is what transactions
+   * match on: renaming "Dining" to "Eating out" must not orphan the spending
+   * already categorized against it.
+   */
+  name?: string;
   planned: number;
   actual: number;
   cadence: "Monthly" | "Biweekly";

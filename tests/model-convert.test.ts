@@ -253,3 +253,34 @@ test("a bucket created after load is given a legacy home rather than dropped", (
   );
   assert.deepEqual(toLegacy(toModel(written)), written);
 });
+
+test("renaming a spend bucket survives a save, and does not move its category", () => {
+  // Regression. Legacy `Budget` had no name field, so every spend-bucket rename
+  // silently reverted on the next save — the user retyped it and watched it
+  // snap back. The category must NOT follow the name: transactions match on
+  // category, and renaming a bucket cannot orphan the spending already in it.
+  const workspace = toModel(goldenWorkspace());
+  const target = workspace.buckets.find((bucket) => bucket.kind === "spend")!;
+  const originalCategory = target.category;
+
+  const renamed = {
+    ...workspace,
+    buckets: workspace.buckets.map((bucket) =>
+      bucket.id === target.id ? { ...bucket, name: "Eating out" } : bucket,
+    ),
+  };
+
+  const reread = toModel(toLegacy(renamed));
+  const after = reread.buckets.find((bucket) => bucket.id === target.id)!;
+  assert.equal(after.name, "Eating out", "the rename survives the round-trip");
+  assert.equal(after.category, originalCategory, "the category is left alone");
+});
+
+test("an unrenamed workspace stores no name field at all", () => {
+  // The compatibility guarantee: adding the field must not change the stored
+  // bytes for anyone who has never renamed a bucket.
+  const stored = toLegacy(toModel(goldenWorkspace()));
+  for (const budget of stored.budgets) {
+    assert.ok(!("name" in budget), `${budget.category} gained an unexpected name key`);
+  }
+});

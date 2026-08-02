@@ -70,7 +70,7 @@ function bucketFromBudget(budget: Budget, frequency: StewardState["profile"]["pa
   return {
     id: `spend:${budget.id}`,
     kind: "spend",
-    name: budget.category,
+    name: budget.name ?? budget.category,
     category: budget.category,
     essential: budget.essential,
     source: budget.source === "manual" ? "manual" : "derived",
@@ -428,9 +428,13 @@ export function toLegacy(workspace: Workspace): StewardState {
       source?: Budget["source"];
       paycheckAmount?: number;
     };
+    const category = bucket.category ?? bucket.name;
     return compact({
       id,
-      category: bucket.category ?? bucket.name,
+      category,
+      // Only written once the name diverges, so untouched workspaces round-trip
+      // byte-identical.
+      name: bucket.name === category ? undefined : bucket.name,
       planned: meta.planned ?? 0,
       actual: meta.actual ?? 0,
       cadence: meta.cadence ?? "Monthly",
@@ -528,6 +532,8 @@ export function toLegacy(workspace: Workspace): StewardState {
         compact({
           id: stripPrefix(bucket.id, "spend:"),
           category: bucket.category ?? bucket.name,
+          name:
+            bucket.name === (bucket.category ?? bucket.name) ? undefined : bucket.name,
           planned: 0,
           actual: 0,
           cadence: "Monthly",
