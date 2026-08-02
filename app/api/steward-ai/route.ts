@@ -35,7 +35,36 @@ const intentSchema = z.object({
   today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-const requestSchema = z.discriminatedUnion("kind", [phraseSchema, intentSchema]);
+/**
+ * Closed-set classification for the onboarding conversation: the user answered
+ * in their own words, and Steward needs to know which of ITS options that was.
+ *
+ * Deliberately closed. The model cannot introduce an answer, only pick one that
+ * Steward already offered — anything else is discarded and the caller falls
+ * back to the choices as buttons.
+ */
+const chooseSchema = z.object({
+  kind: z.literal("choose"),
+  utterance: z.string().min(1).max(500),
+  choices: z.array(z.string().min(1).max(160)).min(2).max(12),
+});
+
+/**
+ * Rewording, so a scripted question doesn't read like a form. Same guard as
+ * everywhere else: a figure Steward didn't supply discards the whole rewrite
+ * and the original is used instead.
+ */
+const rewordSchema = z.object({
+  kind: z.literal("reword"),
+  text: z.string().min(1).max(600),
+});
+
+const requestSchema = z.discriminatedUnion("kind", [
+  phraseSchema,
+  intentSchema,
+  chooseSchema,
+  rewordSchema,
+]);
 
 const intentOutput = z.object({
   name: z.string().max(120),
@@ -118,6 +147,52 @@ export async function POST(request: Request) {
     ]);
     if (!outputIsGrounded(text, allowed)) {
       return Response.json({ enhanced: false, text: deterministic, rejected: "ungrounded" });
+    }
+    return Response.json({ enhanced: true, text });
+  }
+
+  if (input.kind === "choose") {
+    const result = await callModel(
+      {
+        task: "Pick which of these options the user's answer means. If none fit, return null.",
+        utterance: input.utterance,
+        options: input.choices,
+      },
+      {
+        type: "object",
+        additionalProperties: false,
+        properties: { choice: { type: ["string", "null"] } },
+        required: ["choice"],
+      },
+    );
+
+    const choice = (result as { choice?: string | null } | null)?.choice;
+    // Must be one Steward actually offered. A near-miss is not a match: acting
+    // on an option the user was never shown is worse than asking them to tap.
+    if (!choice || !input.choices.includes(choice)) {
+      return Response.json({ enhanced: false, choice: null });
+    }
+    return Response.json({ enhanced: true, choice });
+  }
+
+  if (input.kind === "reword") {
+    const result = await callModel(
+      {
+        task:
+          "Rewrite this so it sounds like a person talking, not a form. Keep every figure, name and date exactly as given. One or two sentences.",
+        text: input.text,
+      },
+      {
+        type: "object",
+        additionalProperties: false,
+        properties: { text: { type: "string" } },
+        required: ["text"],
+      },
+    );
+
+    const text = (result as { text?: string } | null)?.text;
+    if (!text || !outputIsGrounded(text, allowedNumerals([input.text]))) {
+      return Response.json({ enhanced: false, text: input.text });
     }
     return Response.json({ enhanced: true, text });
   }

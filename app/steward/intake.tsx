@@ -52,6 +52,46 @@ let seq = 0;
 const nextId = () => `b${(seq += 1)}`;
 
 /**
+ * Map what the user typed onto one of Steward's own options.
+ *
+ * Closed-set: the endpoint discards anything that isn't an option Steward
+ * offered, and returns null. Null is a normal outcome — with no API key it is
+ * the only outcome — so the caller must always have somewhere to go.
+ */
+async function classify(utterance: string, choices: string[]): Promise<string | null> {
+  try {
+    const response = await fetch("/api/steward-ai", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "choose", utterance, choices }),
+    });
+    const payload = await response.json();
+    return typeof payload?.choice === "string" ? payload.choice : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Optional rewording of a scripted prompt. Returns the original on any failure,
+ * and the endpoint rejects any rewrite that introduces a figure — so this can
+ * only ever change the wording, never the facts.
+ */
+async function reword(text: string): Promise<string> {
+  try {
+    const response = await fetch("/api/steward-ai", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "reword", text }),
+    });
+    const payload = await response.json();
+    return typeof payload?.text === "string" ? payload.text : text;
+  } catch {
+    return text;
+  }
+}
+
+/**
  * The proposal, entirely from the engine. The conversation may describe this;
  * it may never compute it.
  */
@@ -92,6 +132,7 @@ export function IntakeScreen({
   const [answers, setAnswers] = useState<IntakeAnswer[]>([]);
   const [picks, setPicks] = useState<string[]>([]);
   const [typed, setTyped] = useState("");
+  const [classifying, setClassifying] = useState(false);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
 
@@ -116,20 +157,35 @@ export function IntakeScreen({
     [draft, today, answers],
   );
 
-  // Push each new question into the thread as Steward "says" it.
+  // Push each new question into the thread as Steward "says" it, then swap in a
+  // reworded version if the model is available and its rewrite passes the
+  // guard. The scripted line shows immediately either way — the conversation
+  // never waits on the network to say something it already knows.
   const shownRef = useRef<string | null>(null);
   useEffect(() => {
     if (!step || shownRef.current === step.id) return;
     shownRef.current = step.id;
+    const id = nextId();
     setBubbles((current) => [
       ...current,
       {
-        id: nextId(),
+        id,
         from: "steward",
         text: step.prompt,
         plan: step.kind === "plan" ? (buildPlanView(draft, today, answers) ?? undefined) : undefined,
       },
     ]);
+
+    let live = true;
+    void reword(step.prompt).then((text) => {
+      if (!live || text === step.prompt) return;
+      setBubbles((current) =>
+        current.map((bubble) => (bubble.id === id ? { ...bubble, text } : bubble)),
+      );
+    });
+    return () => {
+      live = false;
+    };
   }, [step, draft, today, answers]);
 
   useEffect(() => {
@@ -247,8 +303,29 @@ export function IntakeScreen({
             className="ik-composer"
             onSubmit={(event) => {
               event.preventDefault();
-              if (!typed.trim()) return;
-              answer(step, step.choices[0], typed.trim());
+              const said = typed.trim();
+              if (!said || classifying) return;
+              setTyped("");
+              setClassifying(true);
+              void classify(said, step.choices)
+                .then((choice) => {
+                  if (choice) {
+                    answer(step, choice, said);
+                    return;
+                  }
+                  // No key, or nothing matched. Steward must not guess at what
+                  // they meant — it keeps what they said and asks them to tap.
+                  setBubbles((current) => [
+                    ...current,
+                    { id: nextId(), from: "you", text: said },
+                    {
+                      id: nextId(),
+                      from: "steward",
+                      text: "I want to be sure I've got that right — which of these is closest?",
+                    },
+                  ]);
+                })
+                .finally(() => setClassifying(false));
             }}
           >
             <input
@@ -257,7 +334,7 @@ export function IntakeScreen({
               placeholder="Or say it in your own words"
               aria-label="Your answer"
             />
-            <button type="submit" aria-label="Send" disabled={!typed.trim()}>
+            <button type="submit" aria-label="Send" disabled={!typed.trim() || classifying}>
               <ArrowUp size={18} />
             </button>
           </form>
