@@ -7,6 +7,8 @@ import {
   intakeProgress,
   isPlannable,
   nextStep,
+  applyIntake,
+  cancelledSubscriptions,
   proposedBuckets,
   type IntakeAnswer,
 } from "../lib/model/intake";
@@ -232,3 +234,94 @@ function runStepFor(workspace: Workspace, prefix: string) {
   }
   throw new Error(`never reached ${prefix}`);
 }
+
+/* ------------------------------------------------------------- applying -- */
+
+test("abandoning the conversation halfway leaves nothing behind", () => {
+  // Everything before agreeing to the plan is a conversation, not a commitment.
+  const workspace = base();
+  const partial: IntakeAnswer[] = [
+    { stepId: "goals", choice: "Pay off a credit card", picks: ["Pay off a credit card"] },
+  ];
+  assert.equal(
+    intakeComplete(workspace, FIXTURE_TODAY, partial),
+    false,
+    "still mid-conversation, so the caller never applies it",
+  );
+  assert.equal(workspace.claims.length, base().claims.length, "no claim was created yet");
+});
+
+test("goals become claims, and none of them gets an invented amount", () => {
+  const workspace = base();
+  const before = workspace.claims.length;
+  const next = applyIntake(workspace, FIXTURE_TODAY, [
+    {
+      stepId: "goals",
+      choice: "Pay off a credit card",
+      picks: ["Pay off a credit card", "Money for emergencies"],
+    },
+  ]);
+  const added = next.claims.slice(before);
+  assert.equal(added.length, 2);
+
+  const payoff = added.find((claim) => claim.name === "Pay off a credit card")!;
+  assert.equal(payoff.kind, "payoff");
+  assert.equal(payoff.targetAmount, 0);
+  assert.equal(payoff.status, "someday", "no figure means it waits, not that one is guessed");
+
+  const cushion = added.find((claim) => claim.name === "Money for emergencies")!;
+  assert.equal(cushion.status, "active", "a stated starting target can be funded");
+});
+
+test("\"Not sure yet\" is a real answer and creates nothing", () => {
+  const workspace = base();
+  const next = applyIntake(workspace, FIXTURE_TODAY, [
+    { stepId: "goals", choice: "Not sure yet", picks: ["Not sure yet"] },
+  ]);
+  assert.equal(next.claims.length, workspace.claims.length);
+  assert.equal(next.profile.onboardingComplete, true, "the app still opens, fully usable");
+});
+
+test("take-home is taken from the deposits Steward observed", () => {
+  const next = applyIntake(base(), FIXTURE_TODAY, [
+    { stepId: "goals", choice: "Not sure yet", picks: [] },
+    { stepId: "income:primary", choice: "Yes, that's my job" },
+  ]);
+  assert.equal(next.profile.takeHomePay, 2150);
+  assert.equal(next.profile.payFrequency, "Biweekly");
+});
+
+test("money the user called a gift is not planned around", () => {
+  // The distinction that matters: a side business recurs, a parent helping out
+  // may never happen again. Only one of them can carry a budget.
+  const workspace = withRows([
+    tx({ id: "m1", merchant: "Zelle From Mom", amount: 300, date: "2026-06-04", type: "income", category: "Other income" }),
+    tx({ id: "m2", merchant: "Zelle From Mom", amount: 300, date: "2026-07-02", type: "income", category: "Other income" }),
+  ]);
+  const key = "income:other:income:zellefrommom";
+
+  const asGift = applyIntake(workspace, FIXTURE_TODAY, [
+    { stepId: "goals", choice: "Not sure yet", picks: [] },
+    { stepId: "income:primary", choice: "Yes, that's my job" },
+    { stepId: key, choice: "Someone helping me out" },
+  ]);
+  assert.equal(asGift.profile.takeHomePay, 2150, "a gift is excluded");
+
+  const asBusiness = applyIntake(workspace, FIXTURE_TODAY, [
+    { stepId: "goals", choice: "Not sure yet", picks: [] },
+    { stepId: "income:primary", choice: "Yes, that's my job" },
+    { stepId: key, choice: "A side business" },
+  ]);
+  assert.equal(asBusiness.profile.takeHomePay, 2450, "recurring earned income counts");
+});
+
+test("a subscription the user rejected is carried into the plan", () => {
+  const workspace = withRows([
+    tx({ id: "n1", merchant: "Netflix", amount: 15.49, date: "2026-05-30", category: "Entertainment" }),
+    tx({ id: "n2", merchant: "Netflix", amount: 15.49, date: "2026-06-30", category: "Entertainment" }),
+  ]);
+  const cancelled = cancelledSubscriptions(workspace, FIXTURE_TODAY, [
+    { stepId: "spend:sub:expense:netflix", choice: "I want to cancel that" },
+  ]);
+  assert.deepEqual(cancelled.map((s) => s.merchant), ["Netflix"]);
+});

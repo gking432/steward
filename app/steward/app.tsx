@@ -49,6 +49,7 @@ import type { Bucket, Claim, Workspace } from "../../lib/model/types";
 import type { StewardState } from "../../lib/steward-types";
 import { BucketsScreen } from "./buckets";
 import { ConnectScreen } from "./connect";
+import { IntakeScreen } from "./intake";
 import { AskScreen } from "./ask";
 import { HomeScreen } from "./home";
 import { SettingsSheet } from "./settings";
@@ -978,19 +979,16 @@ export function StewardApp({
     );
   }
 
+  // The conversation is the front door, not a buckets screen to approve.
+  // Steward asks what you want, says what it found, proposes a plan — and the
+  // rest of the app opens only once you agree to it.
   if (!workspace.profile.onboardingComplete) {
     return (
-      <BucketsScreen
+      <IntakeScreen
         workspace={workspace}
         today={today}
-        mode="review"
-        update={update}
-        onApprove={() =>
-          update((current) => ({
-            ...current,
-            profile: { ...current.profile, onboardingComplete: true },
-          }))
-        }
+        scanComplete={plaid.status !== "importing" && plaid.status !== "syncing"}
+        onDone={(next) => update(() => next)}
       />
     );
   }

@@ -313,6 +313,108 @@ export function intakeProgress(
   return { phase, of: PHASE_ORDER.length };
 }
 
+/** What a goal choice becomes once the user agrees to the plan. */
+const GOAL_KINDS: Record<string, { kind: "payoff" | "fund" | "purchase"; target: number | null }> = {
+  "Pay off a credit card": { kind: "payoff", target: null },
+  "Money for emergencies": { kind: "fund", target: 1000 },
+  "Get out of overdraft": { kind: "payoff", target: null },
+  "Save for something specific": { kind: "purchase", target: null },
+  "Stop living paycheck to paycheck": { kind: "fund", target: null },
+};
+
+/**
+ * Fold the conversation into the workspace.
+ *
+ * Applied only once the user agrees to the plan — everything before that is a
+ * conversation, not a commitment, and abandoning it halfway must leave nothing
+ * behind.
+ *
+ * No amount is ever invented. A goal the user named without a figure lands in
+ * `someday` rather than being given a plausible target, because a target
+ * Steward made up would then drive real allocations.
+ */
+export function applyIntake(
+  workspace: Workspace,
+  today: string,
+  answers: IntakeAnswer[],
+): Workspace {
+  const goals = answers.find((answer) => answer.stepId === "goals");
+  const picks = (goals?.picks ?? []).filter((pick) => pick !== "Not sure yet");
+
+  const existing = workspace.claims.filter((claim) => claim.status === "active").length;
+  const claims = picks.map((label, index) => {
+    const spec = GOAL_KINDS[label] ?? { kind: "fund" as const, target: null };
+    return {
+      id: `claim:intake-${index}`,
+      name: label,
+      kind: spec.kind,
+      targetAmount: spec.target ?? 0,
+      fundedAmount: 0,
+      rank: existing + index,
+      status: (spec.target ? "active" : "someday") as "active" | "someday",
+      horizon: "arrival" as const,
+      divisible: spec.kind !== "purchase",
+      delayCost: { type: "none" as const },
+      protected: false,
+    };
+  });
+
+  // Take-home comes from the deposits Steward actually observed, and only from
+  // the ones the user confirmed are plannable. Money someone described as a
+  // gift or a one-off is left out — planning around it would build a budget on
+  // income that may never arrive again.
+  const income = incomeObservations(workspace, today);
+  const confirmedPrimary = answers.find(
+    (answer) => answer.stepId === "income:primary" && answer.choice.startsWith("Yes"),
+  );
+  const plannableExtra = income.others
+    .filter((stream) =>
+      answers.some(
+        (answer) => answer.stepId === `income:other:${stream.key}` && isPlannable(answer.choice),
+      ),
+    )
+    .reduce((sum, stream) => sum + stream.typicalAmount, 0);
+
+  const takeHome =
+    confirmedPrimary && income.primary
+      ? Math.round((income.primary.typicalAmount + plannableExtra) * 100) / 100
+      : workspace.profile.takeHomePay;
+
+  const payFrequency =
+    confirmedPrimary && income.primary?.cadence === "weekly"
+      ? "Weekly"
+      : confirmedPrimary && income.primary?.cadence === "monthly"
+        ? "Monthly"
+        : confirmedPrimary && income.primary?.cadence === "biweekly"
+          ? "Biweekly"
+          : workspace.profile.payFrequency;
+
+  return {
+    ...workspace,
+    profile: {
+      ...workspace.profile,
+      takeHomePay: takeHome,
+      payFrequency,
+      onboardingComplete: true,
+    },
+    claims: [...workspace.claims, ...claims],
+  };
+}
+
+/** Subscriptions the user said they wanted to cancel, for the plan to reflect. */
+export function cancelledSubscriptions(
+  workspace: Workspace,
+  today: string,
+  answers: IntakeAnswer[],
+): Stream[] {
+  return subscriptions(workspace, today).filter((stream) =>
+    answers.some(
+      (answer) =>
+        answer.stepId === `spend:sub:${stream.key}` && answer.choice === "I want to cancel that",
+    ),
+  );
+}
+
 /**
  * The categories Steward will propose as buckets.
  *
