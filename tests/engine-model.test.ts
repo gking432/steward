@@ -538,3 +538,35 @@ test("a split survives a save and reload", async () => {
 function round(value: number) {
   return Math.round(value * 100) / 100;
 }
+
+test("promoting a claim reports where it lands and what slipped", async () => {
+  const { promoteClaim } = await import("../lib/model/decide");
+  const workspace = ws();
+  const net = workspace.claims.find((claim) => claim.name === "Golf net")!;
+  const fundedBefore = Object.fromEntries(workspace.claims.map((c) => [c.name, c.fundedAmount]));
+
+  const result = promoteClaim(workspace, net.id, FIXTURE_TODAY)!;
+  const promoted = result.workspace.claims.find((claim) => claim.id === net.id)!;
+
+  assert.equal(promoted.rank, 0, "it goes to the top");
+  assert.ok(result.arrival, "and gets a real date");
+
+  // Reordering is future-cycle only; nothing already funded may move.
+  for (const claim of result.workspace.claims) {
+    assert.equal(claim.fundedAmount, fundedBefore[claim.name], claim.name);
+  }
+  // Ranks stay contiguous so the list has no gaps.
+  const ranks = result.workspace.claims.map((claim) => claim.rank).sort((a, b) => a - b);
+  assert.deepEqual(ranks, ranks.map((_, index) => index));
+});
+
+test("promotion names the cost rather than hiding it", async () => {
+  const { promoteClaim } = await import("../lib/model/decide");
+  const workspace = ws();
+  const net = workspace.claims.find((claim) => claim.name === "Golf net")!;
+  const result = promoteClaim(workspace, net.id, FIXTURE_TODAY)!;
+  assert.ok(
+    result.changes.every((change) => change.claimId !== net.id),
+    "the promoted claim isn't listed as its own consequence",
+  );
+});

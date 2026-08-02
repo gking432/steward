@@ -182,3 +182,19 @@
     max-width: 620px;
   }
 }
+
+.ak-promote {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(246, 248, 244, 0.28);
+  border-radius: 12px;
+  background: transparent;
+  padding: 9px 13px;
+  color: #f6f8f4;
+  text-align: left;
+}
+.ak-promote span { font-size: 13.5px; font-weight: 600; }
+.ak-promote small { color: rgba(246, 248, 244, 0.62); font-size: 11.5px; white-space: nowrap; }

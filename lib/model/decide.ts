@@ -834,3 +834,57 @@ export function unsplitTransaction(workspace: Workspace, transactionId: string):
     ),
   };
 }
+
+/* --------------------------------------------------------------- promote */
+
+export type Promotion = {
+  workspace: Workspace;
+  /** Where the promoted claim now lands. */
+  arrival: string | null;
+  /** What moved to make room, so the cost is never hidden. */
+  changes: DateChange[];
+};
+
+/**
+ * Move a claim to the top of the list and report what it costs.
+ *
+ * Steward was already telling users this was the faster route and then leaving
+ * them to go and do it — advice that makes you do the work. Reordering is
+ * future-cycle only, so nothing already funded moves; only what happens next
+ * changes, and every date that shifts is named.
+ */
+export function promoteClaim(
+  workspace: Workspace,
+  claimId: string,
+  today: string,
+  policy: AllocationPolicy = defaultPolicy,
+): Promotion | null {
+  const claim = workspace.claims.find((entry) => entry.id === claimId);
+  if (!claim) return null;
+
+  const before = projectArrivals(workspace, today, policy);
+  const promoted: Workspace = {
+    ...workspace,
+    claims: workspace.claims.map((entry) =>
+      entry.id === claimId
+        ? { ...entry, rank: -1, status: "active" as const }
+        : { ...entry, rank: entry.rank + 1 },
+    ),
+  };
+  // Re-index so ranks stay contiguous from zero.
+  const ordered = [...promoted.claims].sort((a, b) => a.rank - b.rank);
+  const normalised: Workspace = {
+    ...promoted,
+    claims: promoted.claims.map((entry) => ({
+      ...entry,
+      rank: ordered.findIndex((candidate) => candidate.id === entry.id),
+    })),
+  };
+
+  const after = projectArrivals(normalised, today, policy);
+  return {
+    workspace: normalised,
+    arrival: after.find((entry) => entry.claimId === claimId)?.arrivalDate ?? null,
+    changes: diffArrivals(before, after).filter((change) => change.claimId !== claimId),
+  };
+}

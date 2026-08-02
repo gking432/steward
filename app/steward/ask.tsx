@@ -25,6 +25,7 @@ import {
   claimFromPurchase,
   evaluatePurchase,
   planNarrative,
+  promoteClaim,
   type Acceleration,
 } from "../../lib/model/decide";
 import { formatDate, formatMoney } from "../../lib/model/engine";
@@ -183,6 +184,24 @@ export function AskScreen({
     }
   };
 
+  /** Move a claim to the top and report the new date and what slipped. */
+  const promote = (claimId: string, name: string) => {
+    const result = promoteClaim(workspace, claimId, today);
+    if (!result) return;
+    update(() => result.workspace);
+    const slipped = result.changes
+      .filter((change) => change.direction === "later")
+      .slice(0, 2)
+      .map((change) => `${change.name} moves to ${formatDate(change.after)}`);
+    say({
+      from: "steward",
+      text: result.arrival
+        ? `${name} is top of your list now — it lands ${formatDate(result.arrival)}.`
+        : `${name} is top of your list now.`,
+      lines: slipped.length ? slipped : ["Nothing else moved."],
+    });
+  };
+
   /** Apply a cut and report the new date, both from the engine. */
   const applyCut = (acceleration: Acceleration, bucketId: string) => {
     const option = acceleration.options.find((entry) => entry.bucketId === bucketId);
@@ -255,6 +274,15 @@ export function AskScreen({
                     {formatMoney(message.options.totalAvailable)}. Moving it up your list is the
                     faster route.
                   </p>
+                )}
+                {message.claimId && (
+                  <button
+                    className="ak-promote"
+                    onClick={() => promote(message.claimId!, message.options!.claim.name)}
+                  >
+                    <span>Move {message.options.claim.name} to the top</span>
+                    <small>see what shifts</small>
+                  </button>
                 )}
               </div>
             )}
