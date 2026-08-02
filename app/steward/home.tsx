@@ -15,7 +15,7 @@
  * anything cut is reachable by tapping the block it belongs to.
  */
 
-import { ArrowUpRight, Sparkles } from "lucide-react";
+import { ArrowUpRight, Settings, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 import {
   bucketActivity,
@@ -87,12 +87,14 @@ export function HomeScreen({
   onOpenBuckets,
   onOpenBucket,
   onAsk,
+  onSettings,
 }: {
   workspace: Workspace;
   today: string;
   onOpenBuckets: () => void;
   onOpenBucket: (bucket: Bucket) => void;
   onAsk: () => void;
+  onSettings: () => void;
 }) {
   const plan = planCycle(workspace, today);
   const cycle = currentCycle(workspace, today);
@@ -129,7 +131,9 @@ export function HomeScreen({
       <header className="hm-top">
         <span className="hm-mark" aria-hidden="true" />
         <strong>Steward</strong>
-        <time>{formatDate(today)}</time>
+        <button className="hm-settings" onClick={onSettings} aria-label="Settings">
+          <Settings size={18} />
+        </button>
       </header>
 
       {/* Steward's take. The read comes before the number. */}

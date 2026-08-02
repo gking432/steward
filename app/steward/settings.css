@@ -1,0 +1,62 @@
+/** Settings. Sheet presentation, same immersive surface. */
+
+.st-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  background: rgba(8, 26, 18, 0.5);
+}
+@media (min-width: 640px) { .st-backdrop { align-items: center; } }
+
+.st-sheet {
+  display: grid;
+  gap: 18px;
+  width: min(520px, 100%);
+  max-height: 92dvh;
+  overflow-y: auto;
+  border-radius: 22px 22px 0 0;
+  background: #2f654d;
+  padding: 18px 16px calc(22px + env(safe-area-inset-bottom));
+  color: #f6f8f4;
+}
+@media (min-width: 640px) { .st-sheet { border-radius: 22px; } }
+
+.st-sheet > header { display: flex; align-items: center; justify-content: space-between; }
+.st-sheet > header strong { font-size: 17px; font-weight: 650; letter-spacing: -0.025em; }
+.st-sheet > header button {
+  display: grid; width: 44px; height: 44px; place-items: center;
+  border-radius: 12px; color: rgba(246, 248, 244, 0.75);
+}
+
+.st-sheet section { display: grid; gap: 10px; }
+.st-sheet h3 { font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(246, 248, 244, 0.66); }
+.st-sheet section > p { color: rgba(246, 248, 244, 0.72); font-size: 12.5px; }
+
+.st-sheet label { display: grid; gap: 5px; }
+.st-sheet label span { color: rgba(246, 248, 244, 0.78); font-size: 12.5px; font-weight: 600; }
+.st-sheet input,
+.st-sheet select {
+  min-height: 48px;
+  border: 1px solid rgba(246, 248, 244, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.09);
+  padding: 0 12px;
+  color: #f6f8f4;
+  font-size: 15px;
+}
+
+.st-row { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+.st-sheet section button {
+  display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 7px;
+  border: 1px solid rgba(246, 248, 244, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f6f8f4;
+  font-size: 13px;
+  font-weight: 600;
+}
+.st-danger button { border-color: rgba(240, 160, 138, 0.45); }
+.st-delete { background: rgba(240, 160, 138, 0.22) !important; }

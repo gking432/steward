@@ -25,12 +25,15 @@ import "./steward.css";
 
 type Frequency = StewardState["profile"]["payFrequency"];
 
+// The six things most people actually name when asked what their money is for.
+// No amounts are invented for the open-ended ones — those land in Someday until
+// the user gives them a number.
 const STARTERS: { label: string; kind: "payoff" | "fund" | "purchase" | "commitment"; suggest: number | null }[] = [
-  { label: "Pay off a card", kind: "payoff", suggest: null },
-  { label: "Build a cushion", kind: "fund", suggest: 2000 },
-  { label: "Something I want", kind: "purchase", suggest: null },
-  { label: "A trip", kind: "fund", suggest: 1500 },
-  { label: "Fix up my place", kind: "purchase", suggest: 900 },
+  { label: "Pay off a credit card", kind: "payoff", suggest: null },
+  { label: "Money for emergencies", kind: "fund", suggest: 1000 },
+  { label: "Get out of overdraft", kind: "payoff", suggest: null },
+  { label: "Something I need to buy", kind: "purchase", suggest: null },
+  { label: "A trip", kind: "fund", suggest: null },
   { label: "Not sure yet", kind: "fund", suggest: null },
 ];
 

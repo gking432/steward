@@ -51,6 +51,7 @@ import { BucketsScreen } from "./buckets";
 import { ConnectScreen } from "./connect";
 import { AskScreen } from "./ask";
 import { HomeScreen } from "./home";
+import { SettingsSheet } from "./settings";
 import { SplitSheet } from "./split";
 import { Onboarding } from "./onboarding";
 import { usePlaidConnect } from "./use-plaid";
@@ -331,11 +332,16 @@ function BuySheet({
           >
             <label>
               <span>What is it?</span>
-              <input value={item} onChange={(event) => setItem(event.target.value)} placeholder="Logitech keyboard" autoFocus />
+              <input
+                value={item}
+                onChange={(event) => setItem(event.target.value)}
+                placeholder="New tyres, a flight home, a laptop…"
+                autoFocus
+              />
             </label>
             <label>
               <span>How much?</span>
-              <input value={price} onChange={(event) => setPrice(event.target.value)} inputMode="decimal" placeholder="90" />
+              <input value={price} onChange={(event) => setPrice(event.target.value)} inputMode="decimal" placeholder="0.00" />
             </label>
             <button type="submit" className="sw-primary">Ask Steward</button>
           </form>
@@ -581,13 +587,13 @@ function AddClaimSheet({
               <input
                 value={text}
                 onChange={(event) => setText(event.target.value)}
-                placeholder="I want $5,000 in emergency savings"
+                placeholder="I want $2,000 saved for emergencies"
                 autoFocus
               />
             </label>
             <p className="sw-muted">
-              &ldquo;I want this credit card gone&rdquo; · &ldquo;a golf net&rdquo; ·
-              &ldquo;save $20,000 for a house&rdquo;
+              &ldquo;I want this credit card gone&rdquo; · &ldquo;$800 for car repairs&rdquo; ·
+              &ldquo;save for a trip home&rdquo;
             </p>
             <button type="submit" className="sw-primary" disabled={thinking}>
               {thinking ? "Reading that…" : "Continue"}
@@ -900,6 +906,7 @@ export function StewardApp({
   const [buyOpen, setBuyOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
   const [splitting, setSplitting] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
   const [paydayDismissed, setPaydayDismissed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -1003,6 +1010,7 @@ export function StewardApp({
               setTab("activity");
             }}
             onAsk={() => setAskOpen(true)}
+            onSettings={() => setSettingsOpen(true)}
           />
         )}
         {tab === "plan" && (
@@ -1037,6 +1045,20 @@ export function StewardApp({
           <Receipt size={19} /><span>Activity</span>
         </button>
       </nav>
+
+      {settingsOpen && (
+        <SettingsSheet
+          workspace={workspace}
+          update={update}
+          onClose={() => setSettingsOpen(false)}
+          onReset={async () => {
+            // Clear the stored workspace, then return to first run. Without
+            // this there is no way back to Connect once anything is saved.
+            await fetch("/api/steward", { method: "DELETE" }).catch(() => undefined);
+            window.location.reload();
+          }}
+        />
+      )}
 
       {splitting && (() => {
         const row = workspace.transactions.find((entry) => entry.id === splitting);

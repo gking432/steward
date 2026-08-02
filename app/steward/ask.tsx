@@ -9,7 +9,7 @@
  * guard in lib/model/ai.ts discards any figure it invents.
  *
  * The loop:
- *   "I want a golf net"      → claim created, plan recomputed, date quoted
+ *   "I want to pay off my card" → claim created, plan recomputed, date quoted
  *   "want it sooner?"        → priced in real cuts, each one applyable
  *   "what about this paycheck?" → the plan, as sentences
  *
@@ -42,10 +42,12 @@ type Message = {
   options?: Acceleration;
 };
 
+// Deliberately ordinary. These are the first words most people will read, so
+// they should sound like anyone's money — not one person's hobbies.
 const STARTERS = [
   "What should this paycheck do?",
-  "I want a golf net",
-  "Can I buy a $90 keyboard?",
+  "I want to pay off my credit card",
+  "Can I afford a $400 car repair?",
 ];
 
 let seq = 0;
