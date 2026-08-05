@@ -254,6 +254,46 @@ test("a bucket created after load is given a legacy home rather than dropped", (
   assert.deepEqual(toLegacy(toModel(written)), written);
 });
 
+test("a project created after load keeps its linked claim after reload", () => {
+  const model = toModel(goldenWorkspace());
+  const withProject = {
+    ...model,
+    projects: [...model.projects, { id: "project:custom-office", name: "Home office" }],
+    claims: [
+      ...model.claims,
+      {
+        id: "claim:custom-office",
+        name: "Home office",
+        kind: "purchase" as const,
+        projectId: "project:custom-office",
+        targetAmount: 900,
+        fundedAmount: 0,
+        rank: model.claims.length,
+        status: "active" as const,
+        horizon: "arrival" as const,
+        divisible: false,
+        delayCost: { type: "none" as const },
+        protected: false,
+      },
+    ],
+  };
+  const reloaded = toModel(toLegacy(withProject));
+  assert.equal(reloaded.projects.find((project) => project.name === "Home office")?.id, "project:custom-office");
+  assert.equal(
+    reloaded.claims.find((claim) => claim.name === "Home office")?.projectId,
+    "project:custom-office",
+  );
+});
+
+test("removing an existing bucket survives conversion instead of crashing", () => {
+  const model = toModel(goldenWorkspace());
+  const removedId = model.buckets.find((bucket) => bucket.kind === "spend")!.id;
+  const reloaded = toModel(
+    toLegacy({ ...model, buckets: model.buckets.filter((bucket) => bucket.id !== removedId) }),
+  );
+  assert.equal(reloaded.buckets.some((bucket) => bucket.id === removedId), false);
+});
+
 test("renaming a spend bucket survives a save, and does not move its category", () => {
   // Regression. Legacy `Budget` had no name field, so every spend-bucket rename
   // silently reverted on the next save — the user retyped it and watched it

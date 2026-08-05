@@ -19,7 +19,7 @@
  * grouping exists to answer.
  */
 
-import { Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { formatDate, formatMoney, planCycle, allocate } from "../../lib/model/engine";
 import type { Workspace } from "../../lib/model/types";
@@ -57,6 +57,11 @@ export function BucketsScreen({
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [newKind, setNewKind] = useState<"everyday" | "bill" | "goal" | "project">("everyday");
+  const [newName, setNewName] = useState("");
+  const [newAmount, setNewAmount] = useState("");
+  const [newDueDate, setNewDueDate] = useState("");
 
   const { rows, income } = useMemo(() => {
     const plan = planCycle(workspace, today);
@@ -149,6 +154,85 @@ export function BucketsScreen({
     }));
   };
 
+  const add = () => {
+    const name = newName.trim();
+    const amount = Number(newAmount);
+    if (!name || !Number.isFinite(amount) || amount <= 0 || (newKind === "bill" && !newDueDate)) {
+      return;
+    }
+    const stamp = Date.now().toString(36);
+    update((current) => {
+      if (newKind === "everyday") {
+        return {
+          ...current,
+          buckets: [
+            ...current.buckets,
+            {
+              id: `spend:custom-${stamp}`,
+              kind: "spend" as const,
+              name,
+              category: name,
+              essential: false,
+              source: "manual" as const,
+              perCycle: amount,
+              rollover: "sweep" as const,
+            },
+          ],
+        };
+      }
+      if (newKind === "bill") {
+        return {
+          ...current,
+          buckets: [
+            ...current.buckets,
+            {
+              id: `reserve:custom-${stamp}`,
+              kind: "reserve" as const,
+              name,
+              essential: true,
+              source: "manual" as const,
+              amountDue: amount,
+              dueDate: newDueDate,
+              reserved: 0,
+              frequency: "monthly" as const,
+              autopay: false,
+            },
+          ],
+        };
+      }
+
+      const projectId = newKind === "project" ? `project:custom-${stamp}` : undefined;
+      return {
+        ...current,
+        projects: projectId
+          ? [...current.projects, { id: projectId, name }]
+          : current.projects,
+        claims: [
+          ...current.claims,
+          {
+            id: `claim:custom-${stamp}`,
+            name,
+            kind: newKind === "project" ? ("purchase" as const) : ("fund" as const),
+            projectId,
+            targetAmount: amount,
+            fundedAmount: 0,
+            rank: current.claims.filter((claim) => claim.status === "active").length,
+            status: "active" as const,
+            horizon: "arrival" as const,
+            divisible: newKind !== "project",
+            delayCost: { type: "none" as const },
+            protected: false,
+          },
+        ],
+      };
+    });
+    setAdding(false);
+    setNewName("");
+    setNewAmount("");
+    setNewDueDate("");
+    setNewKind("everyday");
+  };
+
   return (
     <div className={mode === "review" ? "bk-screen review" : "bk-screen"}>
       <header className="bk-head">
@@ -235,19 +319,21 @@ export function BucketsScreen({
                           aria-label={`Amount for ${row.name}`}
                         />
                       </label>
-                      <button
-                        className="bk-icon confirm"
-                        onClick={() => {
-                          if (draft.trim()) rename(row, draft.trim());
-                          setEditing(null);
-                        }}
-                        aria-label="Save"
-                      >
-                        <Check size={15} />
-                      </button>
-                      <button className="bk-icon" onClick={() => remove(row)} aria-label={`Remove ${row.name}`}>
-                        <Trash2 size={15} />
-                      </button>
+                      <div className="bk-edit-actions">
+                        <button
+                          className="bk-icon confirm"
+                          onClick={() => {
+                            if (draft.trim()) rename(row, draft.trim());
+                            setEditing(null);
+                          }}
+                          aria-label="Save"
+                        >
+                          <Check size={15} />
+                        </button>
+                        <button className="bk-icon" onClick={() => remove(row)} aria-label={`Remove ${row.name}`}>
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -293,9 +379,49 @@ export function BucketsScreen({
       )}
 
       {mode === "plan" && (
-        <button className="bk-add">
-          <Plus size={15} /> Add a bucket
-        </button>
+        adding ? (
+          <section className="bk-new" aria-label="Add to your plan">
+            <header>
+              <div>
+                <span className="bk-eyebrow">Add to your plan</span>
+                <h2>What kind of money is this?</h2>
+              </div>
+              <button className="bk-icon" onClick={() => setAdding(false)} aria-label="Cancel adding bucket">
+                <X size={16} />
+              </button>
+            </header>
+            <div className="bk-kind" role="group" aria-label="Bucket type">
+              {(["everyday", "bill", "goal", "project"] as const).map((kind) => (
+                <button
+                  key={kind}
+                  className={newKind === kind ? "active" : ""}
+                  onClick={() => setNewKind(kind)}
+                >
+                  {kind === "everyday" ? "Everyday" : kind[0].toUpperCase() + kind.slice(1)}
+                </button>
+              ))}
+            </div>
+            <label>
+              <span>Name</span>
+              <input value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Gym, dog care, new laptop…" />
+            </label>
+            <label>
+              <span>{newKind === "everyday" ? "Each paycheck" : newKind === "bill" ? "Monthly amount" : "Target amount"}</span>
+              <input type="number" inputMode="decimal" value={newAmount} onChange={(event) => setNewAmount(event.target.value)} placeholder="0" />
+            </label>
+            {newKind === "bill" && (
+              <label>
+                <span>Next due date</span>
+                <input type="date" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} />
+              </label>
+            )}
+            <button className="bk-primary" onClick={add}>Add to plan</button>
+          </section>
+        ) : (
+          <button className="bk-add" onClick={() => setAdding(true)}>
+            <Plus size={15} /> Add a bucket
+          </button>
+        )
       )}
     </div>
   );

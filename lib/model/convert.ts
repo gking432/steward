@@ -303,6 +303,10 @@ export function toModel(state: StewardState): Workspace {
     ...state.wishlist.map((item, index) =>
       withConfirmed(claimFromWish(item, state.goals.length + index)),
     ),
+    // Debt payoff claims are derived from connected accounts rather than
+    // stored as legacy goals, but confirmed paycheck allocations still need
+    // to survive a save/reload just like every other claim allocation.
+    ...derivedPayoffClaims(state, state.goals.length + state.wishlist.length).map(withConfirmed),
   ];
 
   const legacy: LegacyRemnant = {
@@ -350,7 +354,7 @@ export function toModel(state: StewardState): Workspace {
       ...state.budgets.map((budget) => bucketFromBudget(budget, state.profile.payFrequency)),
       ...derivedDebtMinimumBuckets(state),
     ],
-    claims: [...storedClaims, ...derivedPayoffClaims(state, storedClaims.length)],
+    claims: storedClaims,
     projects: state.projects.map(projectFrom),
     allocations: storedAllocations.map((row) => ({
       id: row.id,
@@ -403,10 +407,11 @@ export function toLegacy(workspace: Workspace): StewardState {
   const claimById = new Map(workspace.claims.map((claim) => [claim.id, claim]));
   const projectById = new Map(workspace.projects.map((project) => [project.id, project]));
 
-  const bills: Bill[] = legacy.order.bills.map((id) => {
-    const bucket = bucketById.get(`reserve:${id}`)!;
+  const bills: Bill[] = legacy.order.bills.flatMap((id) => {
+    const bucket = bucketById.get(`reserve:${id}`);
+    if (!bucket) return [];
     const meta = (legacy.billMeta[id] ?? {}) as { paid?: boolean };
-    return compact({
+    return [compact({
       id,
       name: bucket.name,
       amount: bucket.amountDue ?? 0,
@@ -416,11 +421,12 @@ export function toLegacy(workspace: Workspace): StewardState {
       essential: bucket.essential,
       accountId: bucket.accountId ?? "",
       paid: meta.paid,
-    });
+    })];
   });
 
-  const budgets: Budget[] = legacy.order.budgets.map((id) => {
-    const bucket = bucketById.get(`spend:${id}`)!;
+  const budgets: Budget[] = legacy.order.budgets.flatMap((id) => {
+    const bucket = bucketById.get(`spend:${id}`);
+    if (!bucket) return [];
     const meta = (legacy.budgetMeta[id] ?? {}) as {
       planned?: number;
       actual?: number;
@@ -429,7 +435,12 @@ export function toLegacy(workspace: Workspace): StewardState {
       paycheckAmount?: number;
     };
     const category = bucket.category ?? bucket.name;
-    return compact({
+    const originalPerCycle =
+      meta.paycheckAmount ??
+      (meta.planned ?? 0) / paychecksPerMonth(workspace.profile.payFrequency);
+    const currentPerCycle = bucket.perCycle ?? 0;
+    const changed = Math.abs(currentPerCycle - originalPerCycle) > 0.005;
+    return [compact({
       id,
       category,
       // Only written once the name diverges, so untouched workspaces round-trip
@@ -440,8 +451,10 @@ export function toLegacy(workspace: Workspace): StewardState {
       cadence: meta.cadence ?? "Monthly",
       essential: bucket.essential,
       source: meta.source,
-      paycheckAmount: meta.paycheckAmount,
-    });
+      // Preserve untouched legacy records byte-for-byte, but do not throw
+      // away a bucket amount the user negotiated or edited in the new model.
+      paycheckAmount: changed ? currentPerCycle : meta.paycheckAmount,
+    })];
   });
 
   const goals: Goal[] = legacy.order.goals.map((id) => {
@@ -487,6 +500,30 @@ export function toLegacy(workspace: Workspace): StewardState {
       tasks: meta.tasks as LegacyProject["tasks"],
     });
   });
+
+  // Projects created in the new Plan screen are absent from the legacy order.
+  // Give them a stored home so their linked claims keep their grouping after a
+  // reload instead of falling back into Goals.
+  const knownProjects = new Set(legacy.order.projects.map((id) => `project:${id}`));
+  for (const project of workspace.projects) {
+    if (isDerived(project.id) || knownProjects.has(project.id)) continue;
+    projects.push(
+      compact({
+        id: stripPrefix(project.id, "project:"),
+        name: project.name,
+        description: project.description ?? "",
+        category: project.category ?? "",
+        priority: "Medium",
+        status: "Active",
+        targetDate: "",
+        estimatedCost: 0,
+        actualCost: 0,
+        progress: 0,
+        nextAction: "",
+        tasks: [],
+      }) as LegacyProject,
+    );
+  }
 
   const wishlist: WishlistItem[] = legacy.order.wishlist.map((id) => {
     const claim = claimById.get(`claim:${id}`)!;

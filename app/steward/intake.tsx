@@ -20,7 +20,7 @@ import { ArrowUp, Check, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { allocate, formatMoney, planCycle } from "../../lib/model/engine";
 import {
-  applyIntake,
+  acceptIntake,
   applyTweak,
   cancelledSubscriptions,
   intakeProgress,
@@ -195,7 +195,7 @@ export function IntakeScreen({
   // The conversation is over: fold it in and hand off to the app.
   useEffect(() => {
     if (step === null && scanComplete && answers.length > 0) {
-      onDone(applyIntake(draft, today, answers));
+      onDone(acceptIntake(draft, today, answers));
     }
   }, [step, scanComplete, answers, draft, today, onDone]);
 
@@ -240,9 +240,15 @@ export function IntakeScreen({
         <span className="ik-badge">
           <Sparkles size={13} /> Steward
         </span>
-        <span className="ik-progress" aria-label={`Step ${progress.phase} of ${progress.of}`}>
+        <span
+          className="ik-progress"
+          aria-label={`Step ${Math.min(progress.of, progress.phase + 1)} of ${progress.of}`}
+        >
           {Array.from({ length: progress.of }, (_, index) => (
-            <i key={index} className={index < progress.phase ? "done" : ""} />
+            <i
+              key={index}
+              className={index < progress.phase ? "done" : index === progress.phase ? "current" : ""}
+            />
           ))}
         </span>
       </header>

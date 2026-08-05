@@ -30,7 +30,12 @@ import {
 } from "./observations";
 import type { Workspace } from "./types";
 import { formatMoney } from "./engine";
-import { promoteClaim } from "./decide";
+import {
+  buildPaydayProposal,
+  confirmProposal,
+  promoteClaim,
+  supersedeStaleProposals,
+} from "./decide";
 
 /** Most questions Steward will ask in one phase before moving on. */
 const MAX_INCOME_QUESTIONS = 2;
@@ -347,7 +352,7 @@ export function nextStep(
       phase: "done",
       kind: "handoff",
       prompt:
-        "Your dashboard tracks spending as it happens. Your plan is the north star — it shows exactly how you get the things you asked for. Any time you want to move faster, ask me where to cut.",
+        "Steward will keep this plan updated as money moves. You can always see where you stand, ask what is safe, or change what matters most.",
       choices: ["Got it"],
       multi: false,
     };
@@ -473,6 +478,32 @@ export function applyIntake(
     },
     claims: [...workspace.claims, ...claims],
   };
+}
+
+/**
+ * Accept the plan the user just reviewed in first run.
+ *
+ * The intake plan and the first payday proposal describe the same paycheck.
+ * Treating them as two separate approvals made Steward ask the user to approve
+ * identical numbers twice. Acceptance now commits the current proposal in the
+ * same transaction that completes onboarding.
+ */
+export function acceptIntake(
+  workspace: Workspace,
+  today: string,
+  answers: IntakeAnswer[],
+  now = new Date().toISOString(),
+): Workspace {
+  const accepted = applyIntake(workspace, today, answers);
+  const proposal = buildPaydayProposal(accepted, today);
+  if (!proposal || proposal.freeCapacity <= 0 || proposal.lines.length === 0) {
+    return accepted;
+  }
+  return confirmProposal(
+    supersedeStaleProposals(accepted, proposal.cycleId),
+    proposal,
+    now,
+  );
 }
 
 /**

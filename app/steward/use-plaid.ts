@@ -37,6 +37,26 @@ export function usePlaidConnect(onState: (state: StewardState) => void) {
   const [status, setStatus] = useState<PlaidStatus>("idle");
   const [error, setError] = useState("");
 
+  const sync = useCallback(async () => {
+    setError("");
+    setStatus("syncing");
+    try {
+      const response = await fetch("/api/plaid/sync", { method: "POST" });
+      const payload = await response.json();
+      if (payload.state) onState(payload.state);
+      if (!response.ok) {
+        setError(payload.error ?? "Your transaction history is still arriving.");
+        return false;
+      }
+      return true;
+    } catch {
+      setError("Steward couldn't refresh your bank activity right now.");
+      return false;
+    } finally {
+      setStatus("idle");
+    }
+  }, [onState]);
+
   const connect = useCallback(async () => {
     setError("");
     setStatus("opening");
@@ -87,17 +107,7 @@ export function usePlaidConnect(onState: (state: StewardState) => void) {
           }
           if (payload.state) onState(payload.state);
 
-          setStatus("syncing");
-          const sync = await fetch("/api/plaid/sync", { method: "POST" });
-          const syncPayload = await sync.json();
-          if (syncPayload.state) onState(syncPayload.state);
-          if (!sync.ok) {
-            setError(
-              syncPayload.error ??
-                "Your accounts connected, but transaction history is still arriving.",
-            );
-          }
-          setStatus("idle");
+          await sync();
         },
         onExit: () => setStatus("idle"),
       }).open();
@@ -105,7 +115,7 @@ export function usePlaidConnect(onState: (state: StewardState) => void) {
       setError("Steward couldn't open the secure bank connection.");
       setStatus("idle");
     }
-  }, [onState]);
+  }, [onState, sync]);
 
-  return { connect, status, error };
+  return { connect, sync, status, error };
 }

@@ -19,7 +19,7 @@
 import { Camera, Check, Plus, Trash2, Upload, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { splitDifference, splitIsBalanced, splitTransaction, type SplitLine } from "../../lib/model/decide";
-import { formatMoney } from "../../lib/model/engine";
+import { formatDate, formatMoney } from "../../lib/model/engine";
 import type { Transaction, Workspace } from "../../lib/model/types";
 import "./split.css";
 
@@ -53,10 +53,7 @@ export function SplitSheet({
   const [lines, setLines] = useState<SplitLine[]>(
     transaction.split?.length
       ? transaction.split
-      : [
-          { category: transaction.category, amount: transaction.amount },
-          { category: categories.find((c) => c !== transaction.category) ?? transaction.category, amount: 0 },
-        ],
+      : [{ category: transaction.category, amount: transaction.amount }],
   );
   const [reading, setReading] = useState(false);
   const [note, setNote] = useState("");
@@ -64,7 +61,8 @@ export function SplitSheet({
   const uploadRef = useRef<HTMLInputElement>(null);
 
   const difference = splitDifference(transaction.amount, lines);
-  const balanced = splitIsBalanced(transaction.amount, lines.filter((line) => line.amount > 0));
+  const positiveLines = lines.filter((line) => line.amount > 0);
+  const balanced = positiveLines.length > 1 && splitIsBalanced(transaction.amount, positiveLines);
 
   const setLine = (index: number, patch: Partial<SplitLine>) =>
     setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
@@ -127,7 +125,7 @@ export function SplitSheet({
           <div>
             <strong>{transaction.merchant}</strong>
             <small>
-              {formatMoney(transaction.amount)} · {transaction.date}
+              {formatMoney(transaction.amount)} · {formatDate(transaction.date)}
             </small>
           </div>
           <button onClick={onClose} aria-label="Close">

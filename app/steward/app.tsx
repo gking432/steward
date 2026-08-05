@@ -100,15 +100,16 @@ function LedgerScreen({
   onSplit: (transactionId: string) => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
+  const [categoryDraft, setCategoryDraft] = useState("");
   const cycle = currentCycle(workspace, today);
   const plan = planCycle(workspace, today);
   const [open, setOpen] = useState<string | null>(focusBucket?.id ?? null);
   const categories = Array.from(
     new Set([
       ...workspace.buckets.filter((b) => b.kind === "spend").map((b) => b.category ?? b.name),
-      ...workspace.transactions.map((t) => t.category),
+      ...workspace.transactions.filter((t) => t.type === "expense").map((t) => t.category),
     ]),
-  ).filter(Boolean).sort();
+  ).filter((category) => Boolean(category) && category !== "Uncategorized").sort();
 
   /**
    * Correcting a category is the whole promise of Ledger: you can see where
@@ -129,15 +130,15 @@ function LedgerScreen({
   const spendBuckets = workspace.buckets.filter((bucket) => bucket.kind === "spend");
 
   return (
-    <div className="sw-screen">
+    <div className="sw-screen sw-ledger-screen">
       <section className="sw-position compact">
         <span className="sw-eyebrow">
           This paycheck · {formatDate(cycle.start)} – {formatDate(cycle.end)}
         </span>
         <div className="sw-inout">
           <div><small>In</small><strong>{formatMoney(income)}</strong></div>
-          <div><small>Out</small><strong>{formatMoney(out)}</strong></div>
-          <div><small>Reserved</small><strong>{formatMoney(plan.reservesTotal)}</strong></div>
+          <div><small>Spent</small><strong>{formatMoney(out)}</strong></div>
+          <div><small>Bills planned</small><strong>{formatMoney(plan.reservesTotal)}</strong></div>
         </div>
       </section>
 
@@ -151,7 +152,7 @@ function LedgerScreen({
         <header className="sw-block-head"><h2>How this paycheck breaks down</h2></header>
         <dl className="sw-math">
           <div><dt>Paycheck</dt><dd>{formatMoney(plan.income)}</dd></div>
-          <div><dt>Bills &amp; minimums reserved</dt><dd>−{formatMoney(plan.reservesTotal)}</dd></div>
+          <div><dt>Bills &amp; minimums planned</dt><dd>−{formatMoney(plan.reservesTotal)}</dd></div>
           <div><dt>Everyday buckets</dt><dd>−{formatMoney(plan.spendTotal)}</dd></div>
           {plan.bufferTopUp > 0 && (
             <div><dt>Buffer top-up</dt><dd>−{formatMoney(plan.bufferTopUp)}</dd></div>
@@ -188,7 +189,7 @@ function LedgerScreen({
                       {activity.rows.map((row) => (
                         <div className="sw-drill-row" key={row.id}>
                           <span>{row.merchant}</span>
-                          <small>{row.date}</small>
+                          <small>{formatDate(row.date)}</small>
                           <b>{formatMoney(row.amount)}</b>
                         </div>
                       ))}
@@ -215,7 +216,7 @@ function LedgerScreen({
             <div>
               <strong>{entry.bucket.name}</strong>
               <small>
-                {formatMoney(entry.bucket.reserved ?? 0)} of {formatMoney(entry.bucket.amountDue ?? 0)} reserved
+                {formatMoney(entry.required)} planned this paycheck · {formatMoney(entry.bucket.amountDue ?? 0)} total
                 {entry.bucket.dueDate ? ` · due ${formatDate(entry.bucket.dueDate)}` : ""}
                 {entry.cyclesRemaining > 1 ? ` · ${entry.cyclesRemaining} paychecks to go` : ""}
               </small>
@@ -232,13 +233,19 @@ function LedgerScreen({
             <div key={row.id}>
               <button
                 className={row.needsReview ? "sw-tx needs-review" : "sw-tx"}
-                onClick={() => setEditing(editing === row.id ? null : row.id)}
+                onClick={() => {
+                  if (row.type !== "expense") return;
+                  const opening = editing !== row.id;
+                  setEditing(opening ? row.id : null);
+                  setCategoryDraft(opening && row.category !== "Uncategorized" ? row.category : "");
+                }}
+                aria-expanded={row.type === "expense" ? editing === row.id : undefined}
               >
                 <span className="sw-tx-mark">{row.merchant.slice(0, 1).toUpperCase()}</span>
                 <div>
                   <strong>{row.merchant}</strong>
                   <small>
-                    {row.category} · {row.date}
+                    {row.category} · {formatDate(row.date)}
                     {row.needsReview ? " · needs a category" : ""}
                   </small>
                 </div>
@@ -253,8 +260,8 @@ function LedgerScreen({
                     {categories.map((category) => (
                       <button
                         key={category}
-                        className={category === row.category ? "sw-pick active" : "sw-pick"}
-                        onClick={() => correct(row.id, category, false)}
+                        className={category === categoryDraft ? "sw-pick active" : "sw-pick"}
+                        onClick={() => setCategoryDraft(category)}
                       >
                         {category}
                       </button>
@@ -262,9 +269,17 @@ function LedgerScreen({
                   </div>
                   <button
                     className="sw-secondary"
-                    onClick={() => correct(row.id, row.category, true)}
+                    disabled={!categoryDraft || categoryDraft === row.category}
+                    onClick={() => correct(row.id, categoryDraft, false)}
                   >
-                    Always put {row.merchant} in {row.category}
+                    Change this transaction
+                  </button>
+                  <button
+                    className="sw-secondary"
+                    disabled={!categoryDraft}
+                    onClick={() => correct(row.id, categoryDraft, true)}
+                  >
+                    Always put {row.merchant} in {categoryDraft || "this category"}
                   </button>
                   <button className="sw-secondary" onClick={() => onSplit(row.id)}>
                     {row.split?.length
@@ -1053,6 +1068,10 @@ export function StewardApp({
           workspace={workspace}
           update={update}
           onClose={() => setSettingsOpen(false)}
+          bankStatus={plaid.status}
+          bankError={plaid.error}
+          onConnectBank={plaid.connect}
+          onSyncBanks={() => { void plaid.sync(); }}
           onReset={async () => {
             // Clear the stored workspace, then return to first run. Without
             // this there is no way back to Connect once anything is saved.

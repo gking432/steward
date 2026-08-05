@@ -97,6 +97,20 @@ test("confirmed allocations survive a save and reload", () => {
   assert.ok(reloaded.allocations.every((row) => row.status === "confirmed"));
 });
 
+test("a confirmed allocation to a connected debt survives reload", () => {
+  const before = persistable();
+  const proposal = buildPaydayProposal(before, FIXTURE_TODAY)!;
+  const debtLine = proposal.lines.find((line) => line.claim.kind === "payoff")!;
+  assert.ok(debtLine.amount > 0, "fixture directs part of the paycheck to debt");
+
+  const confirmed = confirmProposal(before, proposal, "2026-08-10T12:00:00.000Z");
+  const reloaded = toModel(toLegacy(confirmed));
+  assert.equal(
+    reloaded.claims.find((claim) => claim.id === debtLine.claim.id)!.fundedAmount,
+    debtLine.amount,
+  );
+});
+
 test("confirming twice does not double-fund the same cycle", () => {
   const proposal = buildPaydayProposal(persistable(), FIXTURE_TODAY)!;
   const once = confirmProposal(persistable(), proposal, "2026-08-10T12:00:00.000Z");

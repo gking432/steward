@@ -23,6 +23,8 @@
  * this young would promise something it cannot deliver (BLUEPRINT.md §K).
  */
 
+import type { Claim, Workspace } from "./types";
+
 /* ------------------------------------------------------------- numerals -- */
 
 /** Every number in a string, normalized: "$1,388.00" → "1388". */
@@ -98,6 +100,76 @@ export type IntentDraft = {
   wantBy: string | null;
   kind: "purchase" | "fund" | "payoff" | "commitment";
 };
+
+export type DebtResolution =
+  | { kind: "match"; claim: Claim }
+  | { kind: "ambiguous"; claims: Claim[] }
+  | { kind: "none"; claims: [] };
+
+const debtWords = new Set([
+  "a", "account", "card", "credit", "debt", "i", "loan", "my", "off",
+  "pay", "paid", "please", "the", "this", "to", "want",
+]);
+
+const words = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+/**
+ * Resolve ordinary language such as "my credit card" against debts Steward
+ * already knows. A single known debt can be inferred safely; several debts
+ * remain an explicit choice. No balance or account is ever invented.
+ */
+export function resolveDebtMention(
+  workspace: Workspace,
+  utterance: string,
+  candidateIds?: string[],
+): DebtResolution {
+  const allowed = candidateIds ? new Set(candidateIds) : null;
+  let claims = workspace.claims.filter(
+    (claim) =>
+      claim.kind === "payoff" &&
+      claim.status !== "complete" &&
+      claim.targetAmount > claim.fundedAmount &&
+      (!allowed || allowed.has(claim.id)),
+  );
+  if (!claims.length) return { kind: "none", claims: [] };
+
+  const utteranceWords = new Set(words(utterance));
+  if (utteranceWords.has("card") || utteranceWords.has("credit")) {
+    const cards = claims.filter((claim) => {
+      const account = workspace.accounts.find((entry) => entry.id === claim.linkedAccountId);
+      return account?.type === "Credit card" || claim.name.toLowerCase().includes("card");
+    });
+    if (cards.length) claims = cards;
+  } else if (utteranceWords.has("loan")) {
+    const loans = claims.filter((claim) => {
+      const account = workspace.accounts.find((entry) => entry.id === claim.linkedAccountId);
+      return account?.type === "Loan" || claim.name.toLowerCase().includes("loan");
+    });
+    if (loans.length) claims = loans;
+  }
+  const meaningful = [...utteranceWords].filter((word) => !debtWords.has(word));
+  const ranked = claims
+    .map((claim) => {
+      const claimWords = words(claim.name);
+      const exact = utterance.toLowerCase().includes(claim.name.toLowerCase());
+      const overlap = meaningful.filter((word) => claimWords.includes(word)).length;
+      return { claim, score: exact ? 100 : overlap };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (ranked.length && (ranked.length === 1 || ranked[0].score > ranked[1].score)) {
+    return { kind: "match", claim: ranked[0].claim };
+  }
+  if (claims.length === 1) return { kind: "match", claim: claims[0] };
+  return { kind: "ambiguous", claims };
+}
 
 /* ------------------------------------------------------------ fallbacks -- */
 

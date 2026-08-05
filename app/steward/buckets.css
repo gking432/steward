@@ -15,6 +15,14 @@
   color: #f6f8f4;
 }
 
+/* The shell's generic heading/strong rules are more specific than the bucket
+   palette. Keep every primary label readable on the immersive surface. */
+.sw-app .bk-screen h1,
+.sw-app .bk-screen h2,
+.sw-app .bk-screen strong {
+  color: #f6f8f4;
+}
+
 .bk-head {
   padding: 4px 4px 18px;
 }
@@ -177,9 +185,10 @@
   align-items: center;
   gap: 8px;
   grid-column: 1 / -1;
-  grid-template-columns: 1fr 106px 44px 44px;
+  grid-template-columns: minmax(0, 1fr) 106px;
 }
 .bk-edit input {
+  min-width: 0;
   min-height: 44px;
   border: 1px solid rgba(246, 248, 244, 0.22);
   border-radius: 12px;
@@ -205,6 +214,12 @@
   border: none;
   background: none;
   padding-left: 0;
+}
+.bk-edit-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .bk-approve {
@@ -236,6 +251,67 @@
   color: rgba(246, 248, 244, 0.55);
   text-align: center;
   font-size: 11.5px;
+}
+
+.bk-new {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.09);
+  padding: 15px;
+}
+.bk-new > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bk-new h2 {
+  margin-top: 3px;
+  font-size: 17px;
+  letter-spacing: -0.025em;
+}
+.bk-kind {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(4, 1fr);
+}
+.bk-kind button {
+  min-height: 42px;
+  border: 1px solid rgba(246, 248, 244, 0.2);
+  border-radius: 11px;
+  color: rgba(246, 248, 244, 0.75);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.bk-kind button.active {
+  border-color: transparent;
+  background: #f6f8f4;
+  color: #27563f;
+}
+.bk-new label {
+  display: grid;
+  gap: 5px;
+}
+.bk-new label span {
+  color: rgba(246, 248, 244, 0.68);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.bk-new input {
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid rgba(246, 248, 244, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.09);
+  padding: 0 12px;
+  color: #f6f8f4;
+  font-size: 14.5px;
+}
+
+@media (max-width: 360px) {
+  .bk-kind { grid-template-columns: 1fr 1fr; }
 }
 
 /* Desktop is a wider composition, not a phone column in a window. */

@@ -78,7 +78,7 @@ export function evaluatePurchase(
   checks.push({
     label: "Bills and minimums",
     detail: nextBill
-      ? `${formatMoney(plan.reservesTotal)} reserved this cycle. Next up: ${nextBill.bucket.name} on ${nextBill.bucket.dueDate}.`
+      ? `${formatMoney(plan.reservesTotal)} reserved this cycle. Next up: ${nextBill.bucket.name} on ${formatDate(nextBill.bucket.dueDate ?? null)}.`
       : `${formatMoney(plan.reservesTotal)} reserved this cycle.`,
     status: "ok",
   });
@@ -142,7 +142,7 @@ export function evaluatePurchase(
   const tradeoff = delayed.length
     ? delayed
         .slice(0, 2)
-        .map((change) => `${change.name} moves to ${change.after ?? "beyond a year"}`)
+        .map((change) => `${change.name} moves to ${change.after ? formatDate(change.after) : "beyond a year"}`)
         .join(" · ")
     : answer === "wait"
       ? `${formatMoney(price)} is more than the ${formatMoney(plan.freeCapacity)} free this cycle.`

@@ -53,6 +53,9 @@
 .ik-progress i.done {
   background: #f6f8f4;
 }
+.ik-progress i.current {
+  background: rgba(246, 248, 244, 0.62);
+}
 
 /* ------------------------------------------------------------ thread --- */
 

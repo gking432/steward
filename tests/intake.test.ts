@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FIXTURE_TODAY, goldenWorkspace } from "../fixtures/golden-workspace";
-import { toModel } from "../lib/model/convert";
+import { toLegacy, toModel } from "../lib/model/convert";
+import { buildPaydayProposal } from "../lib/model/decide";
 import {
   intakeComplete,
   intakeProgress,
   isPlannable,
   nextStep,
   applyIntake,
+  acceptIntake,
   applyTweak,
   cancelledSubscriptions,
   CHANGE_CHOICE,
@@ -375,6 +377,43 @@ test("cutting a bucket frees real money and says so", () => {
   assert.ok(after < before, "the bucket actually shrank");
   assert.match(result.summary, /drops to/);
   assert.match(result.summary, /freeing/);
+});
+
+test("a negotiated bucket amount survives acceptance, storage, and reload", () => {
+  const workspace = base();
+  const choice = tweakChoices(workspace).find((entry) => entry.startsWith("Spend less on "))!;
+  const name = choice.slice("Spend less on ".length);
+  const tweaked = applyTweak(workspace, FIXTURE_TODAY, choice)!.workspace;
+  const negotiated = tweaked.buckets.find((entry) => entry.name === name)!.perCycle;
+  const answers = [
+    ...toPlan(tweaked),
+    { stepId: "plan", choice: "That works" },
+    { stepId: "handoff", choice: "Got it" },
+  ];
+
+  const reloaded = toModel(
+    toLegacy(acceptIntake(tweaked, FIXTURE_TODAY, answers, `${FIXTURE_TODAY}T12:00:00.000Z`)),
+  );
+  assert.equal(
+    reloaded.buckets.find((entry) => entry.name === name)!.perCycle,
+    negotiated,
+  );
+});
+
+test("accepting intake confirms the current plan so payday does not ask twice", () => {
+  const workspace = base();
+  const { answers } = runToCompletion(workspace);
+  const accepted = acceptIntake(
+    workspace,
+    FIXTURE_TODAY,
+    answers,
+    `${FIXTURE_TODAY}T12:00:00.000Z`,
+  );
+  const proposal = buildPaydayProposal(accepted, FIXTURE_TODAY)!;
+  assert.equal(proposal.confirmed, true);
+
+  const reloaded = toModel(toLegacy(accepted));
+  assert.equal(buildPaydayProposal(reloaded, FIXTURE_TODAY)!.confirmed, true);
 });
 
 test("backing out changes nothing at all", () => {

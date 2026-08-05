@@ -19,7 +19,7 @@
 
 import { ArrowUp, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { fallbackIntent } from "../../lib/model/ai";
+import { fallbackIntent, resolveDebtMention } from "../../lib/model/ai";
 import {
   accelerate,
   claimFromPurchase,
@@ -40,6 +40,7 @@ type Message = {
   /** A claim this message is about, so "sooner?" has something to act on. */
   claimId?: string;
   options?: Acceleration;
+  debtChoices?: { id: string; name: string }[];
 };
 
 // Deliberately ordinary. These are the first words most people will read, so
@@ -73,6 +74,7 @@ export function AskScreen({
   ]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [pendingDebtIds, setPendingDebtIds] = useState<string[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -151,6 +153,34 @@ export function AskScreen({
     });
   };
 
+  const answerKnownDebt = (claimId: string) => {
+    const claim = workspace.claims.find((entry) => entry.id === claimId);
+    if (!claim || claim.kind !== "payoff") return;
+    const remaining = Math.max(0, claim.targetAmount - claim.fundedAmount);
+    const narrative = planNarrative(workspace, today);
+    const line = narrative?.lines.find((entry) => entry.claimId === claim.id);
+    const apr = claim.delayCost.type === "interest" ? claim.delayCost.apr : null;
+    setPendingDebtIds([]);
+    say({
+      from: "steward",
+      text: `${claim.name} has ${formatMoney(remaining)} left${apr === null ? "" : ` at ${apr.toFixed(2)}% APR`}.`,
+      lines: line
+        ? [`This paycheck: ${line.sentence}`]
+        : ["It is already in your plan, but the money ahead of it is spoken for this paycheck."],
+      claimId: claim.id,
+      options: accelerate(workspace, claim.id, today) ?? undefined,
+    });
+  };
+
+  const askWhichDebt = (claims: Workspace["claims"]) => {
+    setPendingDebtIds(claims.map((claim) => claim.id));
+    say({
+      from: "steward",
+      text: "Which one do you mean? I can use the balance and rate already on file.",
+      debtChoices: claims.map((claim) => ({ id: claim.id, name: claim.name })),
+    });
+  };
+
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text || thinking) return;
@@ -160,6 +190,31 @@ export function AskScreen({
 
     const lower = text.toLowerCase();
     try {
+      const isDebtIntent = /card|loan|debt|pay\s*off|paid off/.test(lower);
+      if (pendingDebtIds.length) {
+        const resolution = resolveDebtMention(workspace, text, pendingDebtIds);
+        if (resolution.kind === "match") {
+          answerKnownDebt(resolution.claim.id);
+          return;
+        }
+        if (resolution.kind === "ambiguous") {
+          askWhichDebt(resolution.claims);
+          return;
+        }
+      }
+
+      if (isDebtIntent) {
+        const resolution = resolveDebtMention(workspace, text);
+        if (resolution.kind === "match") {
+          answerKnownDebt(resolution.claim.id);
+          return;
+        }
+        if (resolution.kind === "ambiguous") {
+          askWhichDebt(resolution.claims);
+          return;
+        }
+      }
+
       if (/paycheck|plan|what should/.test(lower) && !/i want/.test(lower)) {
         await answerPlan();
       } else if (/can i (buy|afford)/.test(lower)) {
@@ -245,6 +300,16 @@ export function AskScreen({
                   <li key={line}>{line}</li>
                 ))}
               </ul>
+            )}
+
+            {message.debtChoices && (
+              <div className="ak-debt-choices">
+                {message.debtChoices.map((choice) => (
+                  <button key={choice.id} onClick={() => answerKnownDebt(choice.id)}>
+                    {choice.name}
+                  </button>
+                ))}
+              </div>
             )}
 
             {message.options && message.options.neededPerCycle > 0 && (

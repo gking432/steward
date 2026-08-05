@@ -502,6 +502,10 @@
   font-size: 13px;
   font-weight: 650;
 }
+.sw-secondary:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
 
 .sw-verdict { display: grid; gap: 14px; }
 .sw-answer { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
@@ -659,6 +663,66 @@
   .sw-overview { grid-template-columns: 1.05fr 1fr; grid-template-rows: auto 1fr auto; }
   .sw-overview > .sw-position { grid-column: 1 / -1; }
 }
+
+/* Activity is a detail screen, so it can scroll, but it still belongs to the
+   same calm green application instead of reverting to a white SaaS dashboard. */
+.sw-ledger-screen {
+  min-height: calc(100dvh - var(--sw-nav-height));
+  background: linear-gradient(180deg, #2f654d 0%, #27573f 100%);
+  padding: calc(16px + env(safe-area-inset-top)) 16px 24px;
+  color: #f6f8f4;
+}
+.sw-app .sw-ledger-screen h2,
+.sw-app .sw-ledger-screen strong,
+.sw-app .sw-ledger-screen b,
+.sw-app .sw-ledger-screen dt,
+.sw-app .sw-ledger-screen dd {
+  color: #f6f8f4;
+}
+.sw-ledger-screen .sw-position,
+.sw-ledger-screen .sw-block {
+  border-color: rgba(246, 248, 244, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+.sw-ledger-screen .sw-eyebrow,
+.sw-ledger-screen .sw-sub,
+.sw-ledger-screen .sw-muted,
+.sw-ledger-screen .sw-row small,
+.sw-ledger-screen .sw-ledger-head small,
+.sw-ledger-screen .sw-tx small,
+.sw-ledger-screen .sw-inout small,
+.sw-ledger-screen .sw-math dt,
+.sw-ledger-screen .sw-pct {
+  color: rgba(246, 248, 244, 0.64);
+}
+.sw-ledger-screen .sw-row,
+.sw-ledger-screen .sw-ledger-bucket,
+.sw-ledger-screen .sw-tx,
+.sw-ledger-screen .sw-math,
+.sw-ledger-screen .sw-math-total,
+.sw-ledger-screen .sw-drill-total {
+  border-color: rgba(246, 248, 244, 0.11);
+}
+.sw-ledger-screen .sw-bar,
+.sw-ledger-screen .sw-tx-mark,
+.sw-ledger-screen .sw-correct {
+  background: rgba(255, 255, 255, 0.1);
+}
+.sw-ledger-screen .sw-bar-fill { background: rgba(246, 248, 244, 0.86); }
+.sw-ledger-screen .sw-bar-fill.amber { background: #f0c08a; }
+.sw-ledger-screen .sw-pick,
+.sw-ledger-screen .sw-secondary {
+  border-color: rgba(246, 248, 244, 0.2);
+  background: rgba(255, 255, 255, 0.09);
+  color: #f6f8f4;
+}
+.sw-ledger-screen .sw-pick.active {
+  border-color: transparent;
+  background: #f6f8f4;
+  color: #27563f;
+}
+.sw-ledger-screen .sw-link { color: rgba(246, 248, 244, 0.82); }
 
 /* ---------------------------------------------------------------- payday */
 
@@ -860,4 +924,107 @@
   color: #f6f8f4;
   text-align: center;
   font-size: 11.5px;
+}
+
+/* Manual setup keeps the same immersive language as bank-connected first run.
+   It is a fallback path inside the app, not a website form floating on grey. */
+.sw-onboard {
+  min-height: 100dvh;
+  place-items: start stretch;
+  background: linear-gradient(180deg, #2f654d 0%, #24523c 100%);
+  padding:
+    calc(20px + env(safe-area-inset-top)) 18px
+    calc(20px + env(safe-area-inset-bottom));
+  color: #f6f8f4;
+}
+.sw-onboard-card {
+  width: 100%;
+  max-width: 520px;
+  margin: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+.sw-onboard-card h1,
+.sw-onboard-card h2,
+.sw-onboard-card dt,
+.sw-onboard-card dd {
+  color: #f6f8f4;
+}
+.sw-onboard-card p,
+.sw-onboard-card small,
+.sw-onboard-card .sw-eyebrow,
+.sw-onboard-card .sw-math dt,
+.sw-onboard-fields label > span,
+.sw-onboard-fields small {
+  color: rgba(246, 248, 244, 0.68);
+}
+.sw-onboard-fields input,
+.sw-onboard-fields select {
+  min-height: 52px;
+  border-color: rgba(246, 248, 244, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.09);
+  color: #f6f8f4;
+}
+.sw-onboard-card .sw-primary {
+  min-height: 54px;
+  border-radius: 16px;
+  background: #f6f8f4;
+  color: #27563f;
+}
+.sw-onboard-card .sw-pick {
+  min-height: 42px;
+  border-color: rgba(246, 248, 244, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f6f8f4;
+}
+.sw-onboard-card .sw-pick.active {
+  border-color: transparent;
+  background: #f6f8f4;
+  color: #27563f;
+}
+.sw-onboard-card .sw-math,
+.sw-onboard-card .sw-math-total {
+  border-color: rgba(246, 248, 244, 0.16);
+}
+
+/* Desktop gets a desktop navigation rail and a bounded working area. Mobile
+   keeps the bottom tab bar and all of its native-first behavior unchanged. */
+@media (min-width: 900px) {
+  .sw-main-full {
+    min-height: 100dvh;
+    padding: 0 0 0 92px;
+  }
+  .sw-main-full > .sw-screen {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 32px 40px 56px;
+  }
+  .sw-nav {
+    inset: 0 auto 0 0;
+    width: 92px;
+    align-content: center;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    border-top: 0;
+    border-right: 1px solid rgba(246, 248, 244, 0.12);
+    padding: 18px 10px;
+  }
+  .sw-nav > button:nth-child(1),
+  .sw-nav > button:nth-child(2),
+  .sw-nav > button:nth-child(3),
+  .sw-nav > button:nth-child(4) {
+    grid-column: 1;
+  }
+  .sw-nav button {
+    min-height: 58px;
+  }
+  .sw-fab {
+    width: 54px;
+    height: 54px;
+    margin: 8px 0;
+  }
 }
