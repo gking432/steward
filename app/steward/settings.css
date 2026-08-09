@@ -18,7 +18,9 @@
   max-height: 92dvh;
   overflow-y: auto;
   border-radius: 22px 22px 0 0;
-  background: #2f654d;
+  background:
+    radial-gradient(120% 80% at 50% 0%, #37704f 0%, transparent 60%),
+    linear-gradient(180deg, #2f654d 0%, #21503c 100%);
   padding: 18px 16px calc(22px + env(safe-area-inset-bottom));
   color: #f6f8f4;
 }
@@ -44,6 +46,7 @@
   background: rgba(255, 255, 255, 0.09);
   padding: 11px 12px;
 }
+.st-bank > div:last-child { min-width: 0; }
 .st-bank-icon {
   display: grid;
   width: 42px;
@@ -89,3 +92,8 @@
 @keyframes st-spin { to { transform: rotate(360deg); } }
 .st-danger button { border-color: rgba(240, 160, 138, 0.45); }
 .st-delete { background: rgba(240, 160, 138, 0.22) !important; }
+
+@media (max-width: 360px) {
+  .st-row { grid-template-columns: 1fr; }
+  .st-sheet { padding-inline: 14px; }
+}

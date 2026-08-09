@@ -24,7 +24,9 @@
   align-content: start;
   gap: 12px;
   grid-template-rows: auto auto auto auto 1fr auto;
-  background: linear-gradient(180deg, #2f654d 0%, #26563e 100%);
+  background:
+    radial-gradient(120% 80% at 50% 0%, #37704f 0%, transparent 60%),
+    linear-gradient(180deg, #2f654d 0%, #21503c 100%);
   /* No bottom safe-area inset: the nav below already owns it. */
   padding: calc(16px + env(safe-area-inset-top)) 16px 14px;
   color: #f6f8f4;
