@@ -913,10 +913,12 @@ export function StewardApp({
   initialState,
   syncWithServer = true,
   fixedToday,
+  demoMode = false,
 }: {
   initialState: StewardState;
   syncWithServer?: boolean;
   fixedToday?: string;
+  demoMode?: boolean;
 }) {
   const { workspace, update, loading, saveState, setWorkspaceFromServer } = useWorkspace(
     initialState,
@@ -928,7 +930,7 @@ export function StewardApp({
   const [splitting, setSplitting] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
-  const [paydayDismissed, setPaydayDismissed] = useState(false);
+  const [paydayDismissed, setPaydayDismissed] = useState(demoMode);
   const [addOpen, setAddOpen] = useState(false);
   const [debtClaimId, setDebtClaimId] = useState<string | null>(null);
   const [manualSetup, setManualSetup] = useState(false);
@@ -1009,7 +1011,14 @@ export function StewardApp({
   }
 
   return (
-    <div className="sw-app">
+    <div className={`sw-app${demoMode ? " sw-demo-mode" : ""}`}>
+      {demoMode && (
+        <aside className="sw-demo-bar" aria-label="Demo mode">
+          <span><strong>Demo mode</strong> · Fake bank data</span>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/">Start over</a>
+        </aside>
+      )}
       {saveState === "offline" && (
         <p className="sw-offline" role="status">
           Saving to this session only — changes won&apos;t persist until storage reconnects.

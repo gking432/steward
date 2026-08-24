@@ -64,7 +64,8 @@
   gap: 11px;
 }
 
-.cx-action > button {
+.cx-action > button,
+.cx-demo {
   display: flex;
   /* 56px keeps the primary action comfortably above the 44pt minimum the
      previous rebuild dropped below. */
@@ -77,6 +78,7 @@
   color: #27563f;
   font-size: 16px;
   font-weight: 700;
+  text-decoration: none;
 }
 
 .cx-action > button:disabled {
@@ -89,6 +91,12 @@
   font-size: 14.5px !important;
   font-weight: 600 !important;
   min-height: 48px !important;
+}
+
+.cx-demo:focus-visible,
+.cx-action > button:focus-visible {
+  outline: 3px solid rgba(249, 250, 247, 0.38);
+  outline-offset: 3px;
 }
 
 .cx-error {

@@ -53,4 +53,16 @@ test("the app renders through the domain model, never the legacy state shape", a
 test("routes resolve to the new tree", async () => {
   assert.match(await read("app/page.tsx"), /steward\/app/);
   assert.match(await read("app/fixture/page.tsx"), /steward\/app/);
+  assert.match(await read("app/demo/page.tsx"), /steward\/app/);
+});
+
+test("the public demo is obvious, seeded, and isolated from saved data", async () => {
+  const connect = await read("app/steward/connect.tsx");
+  const demo = await read("app/demo/page.tsx");
+
+  assert.match(connect, /Connect fake bank details to try it out/);
+  assert.match(connect, /href="\/demo"/);
+  assert.match(demo, /goldenWorkspace\(\)/);
+  assert.match(demo, /syncWithServer=\{false\}/);
+  assert.match(demo, /demoMode/);
 });

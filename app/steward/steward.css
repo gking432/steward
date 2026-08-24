@@ -930,6 +930,41 @@
   font-size: 11.5px;
 }
 
+.sw-demo-bar {
+  position: relative;
+  z-index: 45;
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f0c08a;
+  padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+  color: #38291b;
+  font-size: 12px;
+}
+
+.sw-app .sw-demo-bar strong { color: inherit; }
+
+.sw-demo-bar a {
+  color: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.sw-demo-mode .hm-screen {
+  height: auto;
+  min-height: calc(100dvh - var(--sw-nav-height) - 38px - env(safe-area-inset-top));
+  overflow: visible;
+}
+
+.sw-demo-mode .sw-ledger-screen,
+.sw-demo-mode .bk-screen {
+  min-height: calc(100dvh - var(--sw-nav-height) - 38px - env(safe-area-inset-top));
+}
+
 /* Manual setup keeps the same immersive language as bank-connected first run.
    It is a fallback path inside the app, not a website form floating on grey. */
 .sw-onboard {
@@ -1000,6 +1035,8 @@
 /* Desktop gets a desktop navigation rail and a bounded working area. Mobile
    keeps the bottom tab bar and all of its native-first behavior unchanged. */
 @media (min-width: 900px) {
+  .sw-demo-bar { padding-left: 108px; }
+
   .sw-main-full {
     min-height: 100dvh;
     padding: 0 0 0 92px;
