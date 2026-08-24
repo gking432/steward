@@ -245,7 +245,7 @@ export function IntakeScreen({
     <main className="ik-screen">
       <header className="ik-top">
         <span className="ik-badge">
-          <Sparkles size={13} /> {demoMode ? "Demo · Fake bank data" : "Steward"}
+          <Sparkles size={13} /> {demoMode ? "Steward · Demo" : "Steward"}
         </span>
         <span
           className="ik-progress"

@@ -61,22 +61,21 @@ export function ConnectScreen({
             {error}
           </p>
         )}
+        <button onClick={onConnect} disabled={busy}>
+          {busy ? <RefreshCw size={18} className="cx-spin" /> : <Landmark size={18} />}
+          {label}
+        </button>
         {/* A full navigation is intentional: the Sites runtime can retain the
             current RSC tree during a client transition between dynamic routes. */}
-        <a className="cx-demo" href="/demo">
-          <Play size={18} fill="currentColor" />
-          Connect fake bank details to try it out
+        <a className="cx-demo cx-secondary" href="/demo">
+          <Play size={16} fill="currentColor" />
+          Test demo mode
         </a>
-        <button className="cx-secondary" onClick={onConnect} disabled={busy}>
-          {busy ? <RefreshCw size={18} className="cx-spin" /> : <Landmark size={18} />}
-          {label === "Connect your bank" ? "Connect your real bank" : label}
-        </button>
         <button className="cx-secondary" onClick={onManual} disabled={busy}>
           Set it up myself
         </button>
         <small>
-          The demo uses sample data. Real connections are read-only through Plaid — Steward
-          can&apos;t move money.
+          Handled by Plaid, never Steward. Read-only — Steward can&apos;t move money.
         </small>
       </footer>
     </main>

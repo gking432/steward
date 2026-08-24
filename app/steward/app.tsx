@@ -76,7 +76,7 @@ function DemoStatementImport({
   today: string;
   onContinue: () => void;
 }) {
-  const [stage, setStage] = useState<"welcome" | "connecting" | "reading" | "review">("welcome");
+  const [stage, setStage] = useState<"connecting" | "reading" | "review">("connecting");
 
   useEffect(() => {
     if (stage === "connecting") {
@@ -95,36 +95,11 @@ function DemoStatementImport({
   );
   const income = useMemo(() => incomeObservations(workspace, today).primary, [workspace, today]);
 
-  if (stage === "welcome") {
-    return (
-      <main className="dm-screen dm-welcome">
-        <header className="dm-top"><strong>Steward</strong><span>Interactive demo</span></header>
-        <section className="dm-welcome-copy">
-          <p className="dm-eyebrow">See the whole experience</p>
-          <h1>Turn fake bank statements into a real plan.</h1>
-          <p>
-            You&apos;ll watch Steward read a sample account, explain the spending it finds,
-            ask what matters to you, and build a budget from your answers.
-          </p>
-          <ul>
-            <li><span>1</span> Review imported spending</li>
-            <li><span>2</span> Answer Steward&apos;s questions</li>
-            <li><span>3</span> Approve your paycheck plan</li>
-          </ul>
-        </section>
-        <footer className="dm-action">
-          <button onClick={() => setStage("connecting")}>Get started</button>
-          <small>Uses fake accounts and sample transactions. Nothing is saved.</small>
-        </footer>
-      </main>
-    );
-  }
-
   if (stage !== "review") {
     const reading = stage === "reading";
     return (
       <main className="dm-screen dm-loading">
-        <header className="dm-top"><strong>Demo mode</strong><span>Fake bank data</span></header>
+        <header className="dm-top"><strong>Steward</strong><span>Demo mode</span></header>
         <section className="dm-loading-card" aria-live="polite">
           <span className="dm-import-icon"><LoaderCircle size={26} className="cx-spin" /></span>
           <p className="dm-eyebrow">Secure connection</p>
@@ -142,7 +117,7 @@ function DemoStatementImport({
 
   return (
     <main className="dm-screen dm-review">
-      <header className="dm-top"><strong>Demo mode</strong><span>Fake bank data</span></header>
+      <header className="dm-top"><strong>Steward</strong><span>Demo mode</span></header>
       <section className="dm-review-copy">
         <p className="dm-eyebrow">Statements analyzed</p>
         <h1>Here&apos;s what Steward found.</h1>
@@ -1137,7 +1112,7 @@ export function StewardApp({
     <div className={`sw-app${demoMode ? " sw-demo-mode" : ""}`}>
       {demoMode && (
         <aside className="sw-demo-bar" aria-label="Demo mode">
-          <span><strong>Demo mode</strong> · Fake bank data</span>
+          <span><strong>Demo mode</strong></span>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/">Start over</a>
         </aside>

@@ -60,12 +60,13 @@ test("the public demo is obvious, seeded, and isolated from saved data", async (
   const connect = await read("app/steward/connect.tsx");
   const demo = await read("app/demo/page.tsx");
 
-  assert.match(connect, /Connect fake bank details to try it out/);
+  assert.match(connect, /Test demo mode/);
+  assert.match(connect, /\{label\}/);
   assert.match(connect, /href="\/demo"/);
   assert.match(demo, /demoWorkspace\(\)/);
   assert.match(demo, /syncWithServer=\{false\}/);
   assert.match(demo, /demoMode/);
   assert.match(await read("app/steward/app.tsx"), /Reading three months of statements/);
-  assert.match(await read("app/steward/app.tsx"), />Get started</);
+  assert.doesNotMatch(await read("app/steward/app.tsx"), /Turn fake bank statements/);
   assert.match(await read("fixtures/golden-workspace.ts"), /onboardingComplete: false/);
 });
