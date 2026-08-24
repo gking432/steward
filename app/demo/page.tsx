@@ -6,7 +6,7 @@
  * the demo can never overwrite a signed-in visitor's real workspace.
  */
 
-import { FIXTURE_TODAY, goldenWorkspace } from "../../fixtures/golden-workspace";
+import { demoWorkspace, FIXTURE_TODAY } from "../../fixtures/golden-workspace";
 import { StewardApp } from "../steward/app";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default function DemoSteward() {
   return (
     <StewardApp
-      initialState={goldenWorkspace()}
+      initialState={demoWorkspace()}
       syncWithServer={false}
       fixedToday={FIXTURE_TODAY}
       demoMode

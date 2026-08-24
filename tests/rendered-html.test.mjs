@@ -62,7 +62,9 @@ test("the public demo is obvious, seeded, and isolated from saved data", async (
 
   assert.match(connect, /Connect fake bank details to try it out/);
   assert.match(connect, /href="\/demo"/);
-  assert.match(demo, /goldenWorkspace\(\)/);
+  assert.match(demo, /demoWorkspace\(\)/);
   assert.match(demo, /syncWithServer=\{false\}/);
   assert.match(demo, /demoMode/);
+  assert.match(await read("app/steward/app.tsx"), /Reading three months of statements/);
+  assert.match(await read("fixtures/golden-workspace.ts"), /onboardingComplete: false/);
 });

@@ -261,3 +261,30 @@ export function goldenWorkspace(
     notificationPreferences: { bills: true, sync: true, recommendations: true, weeklyReview: true },
   };
 }
+
+/**
+ * The public demo starts immediately after a bank connection, not after setup.
+ * Accounts, statements, detected bills, and suggested spending buckets are
+ * present because those are outputs of the import. Personal goals are empty so
+ * the visitor supplies them during the conversation and watches Steward build
+ * the final plan from their answers.
+ */
+export function demoWorkspace(
+  name = "Jordan Rivera",
+  email = "demo@steward.app",
+): StewardState {
+  const state = goldenWorkspace(name, email);
+  return {
+    ...state,
+    profile: { ...state.profile, onboardingComplete: false },
+    // The canonical dashboard fixture intentionally has two near-identical
+    // July rent rows for cycle-edge tests. A bank demo should not present that
+    // artificial test seam as real spending.
+    transactions: state.transactions.filter((entry) => entry.id !== "fx-rent-2"),
+    goals: [],
+    projects: [],
+    wishlist: [],
+    reviews: [],
+    recommendations: [],
+  };
+}

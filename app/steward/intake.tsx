@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { allocate, formatMoney, planCycle } from "../../lib/model/engine";
 import {
   acceptIntake,
+  applyIntake,
   applyTweak,
   cancelledSubscriptions,
   intakeProgress,
@@ -96,9 +97,13 @@ async function reword(text: string): Promise<string> {
  * it may never compute it.
  */
 function buildPlanView(workspace: Workspace, today: string, answers: IntakeAnswer[]): PlanView | null {
-  const plan = planCycle(workspace, today);
+  // Preview the answers in the proposal before anything is committed. Without
+  // this, the plan card described the imported fixture but ignored the goals
+  // the visitor had just chosen — the exact opposite of an onboarding demo.
+  const personalized = applyIntake(workspace, today, answers);
+  const plan = planCycle(personalized, today);
   if (!plan) return null;
-  const ranked = allocate(workspace, plan.freeCapacity, today);
+  const ranked = allocate(personalized, plan.freeCapacity, today);
 
   return {
     income: plan.income,
@@ -121,12 +126,14 @@ export function IntakeScreen({
   workspace,
   today,
   scanComplete,
+  demoMode = false,
   onDone,
 }: {
   workspace: Workspace;
   today: string;
   /** False while the bank sync is still running. Gates every factual phase. */
   scanComplete: boolean;
+  demoMode?: boolean;
   onDone: (next: Workspace) => void;
 }) {
   const [answers, setAnswers] = useState<IntakeAnswer[]>([]);
@@ -238,7 +245,7 @@ export function IntakeScreen({
     <main className="ik-screen">
       <header className="ik-top">
         <span className="ik-badge">
-          <Sparkles size={13} /> Steward
+          <Sparkles size={13} /> {demoMode ? "Demo · Fake bank data" : "Steward"}
         </span>
         <span
           className="ik-progress"

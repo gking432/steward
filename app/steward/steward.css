@@ -965,6 +965,121 @@
   min-height: calc(100dvh - var(--sw-nav-height) - 38px - env(safe-area-inset-top));
 }
 
+/* Demo import: the visitor sees the raw bank connection become an explanation
+   before Steward asks for goals. This is deliberately a flow, not a shortcut. */
+.dm-screen {
+  display: grid;
+  min-height: 100dvh;
+  grid-template-rows: auto 1fr auto;
+  background:
+    radial-gradient(120% 80% at 50% 0%, #37704f 0%, transparent 60%),
+    linear-gradient(180deg, #2f654d 0%, #21503c 100%);
+  padding: calc(16px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom));
+  color: #f6f8f4;
+}
+
+.dm-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.dm-top span { color: rgba(246, 248, 244, 0.62); }
+.dm-eyebrow {
+  color: rgba(246, 248, 244, 0.64);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dm-loading { grid-template-rows: auto 1fr; }
+.dm-loading-card {
+  align-self: center;
+  max-width: 440px;
+  padding-bottom: 8vh;
+}
+.dm-import-icon {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 22px;
+  place-items: center;
+  border-radius: 18px;
+  background: #f6f8f4;
+  color: #27563f;
+}
+.dm-loading-card h1,
+.dm-review-copy h1 {
+  margin: 7px 0 12px;
+  color: #f6f8f4;
+  font-size: clamp(30px, 9vw, 46px);
+  font-weight: 560;
+  letter-spacing: -0.055em;
+  line-height: 1.04;
+}
+.dm-progress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 24px 0 20px;
+}
+.dm-progress i { height: 4px; border-radius: 99px; background: rgba(246, 248, 244, 0.18); }
+.dm-progress i.active { background: #f0c08a; }
+.dm-progress i.complete { background: #f6f8f4; }
+.dm-checks { display: grid; gap: 11px; margin: 0; padding: 0; list-style: none; }
+.dm-checks li { display: flex; align-items: center; gap: 9px; color: rgba(246, 248, 244, 0.46); font-size: 13.5px; }
+.dm-checks li.done { color: #f6f8f4; }
+.dm-checks li.active { color: #f0c08a; }
+
+.dm-review { gap: 16px; overflow-y: auto; }
+.dm-review-copy { align-self: end; padding-top: 18px; }
+.dm-review-copy > p:last-child { color: rgba(246, 248, 244, 0.7); font-size: 14px; line-height: 1.5; }
+.dm-findings {
+  align-self: start;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #f7f9f5;
+  color: #1e4a35;
+}
+.dm-findings article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid rgba(30, 74, 53, 0.1);
+  padding: 11px 14px;
+}
+.dm-findings article > span { display: grid; min-width: 0; }
+.dm-findings article strong { color: #1e4a35; font-size: 14px; }
+.dm-findings article small { overflow: hidden; color: rgba(30, 74, 53, 0.58); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.dm-findings article b { flex: none; color: #1e4a35; font-size: 15px; font-variant-numeric: tabular-nums; }
+.dm-findings article b small { margin-left: 2px; }
+.dm-income {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px;
+  color: rgba(30, 74, 53, 0.75);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.dm-income svg { flex: none; }
+.dm-action { display: grid; gap: 10px; }
+.dm-action p { color: rgba(246, 248, 244, 0.66); font-size: 12px; line-height: 1.45; }
+.dm-action button {
+  min-height: 52px;
+  border-radius: 16px;
+  background: #f6f8f4;
+  color: #27563f;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+@media (min-width: 768px) {
+  .dm-screen { padding: 32px max(32px, calc(50vw - 300px)); }
+}
+
 /* Manual setup keeps the same immersive language as bank-connected first run.
    It is a fallback path inside the app, not a website form floating on grey. */
 .sw-onboard {

@@ -12,11 +12,14 @@
 
 import {
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   CreditCard,
+  FileText,
   Landmark,
   ListChecks,
+  LoaderCircle,
   Receipt,
   ShieldCheck,
   Sparkles,
@@ -45,6 +48,7 @@ import {
   type Verdict,
 } from "../../lib/model/decide";
 import { fallbackIntent, type IntentDraft } from "../../lib/model/ai";
+import { incomeObservations, spendingByCategory } from "../../lib/model/observations";
 import type { Bucket, Claim, Workspace } from "../../lib/model/types";
 import type { StewardState } from "../../lib/steward-types";
 import { BucketsScreen } from "./buckets";
@@ -62,6 +66,86 @@ import "./steward.css";
 type Tab = "home" | "plan" | "activity";
 
 const todayISO = (fixed?: string) => fixed ?? new Date().toISOString().slice(0, 10);
+
+function DemoStatementImport({
+  workspace,
+  today,
+  onContinue,
+}: {
+  workspace: Workspace;
+  today: string;
+  onContinue: () => void;
+}) {
+  const [stage, setStage] = useState<"connecting" | "reading" | "review">("connecting");
+
+  useEffect(() => {
+    const reading = window.setTimeout(() => setStage("reading"), 650);
+    const review = window.setTimeout(() => setStage("review"), 1700);
+    return () => {
+      window.clearTimeout(reading);
+      window.clearTimeout(review);
+    };
+  }, []);
+
+  const categories = useMemo(
+    () => spendingByCategory(workspace, today).slice(0, 5),
+    [workspace, today],
+  );
+  const income = useMemo(() => incomeObservations(workspace, today).primary, [workspace, today]);
+
+  if (stage !== "review") {
+    const reading = stage === "reading";
+    return (
+      <main className="dm-screen dm-loading">
+        <header className="dm-top"><strong>Demo mode</strong><span>Fake bank data</span></header>
+        <section className="dm-loading-card" aria-live="polite">
+          <span className="dm-import-icon"><LoaderCircle size={26} className="cx-spin" /></span>
+          <p className="dm-eyebrow">Secure connection</p>
+          <h1>{reading ? "Reading three months of statements…" : "Connecting the fake accounts…"}</h1>
+          <div className="dm-progress"><i className={reading ? "complete" : "active"} /><i className={reading ? "active" : ""} /><i /></div>
+          <ul className="dm-checks">
+            <li className="done"><CheckCircle2 size={17} /> First National connected</li>
+            <li className={reading ? "done" : ""}><CheckCircle2 size={17} /> {workspace.accounts.length} accounts found</li>
+            <li className={reading ? "active" : ""}><FileText size={17} /> Categorizing {workspace.transactions.length} transactions</li>
+          </ul>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="dm-screen dm-review">
+      <header className="dm-top"><strong>Demo mode</strong><span>Fake bank data</span></header>
+      <section className="dm-review-copy">
+        <p className="dm-eyebrow">Statements analyzed</p>
+        <h1>Here&apos;s what Steward found.</h1>
+        <p>
+          I read {workspace.transactions.length} transactions across {workspace.accounts.length} accounts.
+          This is your average monthly spending from the last 90 days.
+        </p>
+      </section>
+
+      <section className="dm-findings" aria-label="Statement findings">
+        {categories.map((entry) => (
+          <article key={entry.category}>
+            <span><strong>{entry.category}</strong><small>{entry.merchants.slice(0, 2).join(" · ")}</small></span>
+            <b>{formatMoney(entry.total / 3)}<small>/mo</small></b>
+          </article>
+        ))}
+        {income && (
+          <p className="dm-income">
+            <CheckCircle2 size={17} /> I also found a regular {formatMoney(income.typicalAmount)} paycheck from {income.merchant}.
+          </p>
+        )}
+      </section>
+
+      <footer className="dm-action">
+        <p>Next, Steward will ask what matters to you and turn these patterns into a paycheck plan.</p>
+        <button onClick={onContinue}>Tell Steward what I want</button>
+      </footer>
+    </main>
+  );
+}
 
 /* ------------------------------------------------------------- primitives */
 
@@ -934,6 +1018,7 @@ export function StewardApp({
   const [addOpen, setAddOpen] = useState(false);
   const [debtClaimId, setDebtClaimId] = useState<string | null>(null);
   const [manualSetup, setManualSetup] = useState(false);
+  const [demoStatementsReviewed, setDemoStatementsReviewed] = useState(false);
   const plaid = usePlaidConnect(setWorkspaceFromServer);
   const today = todayISO(fixedToday);
 
@@ -996,6 +1081,16 @@ export function StewardApp({
     );
   }
 
+  if (demoMode && hasData && !workspace.profile.onboardingComplete && !demoStatementsReviewed) {
+    return (
+      <DemoStatementImport
+        workspace={workspace}
+        today={today}
+        onContinue={() => setDemoStatementsReviewed(true)}
+      />
+    );
+  }
+
   // The conversation is the front door, not a buckets screen to approve.
   // Steward asks what you want, says what it found, proposes a plan — and the
   // rest of the app opens only once you agree to it.
@@ -1005,6 +1100,7 @@ export function StewardApp({
         workspace={workspace}
         today={today}
         scanComplete={plaid.status !== "importing" && plaid.status !== "syncing"}
+        demoMode={demoMode}
         onDone={(next) => update(() => next)}
       />
     );
