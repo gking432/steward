@@ -993,6 +993,52 @@
   text-transform: uppercase;
 }
 
+.dm-welcome-copy {
+  align-self: center;
+  max-width: 480px;
+  padding-bottom: 2vh;
+}
+.dm-welcome-copy h1 {
+  margin: 8px 0 15px;
+  color: #f6f8f4;
+  font-size: clamp(38px, 11vw, 54px);
+  font-weight: 540;
+  letter-spacing: -0.06em;
+  line-height: 0.99;
+}
+.dm-welcome-copy > p:last-of-type {
+  max-width: 410px;
+  color: rgba(246, 248, 244, 0.7);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.dm-welcome-copy ul {
+  display: grid;
+  gap: 10px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dm-welcome-copy li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(246, 248, 244, 0.82);
+  font-size: 13.5px;
+}
+.dm-welcome-copy li span {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: none;
+  place-items: center;
+  border: 1px solid rgba(246, 248, 244, 0.25);
+  border-radius: 999px;
+  color: #f6f8f4;
+  font-size: 11px;
+  font-weight: 750;
+}
+
 .dm-loading { grid-template-rows: auto 1fr; }
 .dm-loading-card {
   align-self: center;
@@ -1074,6 +1120,11 @@
   color: #27563f;
   font-size: 15px;
   font-weight: 750;
+}
+.dm-action small {
+  color: rgba(246, 248, 244, 0.5);
+  text-align: center;
+  font-size: 10.5px;
 }
 
 @media (min-width: 768px) {

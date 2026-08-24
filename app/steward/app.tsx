@@ -76,22 +76,49 @@ function DemoStatementImport({
   today: string;
   onContinue: () => void;
 }) {
-  const [stage, setStage] = useState<"connecting" | "reading" | "review">("connecting");
+  const [stage, setStage] = useState<"welcome" | "connecting" | "reading" | "review">("welcome");
 
   useEffect(() => {
-    const reading = window.setTimeout(() => setStage("reading"), 650);
-    const review = window.setTimeout(() => setStage("review"), 1700);
-    return () => {
-      window.clearTimeout(reading);
-      window.clearTimeout(review);
-    };
-  }, []);
+    if (stage === "connecting") {
+      const timer = window.setTimeout(() => setStage("reading"), 650);
+      return () => window.clearTimeout(timer);
+    }
+    if (stage === "reading") {
+      const timer = window.setTimeout(() => setStage("review"), 1050);
+      return () => window.clearTimeout(timer);
+    }
+  }, [stage]);
 
   const categories = useMemo(
     () => spendingByCategory(workspace, today).slice(0, 5),
     [workspace, today],
   );
   const income = useMemo(() => incomeObservations(workspace, today).primary, [workspace, today]);
+
+  if (stage === "welcome") {
+    return (
+      <main className="dm-screen dm-welcome">
+        <header className="dm-top"><strong>Steward</strong><span>Interactive demo</span></header>
+        <section className="dm-welcome-copy">
+          <p className="dm-eyebrow">See the whole experience</p>
+          <h1>Turn fake bank statements into a real plan.</h1>
+          <p>
+            You&apos;ll watch Steward read a sample account, explain the spending it finds,
+            ask what matters to you, and build a budget from your answers.
+          </p>
+          <ul>
+            <li><span>1</span> Review imported spending</li>
+            <li><span>2</span> Answer Steward&apos;s questions</li>
+            <li><span>3</span> Approve your paycheck plan</li>
+          </ul>
+        </section>
+        <footer className="dm-action">
+          <button onClick={() => setStage("connecting")}>Get started</button>
+          <small>Uses fake accounts and sample transactions. Nothing is saved.</small>
+        </footer>
+      </main>
+    );
+  }
 
   if (stage !== "review") {
     const reading = stage === "reading";
