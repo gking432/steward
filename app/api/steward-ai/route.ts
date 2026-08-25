@@ -165,6 +165,9 @@ const intentOutput = z.object({
 const cleanModelText = (value: unknown, max: number) =>
   typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
 
+const containsUnsupportedScript = (value: string) =>
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}]/u.test(value);
+
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -199,7 +202,10 @@ async function callModel(
         store: false,
       }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error("OpenAI request failed", response.status);
+      return null;
+    }
     const payload = (await response.json()) as {
       output_text?: string;
       output?: { content?: { type?: string; text?: string }[] }[];
@@ -208,7 +214,8 @@ async function callModel(
       payload.output_text ??
       payload.output?.flatMap((item) => item.content ?? []).find((item) => item.type === "output_text")?.text;
     return text ? (JSON.parse(text) as unknown) : null;
-  } catch {
+  } catch (error) {
+    console.error("OpenAI request failed", error instanceof Error ? error.name : "UnknownError");
     return null;
   } finally {
     clearTimeout(timeout);
@@ -276,15 +283,19 @@ const ONBOARDING_PROMPT = [
   "Keep the interview concise, but collect exactly one piece of information per turn.",
   "",
   "Conversation rules:",
+  "- Write only in English, including every quick reply. Never translate a choice into another language.",
   "- Write one short message, normally under 24 words. Ask exactly one question about exactly one decision or fact per turn.",
   "- Never combine requests with 'and'. Do not ask for a goal, its amount, its timing, or its priority in the same turn.",
   "- The opening asks only which kind of goal to start with. Never ask for an amount in the opening.",
   "- Collect one goal at a time: first its kind, then what it specifically is, then its rough amount if useful, then timing only if useful.",
-  "- After one goal is clear, ask whether to add another. After all goals are collected, confirm their priority in a separate turn.",
-  "- If the user volunteers several goals or details at once, extract all supplied information, but ask for only one remaining item next.",
+  "- After one goal is clear, move to the next goal the user already selected. Only ask whether to add another after every selected goal is clear.",
+  "- The interface lets the user select any number of choices and optionally type more context before sending.",
+  "- Answers may be formatted as 'Selected: choice, choice. More context: text.' Treat every selected choice and the context as user input.",
+  "- If the user selects or writes several goals, retain all of them, then discuss them one at a time in selection order. Finish the current goal before asking about the next one.",
+  "- If the user volunteers several details at once, extract all supplied information, but ask for only one remaining item next.",
   "- 'Not sure' is valid. Do not keep pressing for an amount or date after that answer.",
   "- A debt goal is detailed once it is linked to a known account; use that account's supplied balance and never ask the user to repeat the payoff amount.",
-  "- A person may choose one debt or several. For debt-account selection, set selectionMode to multiple, say 'Choose one or more,' and use the exact account names as quickReplies.",
+  "- A person may choose one debt or several. For debt-account selection, say 'Choose one or more,' and use the exact account names as quickReplies.",
   "- Interpret a multi-select answer as the exact selected set. Create one payoff goal for each selected debt.",
   "- If a generic phrase such as 'credit card' uniquely identifies an account type, explain the matching account name before continuing. If it is ambiguous, ask; never guess.",
   "- A correction such as 'no,' 'I said,' or 'instead' reopens the current question. Correct the state and do not advance to income or another phase.",
@@ -312,6 +323,7 @@ const ONBOARDING_PROMPT = [
   "- Never recommend borrowing, refinancing, opening or closing accounts, investments, tax actions, or legal actions.",
   "- Be specific, practical, non-judgmental, and concise.",
   "- Every question must include 2-4 useful quickReplies that directly answer that one question. Free text always remains available.",
+  "- Always set selectionMode to multiple. The user decides when to send, even when only one choice is expected.",
   "- Quick replies should be concrete choices such as goal types, known debt names, yes/no, another goal, strategy decisions, or cadence. Never use commands like 'List my goals'.",
 ].join("\n");
 
@@ -335,7 +347,7 @@ export async function POST(request: Request) {
         enhanced: true,
         message: "What would you like Steward to help with first?",
         quickReplies: ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
-        selectionMode: "single",
+        selectionMode: "multiple",
         showPlan: false,
         phase: "goals",
         state: previous,
@@ -352,7 +364,7 @@ export async function POST(request: Request) {
             enhanced: false,
             message: "What would you like to buy?",
             quickReplies: ["A car", "Clothes", "A trip", "Something else"],
-            selectionMode: "single",
+            selectionMode: "multiple",
             showPlan: false,
             phase,
             state: previous,
@@ -369,7 +381,7 @@ export async function POST(request: Request) {
               ? "Which debts should Steward include? Choose one or more."
               : "Which debt should Steward include?",
             quickReplies: debts,
-            selectionMode: debts.length > 1 ? "multiple" : "single",
+            selectionMode: "multiple",
             showPlan: false,
             phase,
             state: previous,
@@ -380,7 +392,7 @@ export async function POST(request: Request) {
             enhanced: false,
             message: "What should the savings be for?",
             quickReplies: ["Emergency cushion", "A home", "A trip", "Something else"],
-            selectionMode: "single",
+            selectionMode: "multiple",
             showPlan: false,
             phase,
             state: previous,
@@ -391,7 +403,7 @@ export async function POST(request: Request) {
             enhanced: false,
             message: "Where would extra breathing room help most?",
             quickReplies: ["Monthly bills", "Everyday spending", "Debt payments", "Savings"],
-            selectionMode: "single",
+            selectionMode: "multiple",
             showPlan: false,
             phase,
             state: previous,
@@ -409,7 +421,7 @@ export async function POST(request: Request) {
             : previous.goals.length
               ? ["Add another goal", "That’s everything"]
               : ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
-          selectionMode: "single",
+          selectionMode: "multiple",
           showPlan: false,
           phase,
           state: previous,
@@ -423,7 +435,7 @@ export async function POST(request: Request) {
             enhanced: false,
             message: `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that right?`,
             quickReplies: ["Yes, that’s right", "No, that’s not right"],
-            selectionMode: "single",
+            selectionMode: "multiple",
             showPlan: false,
             phase,
             state: previous,
@@ -437,7 +449,7 @@ export async function POST(request: Request) {
           quickReplies: charges
             ? ["Keep them all", "Review them one at a time"]
             : ["Yes, continue", "Go back"],
-          selectionMode: "single",
+          selectionMode: "multiple",
           showPlan: false,
           phase,
           state: previous,
@@ -450,7 +462,7 @@ export async function POST(request: Request) {
           enhanced: false,
           message: option ? `${option.label}. Does that feel realistic?` : "Your current spending can stay as it is. Ready to see the budget?",
           quickReplies: option ? ["Yes", "Show me another", "Keep spending as is"] : ["Show my budget"],
-          selectionMode: "single",
+          selectionMode: "multiple",
           showPlan: false,
           phase,
           state: previous,
@@ -461,7 +473,7 @@ export async function POST(request: Request) {
           enhanced: false,
           message: "Here’s the budget built around what matters to you. Want to use it?",
           quickReplies: ["Use this budget", "Change the strategy"],
-          selectionMode: "single",
+          selectionMode: "multiple",
           showPlan: true,
           phase,
           state: previous,
@@ -471,7 +483,7 @@ export async function POST(request: Request) {
         enhanced: false,
         message: "I’ll group each purchase into its budget bucket. How often should I check in?",
         quickReplies: ["Daily", "Every other day", "Weekly"],
-        selectionMode: "single",
+        selectionMode: "multiple",
         showPlan: false,
         phase,
         state: previous,
@@ -499,13 +511,24 @@ export async function POST(request: Request) {
     };
     let message = cleanModelText(candidate.message, 300);
     let quickReplies = Array.isArray(candidate.quickReplies)
-      ? candidate.quickReplies.map((reply) => cleanModelText(reply, 80)).filter(Boolean).slice(0, 4)
+      ? candidate.quickReplies
+          .map((reply) => cleanModelText(reply, 80))
+          .filter((reply) => reply && !containsUnsupportedScript(reply))
+          .slice(0, 4)
       : [];
-    let selectionMode: "single" | "multiple" = candidate.selectionMode === "multiple"
-      ? "multiple"
-      : "single";
     const outputState = onboardingStateSchema.safeParse(candidate.state);
-    if (!message || !outputState.success || message.split(/\s+/).length > 60) {
+    if (
+      !message ||
+      !outputState.success ||
+      message.split(/\s+/).length > 60 ||
+      containsUnsupportedScript(message)
+    ) {
+      console.warn("Onboarding model output rejected", {
+        hasMessage: Boolean(message),
+        stateValid: outputState.success,
+        tooLong: message.split(/\s+/).length > 60,
+        unsupportedScript: containsUnsupportedScript(message),
+      });
       return Response.json(fallback());
     }
 
@@ -541,7 +564,6 @@ export async function POST(request: Request) {
         ? `${match.name} is the ${genericCreditCard ? "credit card" : "loan"} I found. ${selectionInstruction}`
         : selectionInstruction;
       quickReplies = debtAccounts.map((account) => account.name).slice(0, 4);
-      selectionMode = debtAccounts.length > 1 ? "multiple" : "single";
       showPlan = false;
     }
 
@@ -551,7 +573,6 @@ export async function POST(request: Request) {
       const merchant = context.paycheck.merchant ?? "your regular income";
       message = `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that right?`;
       quickReplies = ["Yes, that’s right", "No, that’s not right"];
-      selectionMode = "single";
       showPlan = false;
     } else if (phase === "review" && !state.recurringReviewed) {
       const charges = context.recurringCharges.map((charge) => charge.merchant).join(", ");
@@ -561,7 +582,6 @@ export async function POST(request: Request) {
       quickReplies = charges
         ? ["Keep them all", "Review them one at a time"]
         : ["Yes, continue", "Go back"];
-      selectionMode = "single";
       showPlan = false;
     }
 
@@ -571,9 +591,16 @@ export async function POST(request: Request) {
     ) {
       message = "Deal. Here’s the budget built around your priorities. Want to use it?";
       quickReplies = ["Use this budget", "Try another strategy"];
-      selectionMode = "single";
       showPlan = true;
     }
+
+    const allowedOnboardingNumerals = onboardingAllowedNumerals(context, conversation);
+    if (!outputIsGrounded(message, allowedOnboardingNumerals)) {
+      console.warn("Onboarding model output rejected", { groundedMessage: false });
+      return Response.json(fallback());
+    }
+    quickReplies = quickReplies.filter((reply) =>
+      outputIsGrounded(reply, allowedOnboardingNumerals));
 
     // Questions must always have visible paths forward. The composer remains
     // available for an answer that does not fit a chip.
@@ -592,14 +619,15 @@ export async function POST(request: Request) {
       }
     }
     const prose = [message, ...quickReplies].join(" ");
-    if (!outputIsGrounded(prose, onboardingAllowedNumerals(context, conversation))) {
+    if (!outputIsGrounded(prose, allowedOnboardingNumerals)) {
+      console.warn("Onboarding model output rejected", { grounded: false });
       return Response.json(fallback());
     }
     return Response.json({
       enhanced: true,
       message,
       quickReplies,
-      selectionMode,
+      selectionMode: "multiple",
       showPlan,
       phase,
       state,

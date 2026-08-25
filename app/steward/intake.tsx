@@ -44,7 +44,6 @@ type OnboardingResponse = {
   enhanced: boolean;
   message: string;
   quickReplies: string[];
-  selectionMode: "single" | "multiple";
   showPlan: boolean;
   phase: OnboardingPhase;
   state: AIOnboardingState;
@@ -98,7 +97,6 @@ export function IntakeScreen({
   const [, setTurns] = useState<OnboardingTurn[]>([]);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
-  const [selectionMode, setSelectionMode] = useState<"single" | "multiple">("single");
   const [selectedReplies, setSelectedReplies] = useState<string[]>([]);
   const [phase, setPhase] = useState<OnboardingPhase>("goals");
   const [typed, setTyped] = useState("");
@@ -162,7 +160,6 @@ export function IntakeScreen({
       setTurns(nextTurns);
       setPhase(payload.phase);
       setQuickReplies(payload.quickReplies ?? []);
-      setSelectionMode(payload.selectionMode === "multiple" ? "multiple" : "single");
       setBubbles((current) => [
         ...current,
         { id: nextId(), from: "steward", text: payload.message, plan },
@@ -196,6 +193,16 @@ export function IntakeScreen({
   const submit = (text: string) => {
     if (!text.trim() || busy || complete) return;
     void runTurn(text);
+  };
+  const submitAnswer = () => {
+    const contextText = typed.trim();
+    const selectedText = selectedReplies.join(", ");
+    const answer = selectedText && contextText
+      ? `Selected: ${selectedText}. More context: ${contextText}`
+      : selectedText
+        ? `Selected: ${selectedText}.`
+        : contextText;
+    submit(answer);
   };
 
   return (
@@ -235,12 +242,8 @@ export function IntakeScreen({
               <button
                 key={reply}
                 className={`ik-chip ${selectedReplies.includes(reply) ? "active" : ""}`}
-                aria-pressed={selectionMode === "multiple" ? selectedReplies.includes(reply) : undefined}
+                aria-pressed={selectedReplies.includes(reply)}
                 onClick={() => {
-                  if (selectionMode === "single") {
-                    submit(reply);
-                    return;
-                  }
                   setSelectedReplies((current) => current.includes(reply)
                     ? current.filter((entry) => entry !== reply)
                     : [...current, reply]);
@@ -250,15 +253,6 @@ export function IntakeScreen({
                 {reply}
               </button>
             ))}
-            {selectionMode === "multiple" && (
-              <button
-                className="ik-chip ik-chip-continue"
-                onClick={() => submit(selectedReplies.join(" and "))}
-                disabled={busy || selectedReplies.length === 0}
-              >
-                Continue
-              </button>
-            )}
           </div>
         )}
 
@@ -274,17 +268,25 @@ export function IntakeScreen({
             className="ik-composer"
             onSubmit={(event) => {
               event.preventDefault();
-              submit(typed);
+              submitAnswer();
             }}
           >
             <input
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
-              placeholder={busy ? "Steward is thinking…" : "Message Steward"}
+              placeholder={busy
+                ? "Steward is thinking…"
+                : selectedReplies.length > 0
+                  ? "Include more context?"
+                  : "Message Steward"}
               aria-label="Your answer"
               disabled={busy}
             />
-            <button type="submit" aria-label="Send" disabled={!typed.trim() || busy}>
+            <button
+              type="submit"
+              aria-label="Send"
+              disabled={(!typed.trim() && selectedReplies.length === 0) || busy}
+            >
               <ArrowUp size={18} />
             </button>
           </form>
