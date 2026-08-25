@@ -1,0 +1,219 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { demoWorkspace, FIXTURE_TODAY } from "../fixtures/golden-workspace";
+import { toModel } from "../lib/model/convert";
+import {
+  EMPTY_AI_ONBOARDING_STATE,
+  acceptAIOnboarding,
+  buildAIOnboardingContext,
+  normalizeAIOnboardingState,
+  onboardingPhase,
+  previewAIOnboarding,
+  type AIOnboardingState,
+} from "../lib/model/onboarding-ai";
+
+const workspace = () => toModel(demoWorkspace());
+
+test("every AI turn can receive a complete compact financial context", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  assert.equal(context.paycheck.amount, 2150);
+  assert.match(context.paycheck.merchant ?? "", /Employer Payroll/);
+  assert.ok(context.accounts.some((account) => account.type === "Credit card"));
+  assert.ok(context.monthlySpending.some((entry) => entry.category === "Dining"));
+  assert.ok(context.recurringCharges.some((entry) => entry.merchant === "Netflix"));
+  assert.ok(context.strategies.some((entry) => entry.kind === "cut_bucket"));
+  assert.ok(context.strategies.some((entry) => entry.kind === "cancel_subscription"));
+});
+
+test("free-form goals survive while invented amounts and strategies do not", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const validStrategy = context.strategies[0].id;
+  const candidate: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [
+      {
+        id: "goal:car",
+        name: "Used car",
+        kind: "purchase",
+        targetAmount: 8000,
+        targetDate: null,
+        linkedAccountId: null,
+        detailsComplete: true,
+      },
+      {
+        id: "goal:clothes",
+        name: "New clothes",
+        kind: "purchase",
+        targetAmount: 999,
+        targetDate: null,
+        linkedAccountId: null,
+        detailsComplete: true,
+      },
+    ],
+    goalCollectionComplete: true,
+    prioritiesConfirmed: true,
+    acceptedStrategyIds: [validStrategy, "invented:strategy"],
+  };
+  const normalized = normalizeAIOnboardingState(candidate, {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    acceptedStrategyIds: [validStrategy],
+  }, context, [
+    { role: "user", content: "A used car for about $8,000 and some new clothes." },
+  ]);
+  assert.deepEqual(normalized.goals.map((goal) => goal.name), ["Used car", "New clothes"]);
+  assert.equal(normalized.goals[0].targetAmount, 8000);
+  assert.equal(normalized.goals[1].targetAmount, null, "the model cannot invent a clothes budget");
+  assert.deepEqual(normalized.acceptedStrategyIds, [validStrategy]);
+});
+
+test("accepted strategies reshape the preview with exact engine-owned amounts", () => {
+  const base = workspace();
+  const context = buildAIOnboardingContext(base, FIXTURE_TODAY, true);
+  const cut = context.strategies.find((entry) => entry.kind === "cut_bucket")!;
+  const state: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:trip",
+      name: "Japan trip",
+      kind: "purchase",
+      targetAmount: 2500,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: true,
+    }],
+    goalCollectionComplete: true,
+    prioritiesConfirmed: true,
+    acceptedStrategyIds: [cut.id],
+  };
+  const preview = previewAIOnboarding(base, FIXTURE_TODAY, state);
+  assert.equal(preview.buckets.find((bucket) => bucket.id === cut.targetId)?.perCycle, cut.toAmount);
+  assert.equal(preview.claims.find((claim) => claim.name === "Japan trip")?.targetAmount, 2500);
+});
+
+test("an explicit yes or no records the one strategy Steward just discussed", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const option = context.strategies.find((entry) => entry.kind === "cut_bucket")!;
+  const accepted = normalizeAIOnboardingState(
+    EMPTY_AI_ONBOARDING_STATE,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: `${option.label}. Does that work?` },
+      { role: "user", content: "Yes, that works. Deal." },
+    ],
+  );
+  assert.deepEqual(accepted.acceptedStrategyIds, [option.id]);
+  assert.equal(accepted.strategyComplete, true);
+
+  const declined = normalizeAIOnboardingState(
+    EMPTY_AI_ONBOARDING_STATE,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: `${option.label}. Does that work?` },
+      { role: "user", content: "No, show me another." },
+    ],
+  );
+  assert.deepEqual(declined.declinedStrategyIds, [option.id]);
+  assert.equal(declined.strategyComplete, false);
+
+  const keptCurrent = normalizeAIOnboardingState(
+    EMPTY_AI_ONBOARDING_STATE,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: `${option.label}. Does that work?` },
+      { role: "user", content: "Keep the current Dining budget." },
+    ],
+  );
+  assert.deepEqual(keptCurrent.acceptedStrategyIds, []);
+  assert.deepEqual(keptCurrent.declinedStrategyIds, [option.id]);
+});
+
+test("a debt goal reuses the known debt instead of creating a duplicate", () => {
+  const base = workspace();
+  const card = base.accounts.find((account) => account.type === "Credit card")!;
+  const before = base.claims.filter((claim) => claim.kind === "payoff").length;
+  const preview = previewAIOnboarding(base, FIXTURE_TODAY, {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:card",
+      name: "Pay off my card",
+      kind: "payoff",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: card.id,
+      detailsComplete: true,
+    }],
+  });
+  assert.equal(preview.claims.filter((claim) => claim.kind === "payoff").length, before);
+  assert.equal(preview.claims.find((claim) => claim.linkedAccountId === card.id)?.status, "active");
+});
+
+test("completion requires goals, financial review, strategy, budget approval, and cadence", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const almost: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:cushion",
+      name: "Emergency cushion",
+      kind: "fund",
+      targetAmount: 2000,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: true,
+    }],
+    goalCollectionComplete: true,
+    prioritiesConfirmed: true,
+    incomeConfirmed: true,
+    recurringReviewed: true,
+    strategyComplete: true,
+    budgetAccepted: true,
+  };
+  assert.equal(onboardingPhase(almost, context), "checkin");
+  const complete = normalizeAIOnboardingState(
+    { ...almost, checkInCadence: "every_other_day", complete: true },
+    almost,
+    context,
+    [
+      { role: "user", content: "I want a $2,000 cushion." },
+      { role: "assistant", content: "How often should I check in: daily, every other day, or weekly?" },
+      { role: "user", content: "Every other day works." },
+    ],
+  );
+  assert.equal(complete.complete, true);
+  assert.equal(onboardingPhase(complete, context), "complete");
+});
+
+test("the model cannot confirm finances before the user answers that question", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const candidate: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    incomeConfirmed: true,
+    recurringReviewed: true,
+  };
+  const premature = normalizeAIOnboardingState(candidate, EMPTY_AI_ONBOARDING_STATE, context, [
+    { role: "assistant", content: "What are your goals?" },
+    { role: "user", content: "Pay off my card." },
+  ]);
+  assert.equal(premature.incomeConfirmed, null);
+  assert.equal(premature.recurringReviewed, false);
+
+  const confirmed = normalizeAIOnboardingState(candidate, premature, context, [
+    { role: "assistant", content: "I found your paycheck and recurring charges. Is the income right, and should those charges stay?" },
+    { role: "user", content: "Yes, the paycheck is right. Keep them." },
+  ]);
+  assert.equal(confirmed.incomeConfirmed, true);
+  assert.equal(confirmed.recurringReviewed, true);
+});
+
+test("accepted onboarding persists the check-in cadence", () => {
+  const base = workspace();
+  const accepted = acceptAIOnboarding(base, FIXTURE_TODAY, {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    checkInCadence: "daily",
+  });
+  assert.equal(accepted.profile.onboardingComplete, true);
+  assert.equal(accepted.legacy.notificationPreferences.dailyCheckIn, true);
+  assert.equal(accepted.legacy.notificationPreferences.weeklyReview, false);
+});

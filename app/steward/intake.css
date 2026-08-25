@@ -78,6 +78,9 @@
   font-size: 15px;
   line-height: 1.42;
 }
+.ik-msg > p {
+  margin: 0;
+}
 .ik-msg.steward {
   align-self: flex-start;
   border-bottom-left-radius: 6px;
@@ -91,8 +94,17 @@
   color: #f6f8f4;
 }
 .ik-msg.pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--ik-ink-soft);
   font-style: italic;
+}
+.ik-spin {
+  animation: ik-spin 0.9s linear infinite;
+}
+@keyframes ik-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* -------------------------------------------------------------- plan --- */
