@@ -1062,19 +1062,29 @@
 .dm-loading { grid-template-rows: auto 1fr; }
 .dm-loading-card {
   align-self: center;
+  display: grid;
+  width: min(100%, 440px);
   max-width: 440px;
-  padding-bottom: 8vh;
+  grid-template-rows: 56px 112px 4px 104px 118px;
+  gap: 18px;
+  margin-inline: auto;
+  padding-bottom: 4vh;
 }
 .dm-import-icon {
   display: grid;
   width: 56px;
   height: 56px;
-  margin-bottom: 22px;
   place-items: center;
   border-radius: 18px;
   background: #f6f8f4;
   color: #27563f;
 }
+.dm-loading-copy {
+  display: grid;
+  align-content: start;
+  grid-template-rows: 17px 1fr;
+}
+.dm-loading-copy .dm-eyebrow { margin: 0; }
 .dm-loading-card h1,
 .dm-review-copy h1 {
   margin: 7px 0 12px;
@@ -1088,20 +1098,28 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
-  margin: 24px 0 20px;
+  margin: 0;
 }
 .dm-progress i { height: 4px; border-radius: 99px; background: rgba(246, 248, 244, 0.18); }
 .dm-progress i.active { background: #f0c08a; }
 .dm-progress i.complete { background: #f6f8f4; }
-.dm-checks { display: grid; gap: 11px; margin: 0; padding: 0; list-style: none; }
+.dm-checks {
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 .dm-checks li { display: flex; align-items: center; gap: 9px; color: rgba(246, 248, 244, 0.46); font-size: 13.5px; }
 .dm-checks li.done { color: #f6f8f4; }
 .dm-checks li.active { color: #f0c08a; }
 .dm-import-rows {
   display: grid;
+  grid-template-rows: repeat(3, 1fr);
   gap: 1px;
   overflow: hidden;
-  margin-top: 20px;
+  margin-top: 0;
   border-radius: 13px;
   background: rgba(246, 248, 244, 0.12);
 }

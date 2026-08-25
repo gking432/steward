@@ -136,13 +136,32 @@ function DemoStatementImport({
         : stage === "statements"
           ? "Reading May 3 – June 30…"
           : "Reading July 1 – August 1…";
+    const importRows = index === 0
+      ? workspace.accounts.slice(0, 3).map((account) => ({
+          id: account.id,
+          label: account.name,
+          detail: formatMoney(account.balance),
+        }))
+      : index === 1
+        ? [
+            { id: "may", label: "May 3 – May 31", detail: "Statement data" },
+            { id: "june", label: "June 1 – June 30", detail: "Statement data" },
+            { id: "may-june", label: "May and June", detail: `${statementCounts.mayJune} transactions total` },
+          ]
+        : workspace.transactions.slice(0, 3).map((row) => ({
+            id: row.id,
+            label: row.merchant,
+            detail: `${formatDate(row.date)} · ${formatMoney(row.amount)}`,
+          }));
     return (
       <main className="dm-screen dm-loading">
         <header className="dm-top"><strong>Steward</strong><span>Demo mode</span></header>
         <section className="dm-loading-card" aria-live="polite">
           <span className="dm-import-icon"><LoaderCircle size={26} className="cx-spin" /></span>
-          <p className="dm-eyebrow">Importing with Plaid</p>
-          <h1>{title}</h1>
+          <div className="dm-loading-copy">
+            <p className="dm-eyebrow">Importing with Plaid</p>
+            <h1>{title}</h1>
+          </div>
           <div className="dm-progress">
             {[0, 1, 2].map((step) => <i key={step} className={step < index ? "complete" : step === index ? "active" : ""} />)}
           </div>
@@ -152,12 +171,8 @@ function DemoStatementImport({
             <li className={index >= 2 ? "active" : ""}><FileText size={17} /> July statement · {statementCounts.july} transactions</li>
           </ul>
           <div className="dm-import-rows">
-            {index === 0 && workspace.accounts.slice(0, 3).map((account) => (
-              <span key={account.id}><b>{account.name}</b><small>{formatMoney(account.balance)}</small></span>
-            ))}
-            {index === 1 && <><span><b>May 3 – May 31</b><small>Statement data</small></span><span><b>June 1 – June 30</b><small>{statementCounts.mayJune} transactions total</small></span></>}
-            {index === 2 && workspace.transactions.slice(0, 3).map((row) => (
-              <span key={row.id}><b>{row.merchant}</b><small>{formatDate(row.date)} · {formatMoney(row.amount)}</small></span>
+            {importRows.map((row) => (
+              <span key={row.id}><b>{row.label}</b><small>{row.detail}</small></span>
             ))}
           </div>
         </section>

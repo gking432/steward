@@ -63,7 +63,36 @@ test("free-form goals survive while invented amounts and strategies do not", () 
   assert.deepEqual(normalized.goals.map((goal) => goal.name), ["Used car", "New clothes"]);
   assert.equal(normalized.goals[0].targetAmount, 8000);
   assert.equal(normalized.goals[1].targetAmount, null, "the model cannot invent a clothes budget");
+  assert.equal(normalized.goals[1].detailsComplete, false, "a missing amount needs its own follow-up");
+  assert.equal(normalized.goalCollectionComplete, false, "the model cannot skip the explicit add-another-goal decision");
   assert.deepEqual(normalized.acceptedStrategyIds, [validStrategy]);
+});
+
+test("goal collection closes only after its own explicit one-piece question", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const goal = {
+    id: "goal:car",
+    name: "Used car",
+    kind: "purchase" as const,
+    targetAmount: 8000,
+    targetDate: null,
+    linkedAccountId: null,
+    detailsComplete: true,
+  };
+  const previous: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [goal],
+  };
+  const normalized = normalizeAIOnboardingState(
+    { ...previous, goalCollectionComplete: true },
+    previous,
+    context,
+    [
+      { role: "assistant", content: "Would you like to add another goal?" },
+      { role: "user", content: "That’s everything." },
+    ],
+  );
+  assert.equal(normalized.goalCollectionComplete, true);
 });
 
 test("accepted strategies reshape the preview with exact engine-owned amounts", () => {

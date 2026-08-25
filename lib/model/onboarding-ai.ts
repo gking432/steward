@@ -327,6 +327,16 @@ export function normalizeAIOnboardingState(
       : null;
     const proposedDate = clean(goal.targetDate, 20) || null;
     const targetDate = proposedDate && outputIsGrounded(proposedDate, userNumbers) ? proposedDate : null;
+    const previousGoal = previous.goals.find((entry) =>
+      entry.id === goal.id || entry.name.toLowerCase() === name.toLowerCase());
+    const genericGoal = /^(buy something|purchase|pay off debt|debt|build savings|savings|save money|more breathing room|breathing room)$/i.test(name);
+    const amountWasDeclined = /\b(not sure|don'?t know|no idea|unsure)\b/i.test(lastUser) &&
+      /\b(amount|cost|how much|roughly)\b/i.test(priorAssistant);
+    const hasEnoughDetail = Boolean(previousGoal?.detailsComplete) || (!genericGoal && (
+      (goal.kind === "payoff" && linkedAccountId !== null) ||
+      targetAmount !== null ||
+      amountWasDeclined
+    ));
     return [{
       id: clean(goal.id, 80) || `goal:${slug(name)}:${index}`,
       name,
@@ -334,7 +344,7 @@ export function normalizeAIOnboardingState(
       targetAmount,
       targetDate,
       linkedAccountId,
-      detailsComplete: Boolean(goal.detailsComplete),
+      detailsComplete: Boolean(goal.detailsComplete) && hasEnoughDetail,
     }];
   });
 
@@ -408,10 +418,24 @@ export function normalizeAIOnboardingState(
     (Boolean(candidate.strategyComplete) && context.strategies.length === 0)
   );
 
+  const askedForAnotherGoal = /\b(another goal|anything else|add another)\b/i.test(priorAssistant);
+  const finishedListingGoals = /\b(that['’]?s|that is) (everything|all)|\bno (more|other)|\bdone\b/i.test(lastUser);
+  const goalCollectionComplete = previous.goalCollectionComplete || (
+    Boolean(candidate.goalCollectionComplete) &&
+    goals.length > 0 &&
+    goals.every((goal) => goal.detailsComplete) &&
+    askedForAnotherGoal &&
+    finishedListingGoals
+  );
+  const askedAboutPriority = /\b(priority|priorities|first|most important|order)\b/i.test(priorAssistant);
+  const prioritiesConfirmed = goals.length < 2 || previous.prioritiesConfirmed || (
+    Boolean(candidate.prioritiesConfirmed) && askedAboutPriority && lastUser.length > 0
+  );
+
   const state: AIOnboardingState = {
     goals,
-    goalCollectionComplete: Boolean(candidate.goalCollectionComplete),
-    prioritiesConfirmed: goals.length < 2 ? true : Boolean(candidate.prioritiesConfirmed),
+    goalCollectionComplete,
+    prioritiesConfirmed,
     incomeConfirmed,
     recurringReviewed,
     acceptedStrategyIds: [...new Set(accepted)],
