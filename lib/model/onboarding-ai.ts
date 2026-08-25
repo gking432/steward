@@ -419,7 +419,8 @@ export function normalizeAIOnboardingState(
   );
 
   const askedForAnotherGoal = /\b(another goal|anything else|add another)\b/i.test(priorAssistant);
-  const finishedListingGoals = /\b(that['’]?s|that is) (everything|all)|\bno (more|other)|\bdone\b/i.test(lastUser);
+  const finishedListingGoals = /\b(that['’]?s|that is) (everything|all)|\bno (more|other)|\bdone\b/i.test(lastUser) ||
+    /^no\b/i.test(lastUser);
   const correctingGoal = /\b(i said|instead|not that|change|wrong)\b/i.test(lastUser) ||
     /^no\b/i.test(lastUser) && !finishedListingGoals;
   const goalCollectionComplete = !correctingGoal && (previous.goalCollectionComplete || (

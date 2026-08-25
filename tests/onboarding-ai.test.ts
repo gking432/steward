@@ -89,7 +89,7 @@ test("goal collection closes only after its own explicit one-piece question", ()
     context,
     [
       { role: "assistant", content: "Would you like to add another goal?" },
-      { role: "user", content: "That’s everything." },
+      { role: "user", content: "No, continue." },
     ],
   );
   assert.equal(normalized.goalCollectionComplete, true);
