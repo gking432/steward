@@ -420,13 +420,15 @@ export function normalizeAIOnboardingState(
 
   const askedForAnotherGoal = /\b(another goal|anything else|add another)\b/i.test(priorAssistant);
   const finishedListingGoals = /\b(that['’]?s|that is) (everything|all)|\bno (more|other)|\bdone\b/i.test(lastUser);
-  const goalCollectionComplete = previous.goalCollectionComplete || (
+  const correctingGoal = /\b(i said|instead|not that|change|wrong)\b/i.test(lastUser) ||
+    /^no\b/i.test(lastUser) && !finishedListingGoals;
+  const goalCollectionComplete = !correctingGoal && (previous.goalCollectionComplete || (
     Boolean(candidate.goalCollectionComplete) &&
     goals.length > 0 &&
     goals.every((goal) => goal.detailsComplete) &&
     askedForAnotherGoal &&
     finishedListingGoals
-  );
+  ));
   const askedAboutPriority = /\b(priority|priorities|first|most important|order)\b/i.test(priorAssistant);
   const prioritiesConfirmed = goals.length < 2 || previous.prioritiesConfirmed || (
     Boolean(candidate.prioritiesConfirmed) && askedAboutPriority && lastUser.length > 0

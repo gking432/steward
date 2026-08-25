@@ -221,6 +221,7 @@ const onboardingOutputSchema = {
   properties: {
     message: { type: "string" },
     quickReplies: { type: "array", items: { type: "string" }, maxItems: 4 },
+    selectionMode: { type: "string", enum: ["single", "multiple"] },
     showPlan: { type: "boolean" },
     state: {
       type: "object",
@@ -262,7 +263,7 @@ const onboardingOutputSchema = {
       ],
     },
   },
-  required: ["message", "quickReplies", "showPlan", "state"],
+  required: ["message", "quickReplies", "selectionMode", "showPlan", "state"],
 };
 
 const ONBOARDING_PROMPT = [
@@ -275,7 +276,7 @@ const ONBOARDING_PROMPT = [
   "Keep the interview concise, but collect exactly one piece of information per turn.",
   "",
   "Conversation rules:",
-  "- Write one short message, normally under 30 words. Ask exactly one question about exactly one decision or fact per turn.",
+  "- Write one short message, normally under 24 words. Ask exactly one question about exactly one decision or fact per turn.",
   "- Never combine requests with 'and'. Do not ask for a goal, its amount, its timing, or its priority in the same turn.",
   "- The opening asks only which kind of goal to start with. Never ask for an amount in the opening.",
   "- Collect one goal at a time: first its kind, then what it specifically is, then its rough amount if useful, then timing only if useful.",
@@ -283,6 +284,10 @@ const ONBOARDING_PROMPT = [
   "- If the user volunteers several goals or details at once, extract all supplied information, but ask for only one remaining item next.",
   "- 'Not sure' is valid. Do not keep pressing for an amount or date after that answer.",
   "- A debt goal is detailed once it is linked to a known account; use that account's supplied balance and never ask the user to repeat the payoff amount.",
+  "- A person may choose one debt or several. For debt-account selection, set selectionMode to multiple, say 'Choose one or more,' and use the exact account names as quickReplies.",
+  "- Interpret a multi-select answer as the exact selected set. Create one payoff goal for each selected debt.",
+  "- If a generic phrase such as 'credit card' uniquely identifies an account type, explain the matching account name before continuing. If it is ambiguous, ask; never guess.",
+  "- A correction such as 'no,' 'I said,' or 'instead' reopens the current question. Correct the state and do not advance to income or another phase.",
   "- Do not ask for facts already present in the transcript or financial context.",
   "- Once goals are clear, confirm the detected paycheck by itself. Review recurring charges in the following turn.",
   "- For payoff or ambitious goals, compare them with freePerPaycheck and negotiate using ONLY context.strategies.",
@@ -330,6 +335,7 @@ export async function POST(request: Request) {
         enhanced: true,
         message: "What would you like Steward to help with first?",
         quickReplies: ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
+        selectionMode: "single",
         showPlan: false,
         phase: "goals",
         state: previous,
@@ -346,6 +352,7 @@ export async function POST(request: Request) {
             enhanced: false,
             message: "What would you like to buy?",
             quickReplies: ["A car", "Clothes", "A trip", "Something else"],
+            selectionMode: "single",
             showPlan: false,
             phase,
             state: previous,
@@ -358,8 +365,11 @@ export async function POST(request: Request) {
             .slice(0, 3);
           return {
             enhanced: false,
-            message: "Which debt should Steward focus on first?",
-            quickReplies: [...debts, "All of my debt"].slice(0, 4),
+            message: debts.length > 1
+              ? "Which debts should Steward include? Choose one or more."
+              : "Which debt should Steward include?",
+            quickReplies: debts,
+            selectionMode: debts.length > 1 ? "multiple" : "single",
             showPlan: false,
             phase,
             state: previous,
@@ -370,6 +380,7 @@ export async function POST(request: Request) {
             enhanced: false,
             message: "What should the savings be for?",
             quickReplies: ["Emergency cushion", "A home", "A trip", "Something else"],
+            selectionMode: "single",
             showPlan: false,
             phase,
             state: previous,
@@ -380,6 +391,7 @@ export async function POST(request: Request) {
             enhanced: false,
             message: "Where would extra breathing room help most?",
             quickReplies: ["Monthly bills", "Everyday spending", "Debt payments", "Savings"],
+            selectionMode: "single",
             showPlan: false,
             phase,
             state: previous,
@@ -397,6 +409,7 @@ export async function POST(request: Request) {
             : previous.goals.length
               ? ["Add another goal", "That’s everything"]
               : ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
+          selectionMode: "single",
           showPlan: false,
           phase,
           state: previous,
@@ -410,6 +423,7 @@ export async function POST(request: Request) {
             enhanced: false,
             message: `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that right?`,
             quickReplies: ["Yes, that’s right", "No, that’s not right"],
+            selectionMode: "single",
             showPlan: false,
             phase,
             state: previous,
@@ -423,6 +437,7 @@ export async function POST(request: Request) {
           quickReplies: charges
             ? ["Keep them all", "Review them one at a time"]
             : ["Yes, continue", "Go back"],
+          selectionMode: "single",
           showPlan: false,
           phase,
           state: previous,
@@ -435,6 +450,7 @@ export async function POST(request: Request) {
           enhanced: false,
           message: option ? `${option.label}. Does that feel realistic?` : "Your current spending can stay as it is. Ready to see the budget?",
           quickReplies: option ? ["Yes", "Show me another", "Keep spending as is"] : ["Show my budget"],
+          selectionMode: "single",
           showPlan: false,
           phase,
           state: previous,
@@ -445,6 +461,7 @@ export async function POST(request: Request) {
           enhanced: false,
           message: "Here’s the budget built around what matters to you. Want to use it?",
           quickReplies: ["Use this budget", "Change the strategy"],
+          selectionMode: "single",
           showPlan: true,
           phase,
           state: previous,
@@ -454,6 +471,7 @@ export async function POST(request: Request) {
         enhanced: false,
         message: "I’ll group each purchase into its budget bucket. How often should I check in?",
         quickReplies: ["Daily", "Every other day", "Weekly"],
+        selectionMode: "single",
         showPlan: false,
         phase,
         state: previous,
@@ -475,6 +493,7 @@ export async function POST(request: Request) {
     const candidate = result as {
       message?: unknown;
       quickReplies?: unknown;
+      selectionMode?: unknown;
       showPlan?: unknown;
       state?: unknown;
     };
@@ -482,6 +501,9 @@ export async function POST(request: Request) {
     let quickReplies = Array.isArray(candidate.quickReplies)
       ? candidate.quickReplies.map((reply) => cleanModelText(reply, 80)).filter(Boolean).slice(0, 4)
       : [];
+    let selectionMode: "single" | "multiple" = candidate.selectionMode === "multiple"
+      ? "multiple"
+      : "single";
     const outputState = onboardingStateSchema.safeParse(candidate.state);
     if (!message || !outputState.success || message.split(/\s+/).length > 60) {
       return Response.json(fallback());
@@ -495,6 +517,30 @@ export async function POST(request: Request) {
     );
     const phase = onboardingPhase(state, context);
     let showPlan = Boolean(candidate.showPlan);
+    const lastUser = [...conversation].reverse().find((turn) => turn.role === "user")?.content.trim().toLowerCase() ?? "";
+    const debtAccounts = context.accounts.filter((account) => /credit|loan/i.test(account.type));
+    const uniqueCreditCard = debtAccounts.filter((account) => /credit/i.test(account.type));
+    const uniqueLoan = debtAccounts.filter((account) => /loan/i.test(account.type));
+    const correctingDebt = /\b(no|instead|i said|not that|change)\b/i.test(lastUser) &&
+      /\b(card|credit|loan|debt)\b/i.test(lastUser);
+    const genericCreditCard = /^(credit card|card)$/.test(lastUser) || correctingDebt && /\b(card|credit)\b/i.test(lastUser);
+    const genericLoan = /^(auto loan|loan)$/.test(lastUser) || correctingDebt && /\bloan\b/i.test(lastUser);
+
+    // A type-level answer is valid, but the user should see exactly which
+    // detected account it maps to and may select several debts in one turn.
+    if (phase === "goals" && debtAccounts.length > 0 && (genericCreditCard || genericLoan)) {
+      const match = genericCreditCard && uniqueCreditCard.length === 1
+        ? uniqueCreditCard[0]
+        : genericLoan && uniqueLoan.length === 1
+          ? uniqueLoan[0]
+          : null;
+      message = match
+        ? `${match.name} is the ${genericCreditCard ? "credit card" : "loan"} I found. Choose one debt or more.`
+        : "Choose one or more debts.";
+      quickReplies = debtAccounts.map((account) => account.name).slice(0, 4);
+      selectionMode = debtAccounts.length > 1 ? "multiple" : "single";
+      showPlan = false;
+    }
 
     // Finance review is two separate decisions even if a model tries to merge
     // them: first the paycheck, then recurring charges.
@@ -502,6 +548,7 @@ export async function POST(request: Request) {
       const merchant = context.paycheck.merchant ?? "your regular income";
       message = `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that right?`;
       quickReplies = ["Yes, that’s right", "No, that’s not right"];
+      selectionMode = "single";
       showPlan = false;
     } else if (phase === "review" && !state.recurringReviewed) {
       const charges = context.recurringCharges.map((charge) => charge.merchant).join(", ");
@@ -511,6 +558,7 @@ export async function POST(request: Request) {
       quickReplies = charges
         ? ["Keep them all", "Review them one at a time"]
         : ["Yes, continue", "Go back"];
+      selectionMode = "single";
       showPlan = false;
     }
 
@@ -520,6 +568,7 @@ export async function POST(request: Request) {
     ) {
       message = "Deal. Here’s the budget built around your priorities. Want to use it?";
       quickReplies = ["Use this budget", "Try another strategy"];
+      selectionMode = "single";
       showPlan = true;
     }
 
@@ -547,6 +596,7 @@ export async function POST(request: Request) {
       enhanced: true,
       message,
       quickReplies,
+      selectionMode,
       showPlan,
       phase,
       state,

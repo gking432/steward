@@ -44,6 +44,7 @@ type OnboardingResponse = {
   enhanced: boolean;
   message: string;
   quickReplies: string[];
+  selectionMode: "single" | "multiple";
   showPlan: boolean;
   phase: OnboardingPhase;
   state: AIOnboardingState;
@@ -97,6 +98,8 @@ export function IntakeScreen({
   const [, setTurns] = useState<OnboardingTurn[]>([]);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
+  const [selectionMode, setSelectionMode] = useState<"single" | "multiple">("single");
+  const [selectedReplies, setSelectedReplies] = useState<string[]>([]);
   const [phase, setPhase] = useState<OnboardingPhase>("goals");
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
@@ -124,6 +127,7 @@ export function IntakeScreen({
     }
     setTyped("");
     setQuickReplies([]);
+    setSelectedReplies([]);
     setBusy(true);
 
     try {
@@ -158,6 +162,7 @@ export function IntakeScreen({
       setTurns(nextTurns);
       setPhase(payload.phase);
       setQuickReplies(payload.quickReplies ?? []);
+      setSelectionMode(payload.selectionMode === "multiple" ? "multiple" : "single");
       setBubbles((current) => [
         ...current,
         { id: nextId(), from: "steward", text: payload.message, plan },
@@ -227,10 +232,33 @@ export function IntakeScreen({
         {!complete && quickReplies.length > 0 && (
           <div className="ik-chips" aria-label="Suggested replies">
             {quickReplies.map((reply) => (
-              <button key={reply} className="ik-chip" onClick={() => submit(reply)} disabled={busy}>
+              <button
+                key={reply}
+                className={`ik-chip ${selectedReplies.includes(reply) ? "active" : ""}`}
+                aria-pressed={selectionMode === "multiple" ? selectedReplies.includes(reply) : undefined}
+                onClick={() => {
+                  if (selectionMode === "single") {
+                    submit(reply);
+                    return;
+                  }
+                  setSelectedReplies((current) => current.includes(reply)
+                    ? current.filter((entry) => entry !== reply)
+                    : [...current, reply]);
+                }}
+                disabled={busy}
+              >
                 {reply}
               </button>
             ))}
+            {selectionMode === "multiple" && (
+              <button
+                className="ik-chip ik-chip-continue"
+                onClick={() => submit(selectedReplies.join(" and "))}
+                disabled={busy || selectedReplies.length === 0}
+              >
+                Continue
+              </button>
+            )}
           </div>
         )}
 

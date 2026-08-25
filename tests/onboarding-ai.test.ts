@@ -179,6 +179,58 @@ test("a debt goal reuses the known debt instead of creating a duplicate", () => 
   assert.equal(preview.claims.find((claim) => claim.linkedAccountId === card.id)?.status, "active");
 });
 
+test("one answer can select several detected debts", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const debts = context.accounts.filter((account) => /credit|loan/i.test(account.type));
+  assert.ok(debts.length >= 2);
+  const candidate: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: debts.slice(0, 2).map((account) => ({
+      id: `goal:${account.id}`,
+      name: `Pay off ${account.name}`,
+      kind: "payoff",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: account.id,
+      detailsComplete: true,
+    })),
+  };
+  const answer = debts.slice(0, 2).map((account) => account.name).join(" and ");
+  const normalized = normalizeAIOnboardingState(candidate, EMPTY_AI_ONBOARDING_STATE, context, [
+    { role: "assistant", content: "Which debts should Steward include? Choose one or more." },
+    { role: "user", content: answer },
+  ]);
+  assert.deepEqual(
+    normalized.goals.map((goal) => goal.linkedAccountId),
+    debts.slice(0, 2).map((account) => account.id),
+  );
+});
+
+test("a correction reopens goal selection instead of advancing", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const card = context.accounts.find((account) => /credit/i.test(account.type))!;
+  const previous: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:card",
+      name: `Pay off ${card.name}`,
+      kind: "payoff",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: card.id,
+      detailsComplete: true,
+    }],
+    goalCollectionComplete: true,
+    prioritiesConfirmed: true,
+  };
+  const normalized = normalizeAIOnboardingState(previous, previous, context, [
+    { role: "assistant", content: "Would you like to add another goal?" },
+    { role: "user", content: "No, I said credit card." },
+  ]);
+  assert.equal(normalized.goalCollectionComplete, false);
+  assert.equal(onboardingPhase(normalized, context), "goals");
+});
+
 test("completion requires goals, financial review, strategy, budget approval, and cadence", () => {
   const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
   const almost: AIOnboardingState = {

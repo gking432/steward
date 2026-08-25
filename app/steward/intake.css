@@ -208,6 +208,13 @@
   background: #f6f8f4;
   color: var(--ik-ink);
 }
+.ik-chip-continue {
+  border-color: #f6f8f4;
+  background: rgba(246, 248, 244, 0.18);
+}
+.ik-chip-continue:disabled {
+  opacity: 0.42;
+}
 
 .ik-primary {
   min-height: 48px;
