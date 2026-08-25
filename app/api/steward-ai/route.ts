@@ -534,9 +534,12 @@ export async function POST(request: Request) {
         : genericLoan && uniqueLoan.length === 1
           ? uniqueLoan[0]
           : null;
+      const selectionInstruction = debtAccounts.length === 2
+        ? "Choose one or both."
+        : "Choose one or more.";
       message = match
-        ? `${match.name} is the ${genericCreditCard ? "credit card" : "loan"} I found. Choose one debt or more.`
-        : "Choose one or more debts.";
+        ? `${match.name} is the ${genericCreditCard ? "credit card" : "loan"} I found. ${selectionInstruction}`
+        : selectionInstruction;
       quickReplies = debtAccounts.map((account) => account.name).slice(0, 4);
       selectionMode = debtAccounts.length > 1 ? "multiple" : "single";
       showPlan = false;
