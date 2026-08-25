@@ -93,6 +93,15 @@
   background: rgba(255, 255, 255, 0.16);
   color: #f6f8f4;
 }
+.ik-msg.has-review {
+  width: 100%;
+  max-width: 100%;
+  padding: 14px;
+}
+.ik-msg.has-review > p {
+  font-weight: 580;
+  letter-spacing: -0.01em;
+}
 .ik-msg.pending {
   display: inline-flex;
   align-items: center;
@@ -105,6 +114,103 @@
 }
 @keyframes ik-spin {
   to { transform: rotate(360deg); }
+}
+
+/* -------------------------------------------------- recurring review --- */
+
+.ik-recurring {
+  overflow: hidden;
+  margin-top: 12px;
+  border: 1px solid rgba(30, 74, 53, 0.11);
+  border-radius: 16px;
+  background: linear-gradient(145deg, #ffffff 0%, #eef5ef 100%);
+  box-shadow: 0 10px 28px rgba(20, 54, 37, 0.1);
+}
+.ik-recurring > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px 9px;
+  color: var(--ik-ink-soft);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ik-recurring > header strong {
+  color: var(--ik-ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ik-recurring-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  padding: 0 8px 9px;
+}
+.ik-recurring-grid article {
+  display: flex;
+  min-width: 0;
+  min-height: 112px;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(30, 74, 53, 0.08);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 10px 5px;
+  text-align: center;
+  animation: ik-card-in 360ms both ease-out;
+}
+.ik-recurring-grid article:nth-child(2) { animation-delay: 70ms; }
+.ik-recurring-grid article:nth-child(3) { animation-delay: 140ms; }
+.ik-merchant-mark {
+  position: relative;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #edf2ed;
+  color: var(--ik-ink);
+  font-size: 16px;
+  font-weight: 750;
+}
+.ik-merchant-mark img {
+  position: absolute;
+  inset: 9px;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.ik-recurring-grid article b {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ik-ink);
+  font-size: 11.5px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+}
+.ik-recurring-grid article > span:last-child {
+  color: var(--ik-ink-soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ik-recurring > footer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-top: 1px solid rgba(30, 74, 53, 0.08);
+  padding: 8px 11px;
+  color: var(--ik-ink-soft);
+  font-size: 10.5px;
+}
+@keyframes ik-card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* -------------------------------------------------------------- plan --- */
@@ -202,11 +308,13 @@
   color: #f6f8f4;
   font-size: 13.5px;
   font-weight: 600;
+  transition: transform 160ms ease, background 160ms ease, color 160ms ease;
 }
 .ik-chip.active {
   border-color: transparent;
   background: #f6f8f4;
   color: var(--ik-ink);
+  transform: translateY(-1px);
 }
 .ik-primary {
   min-height: 48px;

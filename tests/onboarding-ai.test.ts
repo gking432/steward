@@ -7,12 +7,22 @@ import {
   acceptAIOnboarding,
   buildAIOnboardingContext,
   normalizeAIOnboardingState,
+  onboardingReplySubmitsImmediately,
   onboardingPhase,
   previewAIOnboarding,
   type AIOnboardingState,
 } from "../lib/model/onboarding-ai";
 
 const workspace = () => toModel(demoWorkspace());
+
+test("binary replies submit immediately while selectable answers wait", () => {
+  for (const reply of ["Yes", "No, something is off", "Accept", "Decline"]) {
+    assert.equal(onboardingReplySubmitsImmediately(reply), true, reply);
+  }
+  for (const reply of ["Travel Rewards Card", "Vehicle", "I’m not sure yet"]) {
+    assert.equal(onboardingReplySubmitsImmediately(reply), false, reply);
+  }
+});
 
 test("every AI turn can receive a complete compact financial context", () => {
   const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
@@ -157,6 +167,36 @@ test("an explicit yes or no records the one strategy Steward just discussed", ()
   );
   assert.deepEqual(keptCurrent.acceptedStrategyIds, []);
   assert.deepEqual(keptCurrent.declinedStrategyIds, [option.id]);
+});
+
+test("wrapped Accept and Decline replies settle exactly the discussed strategy", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const option = context.strategies.find((entry) => entry.kind === "cut_bucket")!;
+  const assistant = `${option.label}. Does that feel realistic?`;
+
+  const accepted = normalizeAIOnboardingState(
+    EMPTY_AI_ONBOARDING_STATE,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: assistant },
+      { role: "user", content: "Selected: Accept." },
+    ],
+  );
+  assert.deepEqual(accepted.acceptedStrategyIds, [option.id]);
+  assert.equal(accepted.strategyComplete, true);
+
+  const declined = normalizeAIOnboardingState(
+    EMPTY_AI_ONBOARDING_STATE,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: assistant },
+      { role: "user", content: "Selected: Decline." },
+    ],
+  );
+  assert.deepEqual(declined.declinedStrategyIds, [option.id]);
+  assert.equal(declined.strategyComplete, false);
 });
 
 test("a debt goal reuses the known debt instead of creating a duplicate", () => {

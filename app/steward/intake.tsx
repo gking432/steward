@@ -9,7 +9,7 @@
  * its state and is the only layer allowed to change the budget.
  */
 
-import { ArrowUp, LoaderCircle, Sparkles } from "lucide-react";
+import { ArrowUp, Dumbbell, LoaderCircle, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { allocate, formatMoney, planCycle } from "../../lib/model/engine";
 import {
@@ -17,8 +17,10 @@ import {
   acceptAIOnboarding,
   acceptedCancellationStrategies,
   buildAIOnboardingContext,
+  onboardingReplySubmitsImmediately,
   previewAIOnboarding,
   type AIOnboardingState,
+  type AIOnboardingContext,
   type OnboardingPhase,
   type OnboardingTurn,
 } from "../../lib/model/onboarding-ai";
@@ -30,6 +32,7 @@ type Bubble = {
   from: "steward" | "you";
   text: string;
   plan?: PlanView;
+  recurringReview?: AIOnboardingContext["recurringCharges"];
 };
 
 type PlanView = {
@@ -105,6 +108,7 @@ export function IntakeScreen({
   const startedRef = useRef(false);
   const stateRef = useRef(state);
   const turnsRef = useRef<OnboardingTurn[]>([]);
+  const inFlightRef = useRef(false);
 
   const context = useMemo(
     () => buildAIOnboardingContext(workspace, today, scanComplete),
@@ -112,7 +116,8 @@ export function IntakeScreen({
   );
 
   const runTurn = useCallback(async (userText?: string) => {
-    if (busy) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     const said = userText?.trim();
     const conversation: OnboardingTurn[] = said
       ? [...turnsRef.current, { role: "user", content: said }]
@@ -160,9 +165,16 @@ export function IntakeScreen({
       setTurns(nextTurns);
       setPhase(payload.phase);
       setQuickReplies(payload.quickReplies ?? []);
+      const recurringReview = payload.phase === "review" &&
+        payload.state.incomeConfirmed === true &&
+        !payload.state.recurringReviewed &&
+        context.recurringCharges.length > 0 &&
+        /do you use all of these|anything look surprising/i.test(payload.message)
+          ? context.recurringCharges
+          : undefined;
       setBubbles((current) => [
         ...current,
-        { id: nextId(), from: "steward", text: payload.message, plan },
+        { id: nextId(), from: "steward", text: payload.message, plan, recurringReview },
       ]);
     } catch {
       setBubbles((current) => [
@@ -174,9 +186,10 @@ export function IntakeScreen({
         },
       ]);
     } finally {
+      inFlightRef.current = false;
       setBusy(false);
     }
-  }, [busy, context, today, workspace]);
+  }, [context, today, workspace]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -223,8 +236,9 @@ export function IntakeScreen({
 
       <div className="ik-thread" ref={threadRef} aria-live="polite">
         {bubbles.map((bubble) => (
-          <div className={`ik-msg ${bubble.from}`} key={bubble.id}>
+          <div className={`ik-msg ${bubble.from} ${bubble.recurringReview ? "has-review" : ""}`} key={bubble.id}>
             <p>{bubble.text}</p>
+            {bubble.recurringReview && <RecurringReviewCard charges={bubble.recurringReview} />}
             {bubble.plan && <PlanCard plan={bubble.plan} />}
           </div>
         ))}
@@ -244,6 +258,10 @@ export function IntakeScreen({
                 className={`ik-chip ${selectedReplies.includes(reply) ? "active" : ""}`}
                 aria-pressed={selectedReplies.includes(reply)}
                 onClick={() => {
+                  if (onboardingReplySubmitsImmediately(reply)) {
+                    submit(`Selected: ${reply}.`);
+                    return;
+                  }
                   setSelectedReplies((current) => current.includes(reply)
                     ? current.filter((entry) => entry !== reply)
                     : [...current, reply]);
@@ -293,6 +311,51 @@ export function IntakeScreen({
         )}
       </div>
     </main>
+  );
+}
+
+const BRAND_MARKS: Record<string, string> = {
+  Netflix: "https://cdn.simpleicons.org/netflix/E50914",
+  Spotify: "https://cdn.simpleicons.org/spotify/1DB954",
+};
+
+function RecurringReviewCard({
+  charges,
+}: {
+  charges: AIOnboardingContext["recurringCharges"];
+}) {
+  const yearlyTotal = charges.reduce((sum, charge) => sum + charge.yearlyCost, 0);
+  return (
+    <section className="ik-recurring" aria-label="Recurring charges Steward found">
+      <header>
+        <span>{charges.length} recurring charges</span>
+        <strong>{formatMoney(yearlyTotal)} / year</strong>
+      </header>
+      <div className="ik-recurring-grid">
+        {charges.map((charge) => {
+          const logo = BRAND_MARKS[charge.merchant];
+          return (
+            <article key={charge.id}>
+              <span className="ik-merchant-mark">
+                {charge.merchant === "Midtown Fitness"
+                  ? <Dumbbell size={20} aria-hidden="true" />
+                  : <span aria-hidden="true">{charge.merchant.slice(0, 1)}</span>}
+                {logo && (
+                  <img
+                    src={logo}
+                    alt={`${charge.merchant} logo`}
+                    onError={(event) => { event.currentTarget.style.display = "none"; }}
+                  />
+                )}
+              </span>
+              <b>{charge.merchant}</b>
+              <span>{formatMoney(charge.amount)} / mo</span>
+            </article>
+          );
+        })}
+      </div>
+      <footer><Sparkles size={12} /> Matched across recent statements</footer>
+    </section>
   );
 }
 

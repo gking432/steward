@@ -66,6 +66,11 @@ export const EMPTY_AI_ONBOARDING_STATE: AIOnboardingState = {
   complete: false,
 };
 
+/** Binary decisions are complete answers; choice lists remain editable. */
+export function onboardingReplySubmitsImmediately(reply: string) {
+  return /^(yes|no|accept|decline)\b/i.test(reply.trim());
+}
+
 export type OnboardingStrategy = {
   id: string;
   kind: "cut_bucket" | "cancel_subscription";
@@ -293,7 +298,7 @@ export function normalizeAIOnboardingState(
     ? [...conversation.slice(0, lastUserIndex)].reverse().find((turn) => turn.role === "assistant")?.content.toLowerCase() ?? ""
     : "";
   const affirmative = /\b(yes|yeah|yep|right|correct|keep|use|works|okay|ok|deal|accept|good|sounds good|do it)\b/i.test(lastUser);
-  const negative = /\b(no|nope|wrong|another|different|don'?t|do not|not that)\b/i.test(lastUser);
+  const negative = /\b(no|nope|wrong|another|different|decline|reject|don'?t|do not|not that)\b/i.test(lastUser);
   const strategyNegative = negative || /\b(keep|leave)\b.{0,28}\b(current|unchanged|same)\b/i.test(lastUser);
 
   const proposedGoals = Array.isArray(candidate.goals) ? candidate.goals : previous.goals;
@@ -387,6 +392,9 @@ export function normalizeAIOnboardingState(
   const askedAboutRecurring =
     /\b(recurring|subscription|charge|keep|cancel)\b/i.test(priorAssistant) ||
     context.recurringCharges.some((charge) => priorAssistant.includes(charge.merchant.toLowerCase()));
+  const reviewingSingleCharge =
+    /\b(still use|keep|cancel)\b/i.test(priorAssistant) &&
+    context.recurringCharges.some((charge) => priorAssistant.includes(charge.merchant.toLowerCase()));
   const incomeConfirmed = previous.incomeConfirmed === true
     ? true
     : askedAboutIncome && affirmative && !negative
@@ -395,7 +403,8 @@ export function normalizeAIOnboardingState(
         ? false
         : previous.incomeConfirmed;
   const recurringReviewed = context.recurringCharges.length === 0 || previous.recurringReviewed ||
-    (askedAboutRecurring && (affirmative || negative));
+    (askedAboutRecurring && affirmative && !negative) ||
+    (reviewingSingleCharge && (affirmative || negative));
   const askedAboutBudget = /\b(budget|plan)\b/i.test(priorAssistant);
   const budgetAccepted = previous.budgetAccepted ||
     (Boolean(candidate.budgetAccepted) && askedAboutBudget && affirmative && !negative);

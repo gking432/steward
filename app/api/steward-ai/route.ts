@@ -143,7 +143,7 @@ const onboardingSchema = z.object({
   conversation: z.array(z.object({
     role: z.enum(["assistant", "user"]),
     content: z.string().min(1).max(600),
-  })).max(30),
+  })).max(80),
   state: onboardingStateSchema,
 });
 
@@ -301,8 +301,9 @@ const ONBOARDING_PROMPT = [
   "- A correction such as 'no,' 'I said,' or 'instead' reopens the current question. Correct the state and do not advance to income or another phase.",
   "- Do not ask for facts already present in the transcript or financial context.",
   "- Once goals are clear, confirm the detected paycheck by itself. Review recurring charges in the following turn.",
+  "- For the first recurring-charge review, say: 'Here’s what I found. Do you use all of these, or does anything look surprising?' The interface shows the merchant details.",
   "- For payoff or ambitious goals, compare them with freePerPaycheck and negotiate using ONLY context.strategies.",
-  "- Offer one specific strategy at a time. If rejected, add its exact id to declinedStrategyIds and offer a different unused strategy. Never repeat a rejected option.",
+  "- Offer one specific strategy at a time with quickReplies 'Accept' and 'Decline'. If rejected, add its exact id to declinedStrategyIds and offer a different unused strategy. Never repeat a rejected option.",
   "- Add a strategy id to acceptedStrategyIds only after explicit agreement. The user may also keep current spending; then set strategyComplete true without a strategy.",
   "- When a strategy is settled, show the budget and ask for approval. Set showPlan true on that turn.",
   "- After budget approval, explain in one sentence that spending will be grouped into buckets, then ask daily, every other day, or weekly check-ins.",
@@ -429,7 +430,11 @@ export async function POST(request: Request) {
       }
       if (phase === "review") {
         const merchant = context.paycheck.merchant ?? "your regular income";
-        const charges = context.recurringCharges.map((charge) => charge.merchant).join(", ");
+        const recurringWasPresented = conversation.some((turn) =>
+          turn.role === "assistant" && /do you use all of these|anything look surprising/i.test(turn.content));
+        const lastUser = [...conversation].reverse().find((turn) => turn.role === "user")?.content ?? "";
+        const selectedCharge = context.recurringCharges.find((charge) =>
+          lastUser.toLowerCase().includes(charge.merchant.toLowerCase()));
         if (previous.incomeConfirmed !== true) {
           return {
             enhanced: false,
@@ -441,13 +446,35 @@ export async function POST(request: Request) {
             state: previous,
           };
         }
+        if (recurringWasPresented && /\b(no|off|surpris|unfamiliar|wrong)\b/i.test(lastUser)) {
+          return {
+            enhanced: false,
+            message: "Which one looks unfamiliar?",
+            quickReplies: context.recurringCharges.map((charge) => charge.merchant).slice(0, 4),
+            selectionMode: "multiple",
+            showPlan: false,
+            phase,
+            state: previous,
+          };
+        }
+        if (selectedCharge) {
+          return {
+            enhanced: false,
+            message: `Do you still use ${selectedCharge.merchant}?`,
+            quickReplies: ["Yes", "No"],
+            selectionMode: "multiple",
+            showPlan: false,
+            phase,
+            state: previous,
+          };
+        }
         return {
           enhanced: false,
-          message: charges
-            ? `I found recurring charges from ${charges}. Do you want to keep them all?`
+          message: context.recurringCharges.length
+            ? "Here’s what I found. Do you use all of these, or does anything look surprising?"
             : "I didn’t find any recurring charges. Ready to continue?",
-          quickReplies: charges
-            ? ["Keep them all", "Review them one at a time"]
+          quickReplies: context.recurringCharges.length
+            ? ["Yes, I use these", "No, something is off"]
             : ["Yes, continue", "Go back"],
           selectionMode: "multiple",
           showPlan: false,
@@ -461,7 +488,7 @@ export async function POST(request: Request) {
         return {
           enhanced: false,
           message: option ? `${option.label}. Does that feel realistic?` : "Your current spending can stay as it is. Ready to see the budget?",
-          quickReplies: option ? ["Yes", "Show me another", "Keep spending as is"] : ["Show my budget"],
+          quickReplies: option ? ["Accept", "Decline"] : ["Show my budget"],
           selectionMode: "multiple",
           showPlan: false,
           phase,
@@ -575,14 +602,27 @@ export async function POST(request: Request) {
       quickReplies = ["Yes, that’s right", "No, that’s not right"];
       showPlan = false;
     } else if (phase === "review" && !state.recurringReviewed) {
-      const charges = context.recurringCharges.map((charge) => charge.merchant).join(", ");
-      message = charges
-        ? `I found recurring charges from ${charges}. Do you want to keep them all?`
-        : "I didn’t find any recurring charges. Ready to continue?";
-      quickReplies = charges
-        ? ["Keep them all", "Review them one at a time"]
-        : ["Yes, continue", "Go back"];
-      showPlan = false;
+      const recurringWasPresented = conversation.some((turn) =>
+        turn.role === "assistant" && /do you use all of these|anything look surprising/i.test(turn.content));
+      const selectedCharge = context.recurringCharges.find((charge) =>
+        lastUser.includes(charge.merchant.toLowerCase()));
+      if (!recurringWasPresented) {
+        message = context.recurringCharges.length
+          ? "Here’s what I found. Do you use all of these, or does anything look surprising?"
+          : "I didn’t find any recurring charges. Ready to continue?";
+        quickReplies = context.recurringCharges.length
+          ? ["Yes, I use these", "No, something is off"]
+          : ["Yes, continue", "No, go back"];
+        showPlan = false;
+      } else if (/\b(no|off|surpris|unfamiliar|wrong)\b/i.test(lastUser)) {
+        message = "Which one looks unfamiliar?";
+        quickReplies = context.recurringCharges.map((charge) => charge.merchant).slice(0, 4);
+        showPlan = false;
+      } else if (selectedCharge) {
+        message = `Do you still use ${selectedCharge.merchant}?`;
+        quickReplies = ["Yes", "No"];
+        showPlan = false;
+      }
     }
 
     if (
