@@ -228,7 +228,16 @@ export function IntakeScreen({
       {
         stepId: current.id,
         choice,
-        picks: current.multi ? picks : undefined,
+        // A typed answer on a multi-select step is classified into one of the
+        // offered choices. Preserve that classified choice even though the
+        // visitor did not tap a chip first.
+        picks: current.multi
+          ? picks.length
+            ? picks
+            : choice === "Not sure yet"
+              ? []
+              : [choice]
+          : undefined,
         text,
       },
     ]);
