@@ -967,6 +967,72 @@
 
 /* Demo import: the visitor sees the raw bank connection become an explanation
    before Steward asks for goals. This is deliberately a flow, not a shortcut. */
+.dm-plaid-screen {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  background: #eef0ed;
+  padding: calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom));
+  color: #17211d;
+}
+.dm-plaid-card {
+  display: grid;
+  width: min(440px, 100%);
+  gap: 18px;
+  border: 1px solid #dde2dc;
+  border-radius: 24px;
+  background: #fff;
+  padding: 22px;
+  box-shadow: 0 20px 55px rgba(24, 38, 31, 0.1);
+}
+.dm-plaid-card > header { display: flex; align-items: center; gap: 8px; }
+.dm-plaid-card > header strong { font-size: 15px; }
+.dm-plaid-card > header small { margin-left: auto; color: #7e8883; font-size: 10px; }
+.dm-plaid-mark {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border-radius: 8px;
+  background: #111;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+.dm-plaid-copy { padding-top: 7px; }
+.dm-plaid-kicker { color: #66716b; font-size: 11px; font-weight: 650; }
+.dm-plaid-copy h1 { margin: 5px 0 8px; font-size: 28px; letter-spacing: -0.045em; }
+.dm-plaid-copy > p:last-child { color: #66716b; font-size: 13px; line-height: 1.45; }
+.dm-plaid-details {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #dde2dc;
+  border-radius: 14px;
+  background: #dde2dc;
+}
+.dm-plaid-details div {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  background: #f9faf8;
+  padding: 11px 13px;
+}
+.dm-plaid-details dt { color: #7e8883; font-size: 11px; }
+.dm-plaid-details dd { font-size: 12.5px; font-weight: 650; }
+.dm-plaid-accounts { display: grid; gap: 8px; }
+.dm-plaid-accounts span { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 12px; }
+.dm-plaid-accounts svg { color: #2f7656; }
+.dm-plaid-accounts small { color: #7e8883; }
+.dm-plaid-card > button {
+  min-height: 50px;
+  border-radius: 13px;
+  background: #111;
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+.dm-plaid-fine { color: #8a938e; text-align: center; font-size: 9.5px; }
+
 .dm-screen {
   display: grid;
   min-height: 100dvh;
@@ -1031,6 +1097,24 @@
 .dm-checks li { display: flex; align-items: center; gap: 9px; color: rgba(246, 248, 244, 0.46); font-size: 13.5px; }
 .dm-checks li.done { color: #f6f8f4; }
 .dm-checks li.active { color: #f0c08a; }
+.dm-import-rows {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  margin-top: 20px;
+  border-radius: 13px;
+  background: rgba(246, 248, 244, 0.12);
+}
+.dm-import-rows span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.dm-import-rows small { color: rgba(246, 248, 244, 0.58); font-size: 10.5px; }
 
 .dm-review { gap: 16px; overflow-y: auto; }
 .dm-review-copy { align-self: end; padding-top: 18px; }

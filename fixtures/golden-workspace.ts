@@ -274,13 +274,27 @@ export function demoWorkspace(
   email = "demo@steward.app",
 ): StewardState {
   const state = goldenWorkspace(name, email);
+  const recurring = [
+    ...["2026-05-30", "2026-06-30"].map((date, index) =>
+      expense(`demo-netflix-${index}`, "Netflix", 15.49, date, "Entertainment"),
+    ),
+    ...["2026-05-22", "2026-06-22", "2026-07-22"].map((date, index) =>
+      expense(`demo-spotify-${index}`, "Spotify", 11.99, date, "Entertainment"),
+    ),
+    ...["2026-05-18", "2026-06-18", "2026-07-18"].map((date, index) =>
+      expense(`demo-gym-${index}`, "Midtown Fitness", 45, date, "Fitness"),
+    ),
+  ];
   return {
     ...state,
     profile: { ...state.profile, onboardingComplete: false },
     // The canonical dashboard fixture intentionally has two near-identical
     // July rent rows for cycle-edge tests. A bank demo should not present that
     // artificial test seam as real spending.
-    transactions: state.transactions.filter((entry) => entry.id !== "fx-rent-2"),
+    transactions: [
+      ...state.transactions.filter((entry) => entry.id !== "fx-rent-2"),
+      ...recurring,
+    ].sort((a, b) => b.date.localeCompare(a.date)),
     goals: [],
     projects: [],
     wishlist: [],

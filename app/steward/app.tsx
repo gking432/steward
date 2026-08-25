@@ -58,7 +58,6 @@ import { AskScreen } from "./ask";
 import { HomeScreen } from "./home";
 import { SettingsSheet } from "./settings";
 import { SplitSheet } from "./split";
-import { Onboarding } from "./onboarding";
 import { usePlaidConnect } from "./use-plaid";
 import { useWorkspace } from "./workspace-store";
 import "./steward.css";
@@ -76,15 +75,19 @@ function DemoStatementImport({
   today: string;
   onContinue: () => void;
 }) {
-  const [stage, setStage] = useState<"connecting" | "reading" | "review">("connecting");
+  const [stage, setStage] = useState<"plaid" | "connecting" | "statements" | "categorizing" | "review">("plaid");
 
   useEffect(() => {
     if (stage === "connecting") {
-      const timer = window.setTimeout(() => setStage("reading"), 650);
+      const timer = window.setTimeout(() => setStage("statements"), 3000);
       return () => window.clearTimeout(timer);
     }
-    if (stage === "reading") {
-      const timer = window.setTimeout(() => setStage("review"), 1050);
+    if (stage === "statements") {
+      const timer = window.setTimeout(() => setStage("categorizing"), 3000);
+      return () => window.clearTimeout(timer);
+    }
+    if (stage === "categorizing") {
+      const timer = window.setTimeout(() => setStage("review"), 3000);
       return () => window.clearTimeout(timer);
     }
   }, [stage]);
@@ -94,22 +97,69 @@ function DemoStatementImport({
     [workspace, today],
   );
   const income = useMemo(() => incomeObservations(workspace, today).primary, [workspace, today]);
+  const statementCounts = useMemo(() => ({
+    mayJune: workspace.transactions.filter((row) => row.date <= "2026-06-30").length,
+    july: workspace.transactions.filter((row) => row.date >= "2026-07-01").length,
+  }), [workspace.transactions]);
+
+  if (stage === "plaid") {
+    return (
+      <main className="dm-plaid-screen">
+        <section className="dm-plaid-card">
+          <header><span className="dm-plaid-mark">P</span><strong>Plaid</strong><small>Demo connection</small></header>
+          <div className="dm-plaid-copy">
+            <p className="dm-plaid-kicker">Steward uses Plaid to connect</p>
+            <h1>First National</h1>
+            <p>Your demo login is ready. Review the details, then connect the sample accounts.</p>
+          </div>
+          <dl className="dm-plaid-details">
+            <div><dt>Username</dt><dd>steward_demo</dd></div>
+            <div><dt>Password</dt><dd>••••••••••••</dd></div>
+          </dl>
+          <div className="dm-plaid-accounts">
+            <span><CheckCircle2 size={17} /><b>Everyday Checking</b><small>••4821</small></span>
+            <span><CheckCircle2 size={17} /><b>Savings</b><small>••9014</small></span>
+            <span><CheckCircle2 size={17} /><b>Travel Rewards</b><small>••1738</small></span>
+          </div>
+          <button onClick={() => setStage("connecting")}>Connect accounts</button>
+          <p className="dm-plaid-fine">Demo credentials only. No real financial information is used.</p>
+        </section>
+      </main>
+    );
+  }
 
   if (stage !== "review") {
-    const reading = stage === "reading";
+    const index = stage === "connecting" ? 0 : stage === "statements" ? 1 : 2;
+    const title =
+      stage === "connecting"
+        ? "Connecting your accounts…"
+        : stage === "statements"
+          ? "Reading May 3 – June 30…"
+          : "Reading July 1 – August 1…";
     return (
       <main className="dm-screen dm-loading">
         <header className="dm-top"><strong>Steward</strong><span>Demo mode</span></header>
         <section className="dm-loading-card" aria-live="polite">
           <span className="dm-import-icon"><LoaderCircle size={26} className="cx-spin" /></span>
-          <p className="dm-eyebrow">Secure connection</p>
-          <h1>{reading ? "Reading three months of statements…" : "Connecting the fake accounts…"}</h1>
-          <div className="dm-progress"><i className={reading ? "complete" : "active"} /><i className={reading ? "active" : ""} /><i /></div>
+          <p className="dm-eyebrow">Importing with Plaid</p>
+          <h1>{title}</h1>
+          <div className="dm-progress">
+            {[0, 1, 2].map((step) => <i key={step} className={step < index ? "complete" : step === index ? "active" : ""} />)}
+          </div>
           <ul className="dm-checks">
-            <li className="done"><CheckCircle2 size={17} /> First National connected</li>
-            <li className={reading ? "done" : ""}><CheckCircle2 size={17} /> {workspace.accounts.length} accounts found</li>
-            <li className={reading ? "active" : ""}><FileText size={17} /> Categorizing {workspace.transactions.length} transactions</li>
+            <li className="done"><CheckCircle2 size={17} /> First National · {workspace.accounts.length} accounts</li>
+            <li className={index > 1 ? "done" : index === 1 ? "active" : ""}><FileText size={17} /> May and June statements · {statementCounts.mayJune} transactions</li>
+            <li className={index >= 2 ? "active" : ""}><FileText size={17} /> July statement · {statementCounts.july} transactions</li>
           </ul>
+          <div className="dm-import-rows">
+            {index === 0 && workspace.accounts.slice(0, 3).map((account) => (
+              <span key={account.id}><b>{account.name}</b><small>{formatMoney(account.balance)}</small></span>
+            ))}
+            {index === 1 && <><span><b>May 3 – May 31</b><small>Statement data</small></span><span><b>June 1 – June 30</b><small>{statementCounts.mayJune} transactions total</small></span></>}
+            {index === 2 && workspace.transactions.slice(0, 3).map((row) => (
+              <span key={row.id}><b>{row.merchant}</b><small>{formatDate(row.date)} · {formatMoney(row.amount)}</small></span>
+            ))}
+          </div>
         </section>
       </main>
     );
@@ -143,7 +193,7 @@ function DemoStatementImport({
 
       <footer className="dm-action">
         <p>Next, Steward will ask what matters to you and turn these patterns into a paycheck plan.</p>
-        <button onClick={onContinue}>Tell Steward what I want</button>
+        <button onClick={onContinue}>Goals</button>
       </footer>
     </main>
   );
@@ -882,117 +932,6 @@ function PaydayFlow({
 }
 
 
-/**
- * Turn onboarding answers into a workspace.
- *
- * Everything created here is an ordinary object the user can edit afterwards —
- * onboarding is a shortcut into the normal model, not a special mode.
- */
-function applyOnboarding(
-  current: Workspace,
-  input: {
-    takeHome: number;
-    frequency: Workspace["profile"]["payFrequency"];
-    nextPayday: string;
-    rent: number;
-    otherBills: number;
-    everyday: number;
-    picks: { label: string; kind: string; amount: number | null }[];
-  },
-): Workspace {
-  const buckets: Workspace["buckets"] = [];
-
-  if (input.rent > 0) {
-    buckets.push({
-      id: "reserve:onboard-rent",
-      kind: "reserve",
-      name: "Rent",
-      essential: true,
-      source: "manual",
-      amountDue: input.rent,
-      dueDate: firstOfNextMonth(input.nextPayday),
-      reserved: 0,
-      frequency: "monthly",
-      autopay: false,
-    });
-  }
-  if (input.otherBills > 0) {
-    buckets.push({
-      id: "reserve:onboard-bills",
-      kind: "reserve",
-      // Not "Bills" — these rows render under a "Bills" heading, and a bucket
-      // called Bills inside a group called Bills tells the user nothing.
-      name: "Utilities and other bills",
-      essential: true,
-      source: "manual",
-      amountDue: input.otherBills,
-      dueDate: firstOfNextMonth(input.nextPayday),
-      reserved: 0,
-      frequency: "monthly",
-      autopay: false,
-    });
-  }
-  // One everyday bucket to start. Splitting it into groceries, gas and the
-  // rest is a natural first edit, and a far better first edit than being made
-  // to invent four numbers before seeing anything.
-  if (input.everyday > 0) {
-    buckets.push({
-      id: "spend:onboard-everyday",
-      kind: "spend",
-      // Named for what it holds, not for the group it sits in — and the name
-      // is the invitation to split it up.
-      name: "Groceries, gas and the rest",
-      category: "Everyday",
-      essential: true,
-      source: "manual",
-      perCycle: input.everyday,
-      rollover: "roll",
-    });
-  }
-
-  const claims = input.picks.map((pick, index) => ({
-    id: `claim:onboard-${index}`,
-    name: pick.label,
-    kind: (pick.kind === "payoff" ? "payoff" : pick.kind === "purchase" ? "purchase" : "fund") as
-      | "payoff"
-      | "purchase"
-      | "fund",
-    targetAmount: pick.amount ?? 0,
-    fundedAmount: 0,
-    rank: index,
-    // Without a target there is nothing to pace, so it waits in Someday until
-    // the user gives it one. Better than inventing an amount on their behalf.
-    status: (pick.amount ? "active" : "someday") as "active" | "someday",
-    horizon: "arrival" as const,
-    divisible: pick.kind !== "purchase",
-    delayCost: { type: "none" as const },
-    protected: false,
-  }));
-
-  return {
-    ...current,
-    profile: {
-      ...current.profile,
-      takeHomePay: input.takeHome,
-      payFrequency: input.frequency,
-      nextPayday: input.nextPayday,
-      bufferFloor: current.profile.bufferFloor || Math.round(input.everyday),
-      // Deliberately not marked complete here. Gathering the basics and
-      // approving the resulting buckets are two different things, and the
-      // review screen is where Steward shows its work — skipping it was how
-      // the manual path used to drop the user straight onto Home.
-    },
-    buckets: [...current.buckets, ...buckets],
-    claims: [...current.claims, ...claims],
-  };
-}
-
-function firstOfNextMonth(from: string) {
-  const date = new Date(`${from}T12:00:00`);
-  date.setMonth(date.getMonth() + 1, 1);
-  return date.toISOString().slice(0, 10);
-}
-
 /* --------------------------------------------------------------- SHELL -- */
 
 export function StewardApp({
@@ -1019,7 +958,6 @@ export function StewardApp({
   const [paydayDismissed, setPaydayDismissed] = useState(demoMode);
   const [addOpen, setAddOpen] = useState(false);
   const [debtClaimId, setDebtClaimId] = useState<string | null>(null);
-  const [manualSetup, setManualSetup] = useState(false);
   const [demoStatementsReviewed, setDemoStatementsReviewed] = useState(false);
   const plaid = usePlaidConnect(setWorkspaceFromServer);
   const today = todayISO(fixedToday);
@@ -1054,32 +992,14 @@ export function StewardApp({
 
   // First run, in three states.
   //
-  //   no data                 → Connect. The real path, because connecting is
-  //                             how Steward derives the budget rather than
-  //                             asking the user to invent one.
+  //   no data                 → Connect. The live bank path is visible but
+  //                             unavailable in this portfolio build.
   //   data, not yet approved  → the buckets Steward worked out, for review.
   //   approved                → the app.
   //
-  // The manual form is reachable from Connect and is deliberately secondary.
-  if (!hasData && !manualSetup) {
+  if (!hasData) {
     return (
-      <ConnectScreen
-        status={plaid.status}
-        error={plaid.error}
-        onConnect={plaid.connect}
-        onManual={() => setManualSetup(true)}
-      />
-    );
-  }
-
-  if (!hasData && manualSetup) {
-    return (
-      <Onboarding
-        onComplete={(input) => {
-          update((current) => applyOnboarding(current, input));
-          setManualSetup(false);
-        }}
-      />
+      <ConnectScreen />
     );
   }
 

@@ -59,6 +59,15 @@ export type IntakeStep =
       choices: string[];
       multi: true;
     }
+  /** Follow-up detail that turns a broad goal into an amount the engine can use. */
+  | {
+      id: string;
+      phase: "goals";
+      kind: "goal-detail";
+      prompt: string;
+      choices: string[];
+      multi: false;
+    }
   /** Phase 2a. Steward states the paycheck it found and checks it. */
   | {
       id: string;
@@ -142,8 +151,9 @@ export type IntakeAnswer = {
 
 /* -------------------------------------------------------- negotiation -- */
 
-export const CHANGE_CHOICE = "I want to change something";
+export const CHANGE_CHOICE = "Show me another tradeoff";
 export const KEEP_AS_IS = "Leave it as it is";
+export const MAKE_ROOM = "Make room in flexible spending";
 
 /** How many rounds of tweaking have been accepted so far. */
 export const tweakRound = (answers: IntakeAnswer[]) =>
@@ -225,6 +235,23 @@ const cadenceWords = (stream: Stream) =>
         ? "every month"
         : "now and then";
 
+const goalPicks = (answers: IntakeAnswer[]) =>
+  (answers.find((answer) => answer.stepId === "goals")?.picks ?? [])
+    .filter((pick) => pick !== "Not sure yet");
+
+const answerChoice = (answers: IntakeAnswer[], stepId: string) =>
+  answers.find((answer) => answer.stepId === stepId)?.choice;
+
+const goalName = (choice: string, answers: IntakeAnswer[]) =>
+  choice === "Save for something specific"
+    ? (answerChoice(answers, "goal:specific:name") ?? choice)
+    : choice;
+
+const prioritizedGoal = (answers: IntakeAnswer[]) => {
+  const picks = goalPicks(answers);
+  return answerChoice(answers, "goal:priority") ?? (picks[0] ? goalName(picks[0], answers) : null);
+};
+
 /**
  * The next thing Steward should say, or `null` when the conversation is over.
  *
@@ -247,6 +274,65 @@ export function nextStep(
       prompt: "What made you download this? Pick anything that fits — you can change it later.",
       choices: GOAL_CHOICES,
       multi: true,
+    };
+  }
+
+  const pickedGoals = goalPicks(answers);
+
+  if (pickedGoals.includes("Save for something specific") && !answered(answers, "goal:specific:name")) {
+    return {
+      id: "goal:specific:name",
+      phase: "goals",
+      kind: "goal-detail",
+      prompt: "What are you saving for?",
+      choices: ["A trip", "A car", "A home", "Something else"],
+      multi: false,
+    };
+  }
+
+  if (pickedGoals.includes("Save for something specific") && !answered(answers, "goal:specific:amount")) {
+    const name = answerChoice(answers, "goal:specific:name") ?? "it";
+    return {
+      id: "goal:specific:amount",
+      phase: "goals",
+      kind: "goal-detail",
+      prompt: `About how much will ${name.toLowerCase()} cost?`,
+      choices: ["$500", "$1,000", "$2,500", "$5,000 or more", "Not sure yet"],
+      multi: false,
+    };
+  }
+
+  if (pickedGoals.includes("Money for emergencies") && !answered(answers, "goal:emergency:amount")) {
+    return {
+      id: "goal:emergency:amount",
+      phase: "goals",
+      kind: "goal-detail",
+      prompt: "How much of an emergency cushion would help you breathe easier?",
+      choices: ["$1,000", "$2,000", "$5,000", "Not sure yet"],
+      multi: false,
+    };
+  }
+
+  if (pickedGoals.length > 1 && !answered(answers, "goal:priority")) {
+    return {
+      id: "goal:priority",
+      phase: "goals",
+      kind: "goal-detail",
+      prompt: "If Steward can move one of these faster, which comes first?",
+      choices: pickedGoals.map((choice) => goalName(choice, answers)),
+      multi: false,
+    };
+  }
+
+  const topGoal = prioritizedGoal(answers);
+  if (topGoal && !answered(answers, "goal:pace")) {
+    return {
+      id: "goal:pace",
+      phase: "goals",
+      kind: "goal-detail",
+      prompt: `How hard should Steward push on ${topGoal.toLowerCase()}?`,
+      choices: ["Use whatever is left", MAKE_ROOM, "Keep it modest for now"],
+      multi: false,
     };
   }
 
@@ -315,6 +401,35 @@ export function nextStep(
     };
   }
 
+  // If the user asked to move faster, negotiate the cost before presenting the
+  // finished plan. A rejection advances to the next real lever; a yes changes
+  // the draft and the plan card will show where that money went.
+  if (answerChoice(answers, "goal:pace") === MAKE_ROOM) {
+    const cuttable = workspace.buckets
+      .filter((bucket) => bucket.kind === "spend" && !bucket.essential && (bucket.perCycle ?? 0) > 0)
+      .sort((a, b) => (b.perCycle ?? 0) - (a.perCycle ?? 0))
+      .slice(0, 2);
+    const accepted = answers.some(
+      (answer) => answer.stepId.startsWith("goal:tradeoff:") && answer.choice.startsWith(CUT_PREFIX),
+    );
+    if (!accepted) {
+      for (const bucket of cuttable) {
+        const id = `goal:tradeoff:${bucket.id}`;
+        if (answered(answers, id)) continue;
+        const current = bucket.perCycle ?? 0;
+        const next = Math.max(0, current - Math.max(1, Math.round(current * 0.25)));
+        return {
+          id,
+          phase: "plan",
+          kind: "tweak",
+          prompt: `To put more toward ${topGoal?.toLowerCase() ?? "that goal"}, I could bring ${bucket.name} from ${formatMoney(current)} to ${formatMoney(next)} a paycheck. Does that feel realistic?`,
+          choices: [`${CUT_PREFIX}${bucket.name}`, "No — show me another option"],
+          multi: false,
+        };
+      }
+    }
+  }
+
   /* --- phase 4: the plan, and the negotiation over it --- */
   //
   // Presenting the plan is not a one-shot. Each accepted tweak reshapes the
@@ -328,8 +443,11 @@ export function nextStep(
       id: planId,
       phase: "plan",
       kind: "plan",
-      prompt: round === 0 ? "Here's what I've got for you." : "Here's how that changes things.",
-      choices: ["That works", CHANGE_CHOICE],
+      prompt:
+        round === 0
+          ? `Here's the plan I built${topGoal ? ` around ${topGoal.toLowerCase()}` : " from your statements"}. Bills and minimums stay protected first, and every remaining dollar has a job.`
+          : "Here's how that tradeoff changes the plan.",
+      choices: ["Use this plan", CHANGE_CHOICE],
       multi: false,
     };
   }
@@ -339,7 +457,7 @@ export function nextStep(
       id: `tweak#${round}`,
       phase: "plan",
       kind: "tweak",
-      prompt: "What would you like to change?",
+      prompt: "The cleanest levers are flexible spending and timing. Which tradeoff should I make?",
       choices: tweakChoices(workspace),
       multi: false,
     };
@@ -401,6 +519,13 @@ const GOAL_KINDS: Record<string, { kind: "payoff" | "fund" | "purchase"; target:
   "Stop living paycheck to paycheck": { kind: "fund", target: null },
 };
 
+const amountChoice = (answers: IntakeAnswer[], stepId: string, fallback: number | null) => {
+  const choice = answerChoice(answers, stepId);
+  if (!choice || choice === "Not sure yet") return fallback;
+  const amount = Number(choice.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? amount : fallback;
+};
+
 /**
  * Fold the conversation into the workspace.
  *
@@ -418,19 +543,29 @@ export function applyIntake(
   answers: IntakeAnswer[],
 ): Workspace {
   const goals = answers.find((answer) => answer.stepId === "goals");
-  const picks = (goals?.picks ?? []).filter((pick) => pick !== "Not sure yet");
+  const rawPicks = (goals?.picks ?? []).filter((pick) => pick !== "Not sure yet");
+  const priority = answerChoice(answers, "goal:priority");
+  const picks = priority
+    ? [...rawPicks].sort((a, b) => Number(goalName(b, answers) === priority) - Number(goalName(a, answers) === priority))
+    : rawPicks;
 
   const existing = workspace.claims.filter((claim) => claim.status === "active").length;
   const claims = picks.map((label, index) => {
     const spec = GOAL_KINDS[label] ?? { kind: "fund" as const, target: null };
+    const target =
+      label === "Save for something specific"
+        ? amountChoice(answers, "goal:specific:amount", spec.target)
+        : label === "Money for emergencies"
+          ? amountChoice(answers, "goal:emergency:amount", spec.target)
+          : spec.target;
     return {
       id: `claim:intake-${index}`,
-      name: label,
+      name: goalName(label, answers),
       kind: spec.kind,
-      targetAmount: spec.target ?? 0,
+      targetAmount: target ?? 0,
       fundedAmount: 0,
       rank: existing + index,
-      status: (spec.target ? "active" : "someday") as "active" | "someday",
+      status: (target ? "active" : "someday") as "active" | "someday",
       horizon: "arrival" as const,
       divisible: spec.kind !== "purchase",
       delayCost: { type: "none" as const },
@@ -542,7 +677,7 @@ export function applyTweak(
           entry.id === bucket.id ? { ...entry, perCycle: next } : entry,
         ),
       },
-      summary: `${bucket.name} drops to ${formatMoney(next)} a paycheck, freeing ${formatMoney(cut)}.`,
+      summary: `${bucket.name} drops to ${formatMoney(next)} a paycheck, freeing ${formatMoney(cut)} for your priorities.`,
     };
   }
 

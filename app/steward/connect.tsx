@@ -7,39 +7,17 @@
  *
  * The previous rebuild put a centered white panel on a grey canvas, which read
  * as a SaaS signup rather than the start of something. This restores the
- * full-bleed green language: the app fills the device, the type is large and
- * quiet, and there is exactly one thing to do.
+ * full-bleed green language: the app fills the device and the type is large
+ * and quiet.
  *
- * Connecting is the real path — it is how Steward derives the budget rather
- * than asking the user to invent one. "Set it up myself" stays as a fallback so
- * a bank failure can never trap anyone, but it is deliberately secondary.
+ * The portfolio demo keeps the real bank path visible but unavailable, then
+ * offers a clearly labeled demo connection that runs through the full product.
  */
 
-import { Landmark, Play, RefreshCw } from "lucide-react";
-import type { PlaidStatus } from "./use-plaid";
+import { Landmark, Play } from "lucide-react";
 import "./connect.css";
 
-export function ConnectScreen({
-  status,
-  error,
-  onConnect,
-  onManual,
-}: {
-  status: PlaidStatus;
-  error: string;
-  onConnect: () => void;
-  onManual: () => void;
-}) {
-  const busy = status !== "idle";
-  const label =
-    status === "opening"
-      ? "Opening secure connection…"
-      : status === "importing"
-        ? "Saving your accounts…"
-        : status === "syncing"
-          ? "Reading your transactions…"
-          : "Connect your bank";
-
+export function ConnectScreen() {
   return (
     <main className="cx-screen">
       <header className="cx-top">
@@ -56,14 +34,9 @@ export function ConnectScreen({
       </div>
 
       <footer className="cx-action">
-        {error && (
-          <p className="cx-error" role="alert">
-            {error}
-          </p>
-        )}
-        <button onClick={onConnect} disabled={busy}>
-          {busy ? <RefreshCw size={18} className="cx-spin" /> : <Landmark size={18} />}
-          {label}
+        <button className="cx-bank-disabled" disabled>
+          <Landmark size={18} />
+          <span>Connect your bank <small>Coming soon</small></span>
         </button>
         {/* A full navigation is intentional: the Sites runtime can retain the
             current RSC tree during a client transition between dynamic routes. */}
@@ -71,9 +44,6 @@ export function ConnectScreen({
           <Play size={16} fill="currentColor" />
           Test demo mode
         </a>
-        <button className="cx-secondary" onClick={onManual} disabled={busy}>
-          Set it up myself
-        </button>
         <small>
           Handled by Plaid, never Steward. Read-only — Steward can&apos;t move money.
         </small>

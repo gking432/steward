@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FIXTURE_TODAY, goldenWorkspace } from "../fixtures/golden-workspace";
+import { demoWorkspace, FIXTURE_TODAY, goldenWorkspace } from "../fixtures/golden-workspace";
 import { toLegacy, toModel } from "../lib/model/convert";
 import { buildPaydayProposal } from "../lib/model/decide";
 import {
@@ -13,6 +13,7 @@ import {
   applyTweak,
   cancelledSubscriptions,
   CHANGE_CHOICE,
+  MAKE_ROOM,
   tweakChoices,
   proposedBuckets,
   type IntakeAnswer,
@@ -69,6 +70,49 @@ test("nothing after goals runs until the scan lands", () => {
   const answers: IntakeAnswer[] = [{ stepId: "goals", choice: "Not sure yet" }];
   assert.equal(nextStep(base(), FIXTURE_TODAY, answers, false), null);
   assert.ok(nextStep(base(), FIXTURE_TODAY, answers, true));
+});
+
+test("a specific savings goal gets a name and amount before planning", () => {
+  const workspace = base();
+  const answers: IntakeAnswer[] = [
+    { stepId: "goals", choice: "Save for something specific", picks: ["Save for something specific"] },
+  ];
+  assert.equal(nextStep(workspace, FIXTURE_TODAY, answers, false)?.prompt, "What are you saving for?");
+  answers.push({ stepId: "goal:specific:name", choice: "A trip" });
+  assert.match(nextStep(workspace, FIXTURE_TODAY, answers, false)?.prompt ?? "", /how much.*trip/i);
+  answers.push({ stepId: "goal:specific:amount", choice: "$2,500" });
+  answers.push({ stepId: "goal:pace", choice: "Use whatever is left" });
+  const personalized = applyIntake(workspace, FIXTURE_TODAY, answers);
+  const trip = personalized.claims.find((claim) => claim.name === "A trip")!;
+  assert.equal(trip.targetAmount, 2500);
+  assert.equal(trip.status, "active");
+});
+
+test("the demo asks about three real recurring charges", () => {
+  const { asked } = runToCompletion(toModel(demoWorkspace()));
+  assert.equal(asked.filter((id) => id.startsWith("spend:sub:")).length, 3);
+});
+
+test("rejecting one suggested cut advances to the next real tradeoff", () => {
+  const workspace = toModel(demoWorkspace());
+  const answers: IntakeAnswer[] = [
+    { stepId: "goals", choice: "Money for emergencies", picks: ["Money for emergencies"] },
+    { stepId: "goal:emergency:amount", choice: "$2,000" },
+    { stepId: "goal:pace", choice: MAKE_ROOM },
+    { stepId: "income:primary", choice: "Yes, that's my job" },
+  ];
+  for (let i = 0; i < 3; i += 1) {
+    const subscription = nextStep(workspace, FIXTURE_TODAY, answers, true)!;
+    assert.equal(subscription.kind, "subscription");
+    answers.push({ stepId: subscription.id, choice: "Keep it" });
+  }
+  const dining = nextStep(workspace, FIXTURE_TODAY, answers, true)!;
+  assert.equal(dining.kind, "tweak");
+  assert.match(dining.prompt, /Dining/);
+  answers.push({ stepId: dining.id, choice: "No — show me another option" });
+  const shopping = nextStep(workspace, FIXTURE_TODAY, answers, true)!;
+  assert.equal(shopping.kind, "tweak");
+  assert.match(shopping.prompt, /Shopping/);
 });
 
 /* --------------------------------------------------------------- income -- */
@@ -432,7 +476,7 @@ test("after a tweak the plan is presented again, so you agree to what you get", 
   const step = nextStep(workspace, FIXTURE_TODAY, answers, true)!;
   assert.equal(step.kind, "plan");
   assert.equal(step.id, "plan#1", "a fresh presentation, not the answered one");
-  assert.match(step.prompt, /how that changes things/i);
+  assert.match(step.prompt, /how that tradeoff changes the plan/i);
 });
 
 test("the negotiation can run several rounds and still terminates", () => {

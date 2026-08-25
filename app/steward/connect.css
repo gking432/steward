@@ -82,7 +82,22 @@
 }
 
 .cx-action > button:disabled {
-  opacity: 0.75;
+  opacity: 1;
+}
+
+.cx-bank-disabled {
+  border: 1px solid rgba(249, 250, 247, 0.16) !important;
+  background: rgba(249, 250, 247, 0.1) !important;
+  color: rgba(249, 250, 247, 0.48) !important;
+  cursor: not-allowed;
+}
+.cx-bank-disabled span { display: flex; align-items: baseline; gap: 7px; }
+.cx-bank-disabled small {
+  color: rgba(249, 250, 247, 0.38);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .cx-secondary {
