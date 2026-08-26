@@ -105,6 +105,33 @@ test("goal collection closes only after its own explicit one-piece question", ()
   assert.equal(normalized.goalCollectionComplete, true);
 });
 
+test("declining to estimate a goal amount completes that detail without inventing money", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const candidate: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:emergency",
+      name: "Emergency fund",
+      kind: "fund",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: false,
+    }],
+  };
+  const normalized = normalizeAIOnboardingState(
+    candidate,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: "What rough amount would you like in your emergency fund?" },
+      { role: "user", content: "Selected: I’m not sure yet." },
+    ],
+  );
+  assert.equal(normalized.goals[0].detailsComplete, true);
+  assert.equal(normalized.goals[0].targetAmount, null);
+});
+
 test("accepted strategies reshape the preview with exact engine-owned amounts", () => {
   const base = workspace();
   const context = buildAIOnboardingContext(base, FIXTURE_TODAY, true);

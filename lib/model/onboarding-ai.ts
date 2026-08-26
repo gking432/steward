@@ -349,7 +349,10 @@ export function normalizeAIOnboardingState(
       targetAmount,
       targetDate,
       linkedAccountId,
-      detailsComplete: Boolean(goal.detailsComplete) && hasEnoughDetail,
+      // "I'm not sure" is still a complete answer to an amount question. The
+      // model occasionally preserved detailsComplete=false even after moving
+      // on, which left the product rail on Goals while it asked about income.
+      detailsComplete: (Boolean(goal.detailsComplete) || amountWasDeclined) && hasEnoughDetail,
     }];
   });
 
