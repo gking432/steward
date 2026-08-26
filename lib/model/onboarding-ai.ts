@@ -120,6 +120,42 @@ export type AIOnboardingContext = {
   strategies: OnboardingStrategy[];
 };
 
+/**
+ * Merchant choices can be submitted together, but Steward reviews them one at
+ * a time. Derive the queue from the transcript so it stays grounded in exactly
+ * what the user selected and requires no model-authored bookkeeping.
+ */
+export function recurringReviewProgress(
+  context: AIOnboardingContext,
+  conversation: OnboardingTurn[],
+) {
+  const flaggedIds = new Set<string>();
+  const reviewedIds = new Set<string>();
+  for (let index = 0; index < conversation.length; index += 1) {
+    const turn = conversation[index];
+    if (turn.role !== "assistant") continue;
+    const answer = conversation[index + 1];
+    if (!answer || answer.role !== "user") continue;
+    if (/which one looks unfamiliar/i.test(turn.content)) {
+      for (const charge of context.recurringCharges) {
+        if (answer.content.toLowerCase().includes(charge.merchant.toLowerCase())) flaggedIds.add(charge.id);
+      }
+    }
+    if (/do you still use/i.test(turn.content)) {
+      for (const charge of context.recurringCharges) {
+        if (turn.content.toLowerCase().includes(charge.merchant.toLowerCase())) reviewedIds.add(charge.id);
+      }
+    }
+  }
+  const flagged = context.recurringCharges.filter((charge) => flaggedIds.has(charge.id));
+  const reviewed = context.recurringCharges.filter((charge) => reviewedIds.has(charge.id));
+  return {
+    flagged,
+    reviewed,
+    pending: flagged.filter((charge) => !reviewedIds.has(charge.id)),
+  };
+}
+
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const clean = (value: unknown, max = 120) =>
   typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
@@ -392,12 +428,11 @@ export function normalizeAIOnboardingState(
       !acceptedSet.has(id) &&
       (previous.declinedStrategyIds.includes(id) || (strategyWasDiscussed(id) && strategyNegative)));
   const askedAboutIncome = /\b(paycheck|income|paid|pay)\b/i.test(priorAssistant);
-  const askedAboutRecurring =
-    /\b(recurring|subscription|charge|keep|cancel)\b/i.test(priorAssistant) ||
-    context.recurringCharges.some((charge) => priorAssistant.includes(charge.merchant.toLowerCase()));
-  const reviewingSingleCharge =
-    /\b(still use|keep|cancel)\b/i.test(priorAssistant) &&
-    context.recurringCharges.some((charge) => priorAssistant.includes(charge.merchant.toLowerCase()));
+  const askedAboutRecurringSet =
+    /\b(all of these|anything look surprising|keep them all|recurring charges)\b/i.test(priorAssistant);
+  const recurringProgress = recurringReviewProgress(context, conversation);
+  const finishedFlaggedReview = recurringProgress.flagged.length > 0 &&
+    recurringProgress.pending.length === 0;
   const incomeConfirmed = previous.incomeConfirmed === true
     ? true
     : askedAboutIncome && affirmative && !negative
@@ -406,8 +441,8 @@ export function normalizeAIOnboardingState(
         ? false
         : previous.incomeConfirmed;
   const recurringReviewed = context.recurringCharges.length === 0 || previous.recurringReviewed ||
-    (askedAboutRecurring && affirmative && !negative) ||
-    (reviewingSingleCharge && (affirmative || negative));
+    (askedAboutRecurringSet && affirmative && !negative) ||
+    finishedFlaggedReview;
   const askedAboutBudget = /\b(budget|plan)\b/i.test(priorAssistant);
   const budgetAccepted = previous.budgetAccepted ||
     (Boolean(candidate.budgetAccepted) && askedAboutBudget && affirmative && !negative);

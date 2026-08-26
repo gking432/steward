@@ -10,6 +10,7 @@ import {
   onboardingReplySubmitsImmediately,
   onboardingPhase,
   previewAIOnboarding,
+  recurringReviewProgress,
   type AIOnboardingState,
 } from "../lib/model/onboarding-ai";
 
@@ -130,6 +131,36 @@ test("declining to estimate a goal amount completes that detail without inventin
   );
   assert.equal(normalized.goals[0].detailsComplete, true);
   assert.equal(normalized.goals[0].targetAmount, null);
+});
+
+test("several flagged recurring charges are reviewed one at a time", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const [first, second] = context.recurringCharges;
+  const oneAnswered = [
+    { role: "assistant" as const, content: "Which one looks unfamiliar?" },
+    { role: "user" as const, content: `Selected: ${first.merchant}, ${second.merchant}.` },
+    { role: "assistant" as const, content: `Do you still use ${first.merchant}?` },
+    { role: "user" as const, content: "Selected: No." },
+  ];
+  const progress = recurringReviewProgress(context, oneAnswered);
+  assert.deepEqual(progress.pending.map((charge) => charge.id), [second.id]);
+
+  const candidate = { ...EMPTY_AI_ONBOARDING_STATE, incomeConfirmed: true, recurringReviewed: true };
+  const normalized = normalizeAIOnboardingState(
+    candidate,
+    { ...EMPTY_AI_ONBOARDING_STATE, incomeConfirmed: true },
+    context,
+    oneAnswered,
+  );
+  assert.equal(normalized.recurringReviewed, false, "one answered charge cannot close a two-charge review");
+
+  const allAnswered = [
+    ...oneAnswered,
+    { role: "assistant" as const, content: `Do you still use ${second.merchant}?` },
+    { role: "user" as const, content: "Selected: Yes." },
+  ];
+  const finished = normalizeAIOnboardingState(candidate, normalized, context, allAnswered);
+  assert.equal(finished.recurringReviewed, true);
 });
 
 test("accepted strategies reshape the preview with exact engine-owned amounts", () => {

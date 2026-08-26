@@ -456,7 +456,13 @@ function RecurringReviewCard({
             </>
           );
           return selectable ? (
-            <button key={charge.id} type="button" className={chosen ? "chosen" : ""} onClick={() => onToggle(charge.merchant)}>{content}</button>
+            <button
+              key={charge.id}
+              type="button"
+              className={chosen ? "chosen" : ""}
+              aria-pressed={chosen}
+              onClick={() => onToggle(charge.merchant)}
+            >{content}</button>
           ) : <article key={charge.id}>{content}</article>;
         })}
       </div>

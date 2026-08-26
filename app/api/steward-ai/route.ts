@@ -12,6 +12,7 @@ import {
   normalizeAIOnboardingState,
   onboardingAllowedNumerals,
   onboardingPhase,
+  recurringReviewProgress,
   type AIOnboardingContext,
   type AIOnboardingState,
   type OnboardingTurn,
@@ -433,8 +434,8 @@ export async function POST(request: Request) {
         const recurringWasPresented = conversation.some((turn) =>
           turn.role === "assistant" && /do you use all of these|anything look surprising/i.test(turn.content));
         const lastUser = [...conversation].reverse().find((turn) => turn.role === "user")?.content ?? "";
-        const selectedCharge = context.recurringCharges.find((charge) =>
-          lastUser.toLowerCase().includes(charge.merchant.toLowerCase()));
+        const reviewProgress = recurringReviewProgress(context, conversation);
+        const lastAssistant = [...conversation].reverse().find((turn) => turn.role === "assistant")?.content ?? "";
         if (previous.incomeConfirmed !== true) {
           return {
             enhanced: false,
@@ -446,22 +447,24 @@ export async function POST(request: Request) {
             state: previous,
           };
         }
-        if (recurringWasPresented && /\b(no|off|surpris|unfamiliar|wrong)\b/i.test(lastUser)) {
+        if (reviewProgress.pending.length > 0) {
           return {
             enhanced: false,
-            message: "Which one looks unfamiliar?",
-            quickReplies: context.recurringCharges.map((charge) => charge.merchant).slice(0, 4),
+            message: `Do you still use ${reviewProgress.pending[0].merchant}?`,
+            quickReplies: ["Yes", "No"],
             selectionMode: "multiple",
             showPlan: false,
             phase,
             state: previous,
           };
         }
-        if (selectedCharge) {
+        if (recurringWasPresented &&
+          /do you use all of these|anything look surprising/i.test(lastAssistant) &&
+          /\b(no|off|surpris|unfamiliar|wrong)\b/i.test(lastUser)) {
           return {
             enhanced: false,
-            message: `Do you still use ${selectedCharge.merchant}?`,
-            quickReplies: ["Yes", "No"],
+            message: "Which one looks unfamiliar?",
+            quickReplies: context.recurringCharges.map((charge) => charge.merchant).slice(0, 4),
             selectionMode: "multiple",
             showPlan: false,
             phase,
@@ -604,8 +607,8 @@ export async function POST(request: Request) {
     } else if (phase === "review" && !state.recurringReviewed) {
       const recurringWasPresented = conversation.some((turn) =>
         turn.role === "assistant" && /do you use all of these|anything look surprising/i.test(turn.content));
-      const selectedCharge = context.recurringCharges.find((charge) =>
-        lastUser.includes(charge.merchant.toLowerCase()));
+      const reviewProgress = recurringReviewProgress(context, conversation);
+      const lastAssistant = [...conversation].reverse().find((turn) => turn.role === "assistant")?.content ?? "";
       if (!recurringWasPresented) {
         message = context.recurringCharges.length
           ? "Here’s what I found. Do you use all of these, or does anything look surprising?"
@@ -614,13 +617,16 @@ export async function POST(request: Request) {
           ? ["Yes, I use these", "No, something is off"]
           : ["Yes, continue", "No, go back"];
         showPlan = false;
-      } else if (/\b(no|off|surpris|unfamiliar|wrong)\b/i.test(lastUser)) {
+      } else if (reviewProgress.pending.length > 0) {
+        message = `Do you still use ${reviewProgress.pending[0].merchant}?`;
+        quickReplies = ["Yes", "No"];
+        showPlan = false;
+      } else if (
+        /do you use all of these|anything look surprising/i.test(lastAssistant) &&
+        /\b(no|off|surpris|unfamiliar|wrong)\b/i.test(lastUser)
+      ) {
         message = "Which one looks unfamiliar?";
         quickReplies = context.recurringCharges.map((charge) => charge.merchant).slice(0, 4);
-        showPlan = false;
-      } else if (selectedCharge) {
-        message = `Do you still use ${selectedCharge.merchant}?`;
-        quickReplies = ["Yes", "No"];
         showPlan = false;
       }
     }
