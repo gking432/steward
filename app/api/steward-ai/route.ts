@@ -365,12 +365,42 @@ export async function POST(request: Request) {
       });
     }
 
+    const lastUserBeforeModel = [...conversation]
+      .reverse()
+      .find((turn) => turn.role === "user")?.content.toLowerCase() ?? "";
+    if (
+      onboardingPhase(previous, context) === "goals" &&
+      previous.goals.length > 0 &&
+      /\badd another goal\b/.test(lastUserBeforeModel)
+    ) {
+      return Response.json({
+        enhanced: true,
+        message: "What else are you trying to make happen?",
+        quickReplies: ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
+        selectionMode: "multiple",
+        showPlan: false,
+        phase: "goals",
+        state: previous,
+      });
+    }
+
     const fallback = () => {
       const phase = onboardingPhase(previous, context);
       if (phase === "goals") {
         const unfinished = previous.goals.find((goal) => !goal.detailsComplete);
         const lastUser = [...conversation].reverse().find((turn) => turn.role === "user")?.content.toLowerCase() ?? "";
-        if (previous.goals.length === 0 && /\bbuy something\b/.test(lastUser)) {
+        if (previous.goalCollectionComplete && !previous.prioritiesConfirmed && previous.goals.length > 1) {
+          return {
+            enhanced: false,
+            message: "What matters most right now? Put these priorities in order.",
+            quickReplies: previous.goals.map((goal) => goal.name).slice(0, 4),
+            selectionMode: "multiple",
+            showPlan: false,
+            phase,
+            state: previous,
+          };
+        }
+        if (/\bbuy something\b/.test(lastUser)) {
           return {
             enhanced: false,
             message: "What would you like to buy?",
@@ -381,7 +411,7 @@ export async function POST(request: Request) {
             state: previous,
           };
         }
-        if (previous.goals.length === 0 && /\bpay off debt\b/.test(lastUser)) {
+        if (/\bpay off debt\b/.test(lastUser)) {
           const debts = context.accounts
             .filter((account) => /credit|loan/i.test(account.type))
             .map((account) => account.name)
@@ -398,7 +428,7 @@ export async function POST(request: Request) {
             state: previous,
           };
         }
-        if (previous.goals.length === 0 && /\bbuild savings\b/.test(lastUser)) {
+        if (/\bbuild savings\b/.test(lastUser)) {
           return {
             enhanced: false,
             message: "What should the savings be for?",
@@ -409,7 +439,7 @@ export async function POST(request: Request) {
             state: previous,
           };
         }
-        if (previous.goals.length === 0 && /\bmore breathing room\b/.test(lastUser)) {
+        if (/\bmore breathing room\b/.test(lastUser)) {
           return {
             enhanced: false,
             message: "Where would extra breathing room help most?",

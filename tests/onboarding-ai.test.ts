@@ -111,6 +111,81 @@ test("several sent purchase choices are retained together", () => {
   assert.deepEqual(normalized.goals.map((goal) => goal.name), ["Car", "Trip"]);
 });
 
+test("an explicit finish and priority answer advance without model-owned flags", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const goals: AIOnboardingState["goals"] = ["Trip", "Emergency cushion"].map((name, index) => ({
+    id: `goal:${index}`,
+    name,
+    kind: index === 0 ? "purchase" : "fund",
+    targetAmount: 1000 + index,
+    targetDate: null,
+    linkedAccountId: null,
+    detailsComplete: true,
+  }));
+  const listed: AIOnboardingState = { ...EMPTY_AI_ONBOARDING_STATE, goals };
+  const finished = normalizeAIOnboardingState(listed, listed, context, [
+    { role: "assistant", content: "Would you like to add another goal?" },
+    { role: "user", content: "Selected: That’s everything." },
+  ]);
+  assert.equal(finished.goalCollectionComplete, true);
+  assert.equal(finished.prioritiesConfirmed, false);
+
+  const prioritized = normalizeAIOnboardingState(finished, finished, context, [
+    { role: "assistant", content: "What matters most right now? Put these priorities in order." },
+    { role: "user", content: "Trip, then Emergency cushion." },
+  ]);
+  assert.equal(prioritized.prioritiesConfirmed, true);
+});
+
+test("adding a second goal reopens priority ordering", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const first: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:trip",
+      name: "Trip",
+      kind: "purchase",
+      targetAmount: 2500,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: true,
+    }],
+    prioritiesConfirmed: true,
+  };
+  const candidate: AIOnboardingState = {
+    ...first,
+    goals: [...first.goals, {
+      id: "goal:cushion",
+      name: "Emergency cushion",
+      kind: "fund",
+      targetAmount: 1000,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: true,
+    }],
+  };
+  const normalized = normalizeAIOnboardingState(candidate, first, context, [
+    { role: "assistant", content: "What should the savings be for?" },
+    { role: "user", content: "Emergency cushion" },
+  ]);
+  assert.equal(normalized.prioritiesConfirmed, false);
+});
+
+test("detected debt selections survive an empty model state", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const debts = context.accounts.filter((account) => /credit|loan/i.test(account.type)).slice(0, 2);
+  const normalized = normalizeAIOnboardingState(
+    EMPTY_AI_ONBOARDING_STATE,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: "Which debts should Steward include? Choose one or more." },
+      { role: "user", content: `Selected: ${debts.map((debt) => debt.name).join(", ")}.` },
+    ],
+  );
+  assert.deepEqual(normalized.goals.map((goal) => goal.linkedAccountId), debts.map((debt) => debt.id));
+});
+
 test("goal collection closes only after its own explicit one-piece question", () => {
   const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
   const goal = {
@@ -163,6 +238,28 @@ test("declining to estimate a goal amount completes that detail without inventin
   );
   assert.equal(normalized.goals[0].detailsComplete, true);
   assert.equal(normalized.goals[0].targetAmount, null);
+});
+
+test("a typed goal amount completes the open goal without model help", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const previous: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:trip",
+      name: "Trip",
+      kind: "purchase",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: false,
+    }],
+  };
+  const normalized = normalizeAIOnboardingState(previous, previous, context, [
+    { role: "assistant", content: "Roughly how much is Trip?" },
+    { role: "user", content: "$2,500" },
+  ]);
+  assert.equal(normalized.goals[0].targetAmount, 2500);
+  assert.equal(normalized.goals[0].detailsComplete, true);
 });
 
 test("several flagged recurring charges are reviewed one at a time", () => {
@@ -383,7 +480,7 @@ test("completion requires goals, financial review, strategy, budget approval, an
   };
   assert.equal(onboardingPhase(almost, context), "checkin");
   const complete = normalizeAIOnboardingState(
-    { ...almost, checkInCadence: "every_other_day", complete: true },
+    { ...almost, checkInCadence: "every_other_day", complete: false },
     almost,
     context,
     [

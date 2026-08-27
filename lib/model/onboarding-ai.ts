@@ -330,13 +330,34 @@ function answerChoices(content: string) {
  * purchase goals from the question/answer pair so the deterministic fallback
  * advances instead of returning to the first screen.
  */
-function inferredPurchaseGoals(
+function inferredGoalsFromAnswer(
   priorAssistant: string,
   lastUser: string,
+  context: AIOnboardingContext,
 ): OnboardingGoal[] {
-  if (!/what would you like to buy|what are you planning to buy/i.test(priorAssistant)) return [];
-  return answerChoices(lastUser)
-    .filter((answer) => answer && !/^(something else|buy something|purchase)$/i.test(answer))
+  const choices = answerChoices(lastUser);
+  const purchaseQuestion = /what would you like to buy|what are you planning to buy/i.test(priorAssistant);
+  const savingsQuestion = /what (?:should the savings be|are you saving) for/i.test(priorAssistant);
+  const debtQuestion = /which debts? should steward include|which debts? should we focus/i.test(priorAssistant);
+  if (debtQuestion) {
+    return context.accounts.flatMap((account, index) => {
+      if (!/credit|loan/i.test(account.type)) return [];
+      const selected = choices.some((choice) => choice.toLowerCase().includes(account.name.toLowerCase()));
+      if (!selected) return [];
+      return {
+        id: `goal:${account.id}:${index}`,
+        name: `Pay off ${account.name}`,
+        kind: "payoff" as const,
+        targetAmount: null,
+        targetDate: null,
+        linkedAccountId: account.id,
+        detailsComplete: true,
+      };
+    });
+  }
+  if (!purchaseQuestion && !savingsQuestion) return [];
+  return choices
+    .filter((answer) => answer && !/^(something else|other purchase|buy something|purchase)$/i.test(answer))
     .slice(0, 4)
     .map((answer, index) => {
       const stripped = clean(answer.replace(/^(?:a|an|the)\s+/i, ""));
@@ -344,7 +365,7 @@ function inferredPurchaseGoals(
       return {
         id: `goal:${slug(name)}:${index}`,
         name,
-        kind: "purchase" as const,
+        kind: savingsQuestion ? "fund" as const : "purchase" as const,
         targetAmount: null,
         targetDate: null,
         linkedAccountId: null,
@@ -388,8 +409,13 @@ export function normalizeAIOnboardingState(
   const affirmative = /\b(yes|yeah|yep|right|correct|keep|use|works|okay|ok|deal|accept|good|sounds good|do it)\b/i.test(lastUser);
   const negative = /\b(no|nope|wrong|another|different|decline|reject|don'?t|do not|not that)\b/i.test(lastUser);
   const strategyNegative = negative || /\b(keep|leave)\b.{0,28}\b(current|unchanged|same)\b/i.test(lastUser);
+  const askedForAmount = /\b(amount|cost|how much|roughly)\b/i.test(priorAssistant);
+  const enteredAmountMatch = lastUser.match(/(?:\$\s*)?([\d,]+(?:\.\d{1,2})?)\s*(k|thousand)?\b/i);
+  const enteredAmount = enteredAmountMatch
+    ? round2(Number(enteredAmountMatch[1].replace(/,/g, "")) * (enteredAmountMatch[2] ? 1000 : 1))
+    : null;
 
-  const inferredGoals = inferredPurchaseGoals(priorAssistant, lastUser);
+  const inferredGoals = inferredGoalsFromAnswer(priorAssistant, lastUser, context);
   const candidateGoals = Array.isArray(candidate.goals) && candidate.goals.length > 0
     ? candidate.goals
     : previous.goals;
@@ -405,7 +431,7 @@ export function normalizeAIOnboardingState(
     const goal = raw as Partial<OnboardingGoal>;
     const name = clean(goal.name);
     if (!name || !kinds.has(goal.kind as OnboardingGoal["kind"])) return [];
-    const targetAmount =
+    const modelTargetAmount =
       typeof goal.targetAmount === "number" &&
       Number.isFinite(goal.targetAmount) &&
       goal.targetAmount > 0 &&
@@ -432,9 +458,12 @@ export function normalizeAIOnboardingState(
     const targetDate = proposedDate && outputIsGrounded(proposedDate, userNumbers) ? proposedDate : null;
     const previousGoal = previous.goals.find((entry) =>
       entry.id === goal.id || entry.name.toLowerCase() === name.toLowerCase());
+    const amountBelongsToGoal = askedForAmount && enteredAmount !== null && enteredAmount > 0 &&
+      previousGoal !== undefined && !previousGoal.detailsComplete &&
+      (priorAssistant.includes(previousGoal.name.toLowerCase()) || previous.goals.filter((entry) => !entry.detailsComplete).length === 1);
+    const targetAmount = modelTargetAmount ?? (amountBelongsToGoal ? enteredAmount : null);
     const genericGoal = /^(buy something|purchase|pay off debt|debt|build savings|savings|save money|more breathing room|breathing room)$/i.test(name);
-    const amountWasDeclined = /\b(not sure|don'?t know|no idea|unsure)\b/i.test(lastUser) &&
-      /\b(amount|cost|how much|roughly)\b/i.test(priorAssistant);
+    const amountWasDeclined = /\b(not sure|don'?t know|no idea|unsure)\b/i.test(lastUser) && askedForAmount;
     const hasEnoughDetail = Boolean(previousGoal?.detailsComplete) || (!genericGoal && (
       (goal.kind === "payoff" && linkedAccountId !== null) ||
       targetAmount !== null ||
@@ -450,7 +479,7 @@ export function normalizeAIOnboardingState(
       // "I'm not sure" is still a complete answer to an amount question. The
       // model occasionally preserved detailsComplete=false even after moving
       // on, which left the product rail on Goals while it asked about income.
-      detailsComplete: (Boolean(goal.detailsComplete) || amountWasDeclined) && hasEnoughDetail,
+      detailsComplete: (Boolean(goal.detailsComplete) || amountWasDeclined || amountBelongsToGoal) && hasEnoughDetail,
     }];
   });
 
@@ -507,7 +536,7 @@ export function normalizeAIOnboardingState(
     finishedFlaggedReview;
   const askedAboutBudget = /\b(budget|plan)\b/i.test(priorAssistant);
   const budgetAccepted = previous.budgetAccepted ||
-    (Boolean(candidate.budgetAccepted) && askedAboutBudget && affirmative && !negative);
+    (askedAboutBudget && affirmative && !negative);
   const askedAboutCadence = /\b(check.?in|daily|weekly|every other day|how often)\b/i.test(priorAssistant);
   const checkInCadence: CheckInCadence | null = previous.checkInCadence ?? (
     askedAboutCadence && /every other day/i.test(lastUser)
@@ -533,16 +562,16 @@ export function normalizeAIOnboardingState(
   const correctingGoal = /\b(i said|instead|not that|change|wrong)\b/i.test(lastUser) ||
     /^no\b/i.test(lastUser) && !finishedListingGoals;
   const goalCollectionComplete = !correctingGoal && (previous.goalCollectionComplete || (
-    Boolean(candidate.goalCollectionComplete) &&
     goals.length > 0 &&
     goals.every((goal) => goal.detailsComplete) &&
     askedForAnotherGoal &&
     finishedListingGoals
   ));
   const askedAboutPriority = /\b(priority|priorities|first|most important|order)\b/i.test(priorAssistant);
-  const prioritiesConfirmed = goals.length < 2 || previous.prioritiesConfirmed || (
-    Boolean(candidate.prioritiesConfirmed) && askedAboutPriority && lastUser.length > 0
-  );
+  const goalSetChanged = goals.length !== previous.goals.length || goals.some((goal, index) =>
+    previous.goals[index]?.id !== goal.id);
+  const prioritiesConfirmed = goals.length < 2 || (!goalSetChanged && previous.prioritiesConfirmed) ||
+    (askedAboutPriority && lastUser.length > 0);
 
   const state: AIOnboardingState = {
     goals,
@@ -567,7 +596,6 @@ export function normalizeAIOnboardingState(
     !context.scanComplete ||
     (state.incomeConfirmed === true && state.recurringReviewed);
   state.complete = Boolean(
-    candidate.complete &&
     context.scanComplete &&
     goalsReady &&
     financesReady &&
