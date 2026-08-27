@@ -79,6 +79,38 @@ test("free-form goals survive while invented amounts and strategies do not", () 
   assert.deepEqual(normalized.acceptedStrategyIds, [validStrategy]);
 });
 
+test("a sent purchase choice survives an empty model state", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const normalized = normalizeAIOnboardingState(
+    { ...EMPTY_AI_ONBOARDING_STATE, goals: [] },
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: "What would you like to buy?" },
+      { role: "user", content: "Selected: A trip." },
+    ],
+  );
+  assert.equal(normalized.goals.length, 1);
+  assert.equal(normalized.goals[0].name, "Trip");
+  assert.equal(normalized.goals[0].kind, "purchase");
+  assert.equal(normalized.goals[0].detailsComplete, false);
+  assert.equal(onboardingPhase(normalized, context), "goals");
+});
+
+test("several sent purchase choices are retained together", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const normalized = normalizeAIOnboardingState(
+    EMPTY_AI_ONBOARDING_STATE,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: "What are you planning to buy?" },
+      { role: "user", content: "Selected: A car, A trip." },
+    ],
+  );
+  assert.deepEqual(normalized.goals.map((goal) => goal.name), ["Car", "Trip"]);
+});
+
 test("goal collection closes only after its own explicit one-piece question", () => {
   const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
   const goal = {

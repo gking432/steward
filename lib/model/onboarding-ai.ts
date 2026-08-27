@@ -307,6 +307,58 @@ function spokenNumerals(conversation: OnboardingTurn[]) {
   );
 }
 
+function answerChoices(content: string) {
+  const selected = content.match(/^\s*Selected:\s*(.*?)(?:\.\s*More context:|\.?\s*$)/i);
+  if (!selected) return [clean(content)];
+  const choices = selected[1]
+    .split(/\s*,\s*/)
+    .map((choice) => clean(choice.replace(/[.!?]+$/, "")))
+    .filter(Boolean);
+  const moreContext = content.match(/\.\s*More context:\s*(.+)$/i)?.[1];
+  if (moreContext && choices.some((choice) => /^something else$/i.test(choice))) {
+    return [
+      ...choices.filter((choice) => !/^something else$/i.test(choice)),
+      clean(moreContext.replace(/[.!?]+$/, "")),
+    ].filter(Boolean);
+  }
+  return choices;
+}
+
+/**
+ * The AI can phrase the next question, but a button the user explicitly sent
+ * must never disappear if that model turn times out or is rejected. Recover
+ * purchase goals from the question/answer pair so the deterministic fallback
+ * advances instead of returning to the first screen.
+ */
+function inferredPurchaseGoals(
+  priorAssistant: string,
+  lastUser: string,
+): OnboardingGoal[] {
+  if (!/what would you like to buy|what are you planning to buy/i.test(priorAssistant)) return [];
+  return answerChoices(lastUser)
+    .filter((answer) => answer && !/^(something else|buy something|purchase)$/i.test(answer))
+    .slice(0, 4)
+    .map((answer, index) => {
+      const stripped = clean(answer.replace(/^(?:a|an|the)\s+/i, ""));
+      const name = stripped.charAt(0).toUpperCase() + stripped.slice(1);
+      return {
+        id: `goal:${slug(name)}:${index}`,
+        name,
+        kind: "purchase" as const,
+        targetAmount: null,
+        targetDate: null,
+        linkedAccountId: null,
+        detailsComplete: false,
+      };
+    });
+}
+
+function goalIdentity(value: unknown) {
+  if (!value || typeof value !== "object") return "";
+  const goal = value as Partial<OnboardingGoal>;
+  return clean(goal.name).replace(/^(?:a|an|the)\s+/i, "").toLowerCase();
+}
+
 /**
  * Treat model output as a proposal. Unknown accounts, strategies, amounts and
  * cadence values are removed before state reaches the product.
@@ -337,7 +389,17 @@ export function normalizeAIOnboardingState(
   const negative = /\b(no|nope|wrong|another|different|decline|reject|don'?t|do not|not that)\b/i.test(lastUser);
   const strategyNegative = negative || /\b(keep|leave)\b.{0,28}\b(current|unchanged|same)\b/i.test(lastUser);
 
-  const proposedGoals = Array.isArray(candidate.goals) ? candidate.goals : previous.goals;
+  const inferredGoals = inferredPurchaseGoals(priorAssistant, lastUser);
+  const candidateGoals = Array.isArray(candidate.goals) && candidate.goals.length > 0
+    ? candidate.goals
+    : previous.goals;
+  const proposedGoals = candidateGoals
+    .filter((goal) => {
+      if (inferredGoals.length === 0 || !goal || typeof goal !== "object") return true;
+      return !/^(buy something|purchase)$/i.test(clean((goal as Partial<OnboardingGoal>).name));
+    })
+    .concat(inferredGoals.filter((inferred) =>
+      !candidateGoals.some((goal) => goalIdentity(goal) === goalIdentity(inferred))));
   const goals = proposedGoals.slice(0, 10).flatMap((raw, index) => {
     if (!raw || typeof raw !== "object") return [];
     const goal = raw as Partial<OnboardingGoal>;

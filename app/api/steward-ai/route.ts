@@ -339,7 +339,16 @@ export async function POST(request: Request) {
   if (input.kind === "onboarding") {
     const context = input.context as AIOnboardingContext;
     const conversation = input.conversation as OnboardingTurn[];
-    const previous = input.state as AIOnboardingState;
+    const suppliedState = input.state as AIOnboardingState;
+    // Reconcile explicit button answers before asking the model anything. This
+    // also makes the deterministic fallback stateful when a model response is
+    // unavailable or rejected.
+    const previous = normalizeAIOnboardingState(
+      suppliedState,
+      suppliedState,
+      context,
+      conversation,
+    );
 
     // The first turn is deliberately fixed. It establishes one easy decision,
     // always offers useful choices, and can never drift into asking for an
