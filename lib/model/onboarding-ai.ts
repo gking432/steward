@@ -381,6 +381,15 @@ function goalIdentity(value: unknown) {
 }
 
 /**
+ * These labels describe a direction, not an understood goal. They need one
+ * human follow-up about what the person actually means—not an automatic price
+ * question.
+ */
+function isVagueGoalName(name: string) {
+  return /^(?:(?:buy )?(?:a )?(?:bunch of )?(?:stuff|things)|something|some stuff|some things|purchase|buy something|save money|savings|more breathing room|breathing room)$/i.test(name.trim());
+}
+
+/**
  * Treat model output as a proposal. Unknown accounts, strategies, amounts and
  * cadence values are removed before state reaches the product.
  */
@@ -463,12 +472,10 @@ export function normalizeAIOnboardingState(
       (priorAssistant.includes(previousGoal.name.toLowerCase()) || previous.goals.filter((entry) => !entry.detailsComplete).length === 1);
     const targetAmount = modelTargetAmount ?? (amountBelongsToGoal ? enteredAmount : null);
     const genericGoal = /^(buy something|purchase|pay off debt|debt|build savings|savings|save money|more breathing room|breathing room)$/i.test(name);
+    const vagueGoal = isVagueGoalName(name);
     const amountWasDeclined = /\b(not sure|don'?t know|no idea|unsure)\b/i.test(lastUser) && askedForAmount;
-    const hasEnoughDetail = Boolean(previousGoal?.detailsComplete) || (!genericGoal && (
-      (goal.kind === "payoff" && linkedAccountId !== null) ||
-      targetAmount !== null ||
-      amountWasDeclined
-    ));
+    const hasEnoughDetail = Boolean(previousGoal?.detailsComplete) ||
+      (goal.kind === "payoff" ? linkedAccountId !== null : !genericGoal && !vagueGoal);
     return [{
       id: clean(goal.id, 80) || `goal:${slug(name)}:${index}`,
       name,
@@ -535,6 +542,7 @@ export function normalizeAIOnboardingState(
     (askedAboutRecurringSet && affirmative && !negative) ||
     finishedFlaggedReview;
   const askedAboutBudget = /\b(budget|plan)\b/i.test(priorAssistant);
+  const offeredCurrentBudget = /\b(?:current|existing)\b.{0,24}\bbudget\b|\bwant to use this budget\b/i.test(priorAssistant);
   const budgetAccepted = previous.budgetAccepted ||
     (askedAboutBudget && affirmative && !negative);
   const askedAboutCadence = /\b(check.?in|daily|weekly|every other day|how often)\b/i.test(priorAssistant);
@@ -552,11 +560,12 @@ export function normalizeAIOnboardingState(
   const strategyComplete = !reopenStrategy && (
     previous.strategyComplete ||
     accepted.length > 0 ||
+    (offeredCurrentBudget && affirmative && !negative) ||
     (Boolean(candidate.strategyComplete) && keepCurrentSpending) ||
     (Boolean(candidate.strategyComplete) && context.strategies.length === 0)
   );
 
-  const askedForAnotherGoal = /\b(another goal|anything else|add another)\b/i.test(priorAssistant);
+  const askedForAnotherGoal = /\b(another goal|anything else|add another|anything important|anything[^?.!]{0,24}missing)\b/i.test(priorAssistant);
   const finishedListingGoals = /\b(that['’]?s|that is) (everything|all)|\bno (more|other)|\bdone\b/i.test(lastUser) ||
     /^no\b/i.test(lastUser);
   const correctingGoal = /\b(i said|instead|not that|change|wrong)\b/i.test(lastUser) ||

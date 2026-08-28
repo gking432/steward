@@ -74,7 +74,7 @@ test("free-form goals survive while invented amounts and strategies do not", () 
   assert.deepEqual(normalized.goals.map((goal) => goal.name), ["Used car", "New clothes"]);
   assert.equal(normalized.goals[0].targetAmount, 8000);
   assert.equal(normalized.goals[1].targetAmount, null, "the model cannot invent a clothes budget");
-  assert.equal(normalized.goals[1].detailsComplete, false, "a missing amount needs its own follow-up");
+  assert.equal(normalized.goals[1].detailsComplete, true, "a clear purchase does not require an invented price interview");
   assert.equal(normalized.goalCollectionComplete, false, "the model cannot skip the explicit add-another-goal decision");
   assert.deepEqual(normalized.acceptedStrategyIds, [validStrategy]);
 });
@@ -213,6 +213,25 @@ test("goal collection closes only after its own explicit one-piece question", ()
   assert.equal(normalized.goalCollectionComplete, true);
 });
 
+test("natural wording can close goal collection without the old scripted phrase", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const goal = {
+    id: "goal:apartment",
+    name: "Refurnish my apartment",
+    kind: "purchase" as const,
+    targetAmount: null,
+    targetDate: null,
+    linkedAccountId: null,
+    detailsComplete: true,
+  };
+  const previous: AIOnboardingState = { ...EMPTY_AI_ONBOARDING_STATE, goals: [goal] };
+  const normalized = normalizeAIOnboardingState(previous, previous, context, [
+    { role: "assistant", content: "Is anything important missing?" },
+    { role: "user", content: "That is everything." },
+  ]);
+  assert.equal(normalized.goalCollectionComplete, true);
+});
+
 test("declining to estimate a goal amount completes that detail without inventing money", () => {
   const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
   const candidate: AIOnboardingState = {
@@ -237,6 +256,60 @@ test("declining to estimate a goal amount completes that detail without inventin
     ],
   );
   assert.equal(normalized.goals[0].detailsComplete, true);
+  assert.equal(normalized.goals[0].targetAmount, null);
+});
+
+test("a specific purchase goal can be understood without demanding a price", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const candidate: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:apartment",
+      name: "Refurnish my apartment",
+      kind: "purchase",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: true,
+    }],
+  };
+  const normalized = normalizeAIOnboardingState(
+    candidate,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: "What are you hoping to buy?" },
+      { role: "user", content: "I want to refurnish my apartment." },
+    ],
+  );
+  assert.equal(normalized.goals[0].targetAmount, null);
+  assert.equal(normalized.goals[0].detailsComplete, true);
+});
+
+test("a vague shopping goal asks for meaning, not an amount", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const candidate: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:stuff",
+      name: "Buy a bunch of stuff",
+      kind: "purchase",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: true,
+    }],
+  };
+  const normalized = normalizeAIOnboardingState(
+    candidate,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: "What are you hoping to buy?" },
+      { role: "user", content: "I want to buy a bunch of stuff." },
+    ],
+  );
+  assert.equal(normalized.goals[0].detailsComplete, false);
   assert.equal(normalized.goals[0].targetAmount, null);
 });
 
@@ -384,6 +457,38 @@ test("wrapped Accept and Decline replies settle exactly the discussed strategy",
   );
   assert.deepEqual(declined.declinedStrategyIds, [option.id]);
   assert.equal(declined.strategyComplete, false);
+});
+
+test("accepting a viable current budget settles strategy and budget approval together", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const previous: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:apartment",
+      name: "Refurnish my apartment",
+      kind: "purchase",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: true,
+    }],
+    goalCollectionComplete: true,
+    prioritiesConfirmed: true,
+    incomeConfirmed: true,
+    recurringReviewed: true,
+  };
+  const normalized = normalizeAIOnboardingState(
+    { ...previous, strategyComplete: true, budgetAccepted: true },
+    previous,
+    context,
+    [
+      { role: "assistant", content: "Your current paycheck budget supports this. Want to use this budget?" },
+      { role: "user", content: "Accept." },
+    ],
+  );
+  assert.equal(normalized.strategyComplete, true);
+  assert.equal(normalized.budgetAccepted, true);
+  assert.equal(onboardingPhase(normalized, context), "checkin");
 });
 
 test("a debt goal reuses the known debt instead of creating a duplicate", () => {

@@ -1,37 +1,29 @@
 "use client";
 
 /**
- * FIRST RUN — a staged financial operating-plan builder.
+ * FIRST RUN — a model-led conversation with a live financial plan beside it.
  *
- * AI decides which missing detail matters next. The product owns the visible
- * experience: every answer changes a real plan, never a transcript.
+ * The model owns the dialogue. The product renders useful controls and the
+ * financial consequences without turning the conversation into a form.
  */
 
 import {
   ArrowRight,
-  BellRing,
-  CalendarDays,
-  CarFront,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  CircleDollarSign,
   CreditCard,
   Dumbbell,
-  House,
   Landmark,
   LoaderCircle,
-  PiggyBank,
-  Plane,
+  Send,
   ShieldCheck,
-  ShoppingBag,
   Sparkles,
   Target,
-  Utensils,
   WalletCards,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { allocate, formatMoney, planCycle } from "../../lib/model/engine";
 import {
   EMPTY_AI_ONBOARDING_STATE,
@@ -57,7 +49,7 @@ type PlanView = {
   savings: { merchant: string; yearly: number }[];
 };
 
-type ActiveStep = {
+type ActiveReply = {
   id: number;
   message: string;
   plan?: PlanView;
@@ -72,15 +64,14 @@ type OnboardingResponse = {
   state: AIOnboardingState;
 };
 
-const DISPLAY_PHASES = ["goals", "review", "strategy", "budget", "checkin"] as const;
-const GOAL_START_CHOICES = ["Pay off debt", "Buy something", "Build savings", "More breathing room"];
-
-const PHASE_LABELS: Record<(typeof DISPLAY_PHASES)[number], string> = {
+const PHASES: OnboardingPhase[] = ["goals", "review", "strategy", "budget", "checkin"];
+const PHASE_LABELS: Record<OnboardingPhase, string> = {
   goals: "Goals",
-  review: "Snapshot",
-  strategy: "Choices",
+  review: "Money",
+  strategy: "Tradeoffs",
   budget: "Plan",
   checkin: "Rhythm",
+  complete: "Ready",
 };
 
 function buildPlanView(
@@ -128,30 +119,32 @@ export function IntakeScreen({
   onDone: (next: Workspace) => void;
 }) {
   const [state, setState] = useState<AIOnboardingState>(EMPTY_AI_ONBOARDING_STATE);
-  const [step, setStep] = useState<ActiveStep | null>(null);
+  const [turns, setTurns] = useState<OnboardingTurn[]>([]);
+  const [activeReply, setActiveReply] = useState<ActiveReply | null>(null);
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
   const [selectedReplies, setSelectedReplies] = useState<string[]>([]);
   const [phase, setPhase] = useState<OnboardingPhase>("goals");
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const startedRef = useRef(false);
+  const inFlightRef = useRef(false);
   const stateRef = useRef(state);
   const turnsRef = useRef<OnboardingTurn[]>([]);
-  const inFlightRef = useRef(false);
-  const stepIdRef = useRef(0);
-  const answerInputRef = useRef<HTMLInputElement>(null);
+  const replyIdRef = useRef(0);
+  const endRef = useRef<HTMLDivElement>(null);
+  const answerInputRef = useRef<HTMLTextAreaElement>(null);
 
   const context = useMemo(
     () => buildAIOnboardingContext(workspace, today, scanComplete),
     [workspace, today, scanComplete],
   );
-  const livePreview = useMemo(
+  const preview = useMemo(
     () => previewAIOnboarding(workspace, today, state),
-    [state, today, workspace],
+    [workspace, today, state],
   );
   const livePlan = useMemo(
-    () => buildPlanView(workspace, livePreview, today, state),
-    [livePreview, state, today, workspace],
+    () => buildPlanView(workspace, preview, today, state),
+    [workspace, preview, today, state],
   );
 
   const runTurn = useCallback(async (userText?: string) => {
@@ -162,7 +155,10 @@ export function IntakeScreen({
       ? [...turnsRef.current, { role: "user", content: said }]
       : turnsRef.current;
 
-    if (said) turnsRef.current = conversation;
+    if (said) {
+      turnsRef.current = conversation;
+      setTurns(conversation);
+    }
     setTyped("");
     setQuickReplies([]);
     setSelectedReplies([]);
@@ -187,24 +183,28 @@ export function IntakeScreen({
       }
       if (!payload?.message || !payload.state) throw new Error("Invalid onboarding response");
 
-      const preview = previewAIOnboarding(workspace, today, payload.state);
+      const nextPreview = previewAIOnboarding(workspace, today, payload.state);
       const plan = payload.showPlan
-        ? buildPlanView(workspace, preview, today, payload.state) ?? undefined
+        ? buildPlanView(workspace, nextPreview, today, payload.state) ?? undefined
         : undefined;
       const assistantTurn: OnboardingTurn = { role: "assistant", content: payload.message };
-      turnsRef.current = [...conversation, assistantTurn];
+      const nextTurns = [...conversation, assistantTurn];
+      turnsRef.current = nextTurns;
       stateRef.current = payload.state;
-      stepIdRef.current += 1;
+      replyIdRef.current += 1;
+      setTurns(nextTurns);
       setState(payload.state);
       setPhase(payload.phase);
       setQuickReplies(payload.quickReplies ?? []);
-      setStep({ id: stepIdRef.current, message: payload.message, plan });
+      setActiveReply({ id: replyIdRef.current, message: payload.message, plan });
     } catch {
-      stepIdRef.current += 1;
-      setStep({
-        id: stepIdRef.current,
-        message: "That didn’t land. Try that answer once more.",
-      });
+      const assistantTurn: OnboardingTurn = {
+        role: "assistant",
+        content: "I lost that for a moment. Tell me what you meant in your own words.",
+      };
+      turnsRef.current = [...conversation, assistantTurn];
+      setTurns(turnsRef.current);
+      setQuickReplies([]);
     } finally {
       inFlightRef.current = false;
       setBusy(false);
@@ -217,22 +217,29 @@ export function IntakeScreen({
     void runTurn();
   }, [runTurn]);
 
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: turns.length > 1 ? "smooth" : "auto", block: "end" });
+  }, [turns, busy, quickReplies]);
+
+  useEffect(() => {
+    if (typed || !answerInputRef.current) return;
+    answerInputRef.current.scrollLeft = 0;
+    answerInputRef.current.scrollTop = 0;
+  }, [typed]);
+
   const complete = state.complete;
   const displayPhase = phase === "complete" ? "checkin" : phase;
-  const progressIndex = Math.max(0, DISPLAY_PHASES.indexOf(displayPhase));
-  const stage = stageCopy(phase, state);
+  const phaseIndex = Math.max(0, PHASES.indexOf(displayPhase));
+  const currentMessage = activeReply?.message ?? "";
   const merchantChoices = quickReplies.length > 0 && quickReplies.every((reply) =>
     context.recurringCharges.some((charge) => charge.merchant === reply));
   const showRecurring = phase === "review" && state.incomeConfirmed === true &&
     !state.recurringReviewed && context.recurringCharges.length > 0;
-  const activeStrategy = phase === "strategy"
-    ? findActiveStrategy(context, state, step?.message ?? "")
-    : undefined;
-  const goalDecision = phase === "goals" && state.goals.length > 0 &&
-    state.goals.every((goal) => goal.detailsComplete) &&
-    /another goal|anything else|add another/i.test(step?.message ?? "");
   const priorityStep = phase === "goals" && state.goals.length > 1 &&
-    /priority|priorities|matters most|put.+order/i.test(step?.message ?? "");
+    /priority|priorities|matters most|put.+order/i.test(currentMessage);
+  const activeStrategy = phase === "strategy"
+    ? findActiveStrategy(context, state, currentMessage)
+    : undefined;
 
   const submit = (text: string) => {
     if (!text.trim() || busy || complete) return;
@@ -240,21 +247,17 @@ export function IntakeScreen({
   };
 
   const submitAnswer = () => {
-    const contextText = typed.trim();
-    const selectedText = selectedReplies.join(", ");
-    const answer = selectedText && contextText
-      ? `Selected: ${selectedText}. More context: ${contextText}`
-      : selectedText
-        ? `Selected: ${selectedText}.`
-        : contextText;
+    const extra = typed.trim();
+    const selected = selectedReplies.join(", ");
+    const answer = selected && extra
+      ? `Selected: ${selected}. More context: ${extra}`
+      : selected
+        ? `Selected: ${selected}.`
+        : extra;
     submit(answer);
   };
 
   const toggleReply = (reply: string) => {
-    if (/enter an amount/i.test(reply)) {
-      answerInputRef.current?.focus();
-      return;
-    }
     if (onboardingReplySubmitsImmediately(reply)) {
       submit(`Selected: ${reply}.`);
       return;
@@ -262,18 +265,6 @@ export function IntakeScreen({
     setSelectedReplies((current) => current.includes(reply)
       ? current.filter((entry) => entry !== reply)
       : [...current, reply]);
-  };
-
-  const addAnotherGoal = () => {
-    if (busy || complete) return;
-    const userTurn: OnboardingTurn = { role: "user", content: "Selected: Add another goal." };
-    const assistantTurn: OnboardingTurn = { role: "assistant", content: "What else are you trying to make happen?" };
-    turnsRef.current = [...turnsRef.current, userTurn, assistantTurn];
-    stepIdRef.current += 1;
-    setSelectedReplies([]);
-    setTyped("");
-    setQuickReplies(GOAL_START_CHOICES);
-    setStep({ id: stepIdRef.current, message: assistantTurn.content });
   };
 
   const moveGoal = (index: number, direction: -1 | 1) => {
@@ -286,246 +277,170 @@ export function IntakeScreen({
     setState(next);
   };
 
+  const submitPriority = () => submit(
+    `Priority order: ${state.goals.map((goal) => goal.name).join(", then ")}.`,
+  );
+
   return (
-    <main className="ik-screen">
-      <header className="ik-top">
-        <span className="ik-brand">
-          <span className="ik-brand-mark"><Sparkles size={14} /></span>
-          <span>Steward{demoMode ? " · Demo" : ""}</span>
-        </span>
-        <span className="ik-phase-count">{Math.min(progressIndex + 1, 5)} of 5</span>
+    <main className="ik-shell">
+      <header className="ik-topbar">
+        <div className="ik-brand"><span><Sparkles size={15} /></span><b>Steward</b>{demoMode && <i>Demo</i>}</div>
+        <div className="ik-stage-status">
+          <span>{PHASE_LABELS[phase]}</span>
+          <div>{PHASES.map((entry, index) => <i key={entry} className={index <= phaseIndex ? "active" : ""} />)}</div>
+        </div>
       </header>
 
-      <nav className="ik-progress" aria-label={`Onboarding stage ${Math.min(progressIndex + 1, 5)} of 5`}>
-        {DISPLAY_PHASES.map((entry, index) => (
-          <span key={entry} className={index < progressIndex ? "done" : index === progressIndex ? "current" : ""}>
-            <i />
-            <b>{PHASE_LABELS[entry]}</b>
-          </span>
-        ))}
-      </nav>
+      <div className="ik-layout">
+        <aside className="ik-plan-desktop">
+          {livePlan && <MoneyMap plan={livePlan} state={state} busy={busy} />}
+        </aside>
 
-      <section className="ik-stage" key={`${phase}:${step?.id ?? 0}`}>
-        <div className="ik-stage-heading">
-          <span className="ik-eyebrow">{stage.eyebrow}</span>
-          <h1>{stage.title}</h1>
-          <p>{stage.description}</p>
-        </div>
-
-        <div className="ik-build-grid">
+        <section className="ik-conversation" aria-label="Conversation with Steward">
           {livePlan && (
-            <LivePlanRail plan={livePlan} state={state} busy={busy} phase={phase} />
+            <details className="ik-plan-mobile">
+              <summary><span><WalletCards size={15} /> Plan taking shape</span><b>{formatMoney(livePlan.income)} / paycheck</b></summary>
+              <MoneyMap plan={livePlan} state={state} busy={busy} compact />
+            </details>
           )}
-          <div className="ik-workspace" aria-live="polite">
-            {phase === "goals" && state.goals.length > 0 && (
-              priorityStep
-                ? <PriorityStack goals={state.goals} onMove={moveGoal} />
-                : <GoalShelf state={state} />
-            )}
-            {phase === "review" && state.incomeConfirmed !== true && <IncomeDiscovery context={context} />}
-            {showRecurring && (
-              <RecurringReviewCard
-                charges={context.recurringCharges}
-                selectable={merchantChoices}
-                selected={selectedReplies}
-                onToggle={toggleReply}
-              />
-            )}
-            {phase === "strategy" && activeStrategy && (
-              <StrategyCard strategy={activeStrategy} context={context} />
-            )}
-            {(phase === "budget" || phase === "complete") && step?.plan && <PlanCard plan={step.plan} />}
-            {phase === "checkin" && !complete && <RhythmPreview />}
-            {complete && <CompletionCard state={state} plan={livePlan} />}
 
-            {!complete && (
-              <div className={`ik-task-prompt${busy ? " is-loading" : ""}`}>
-                {busy ? (
-                  <>
-                    <LoaderCircle size={17} />
-                    <div><span>Updating your plan</span><small>Checking the next useful decision…</small></div>
-                  </>
-                ) : (
-                  <>
-                    <span>Next decision</span>
-                    <h2>{step?.message ?? "Getting your first step ready…"}</h2>
-                  </>
-                )}
+          <div className="ik-thread" aria-live="polite">
+            <div className="ik-intro">
+              <span><Sparkles size={18} /></span>
+              <div><b>Let’s build your first plan.</b><p>I’ve already read the demo finances. Tell me what you want your money to do.</p></div>
+            </div>
+
+            {turns.map((turn, index) => {
+              const isLatest = index === turns.length - 1;
+              return (
+                <div key={`${turn.role}:${index}`} className={`ik-turn ${turn.role}`}>
+                  {turn.role === "assistant" && <span className="ik-avatar"><Sparkles size={13} /></span>}
+                  <div className="ik-turn-body">
+                    <p>{turn.role === "user" ? displayUserAnswer(turn.content) : turn.content}</p>
+                    {isLatest && turn.role === "assistant" && !busy && (
+                      <>
+                        {phase === "review" && state.incomeConfirmed !== true && <IncomeCard context={context} />}
+                        {showRecurring && (
+                          <RecurringCard
+                            charges={context.recurringCharges}
+                            selectable={merchantChoices}
+                            selected={selectedReplies}
+                            onToggle={toggleReply}
+                          />
+                        )}
+                        {phase === "strategy" && activeStrategy && <StrategyCard strategy={activeStrategy} context={context} />}
+                        {priorityStep && <PriorityEditor goals={state.goals} onMove={moveGoal} onSubmit={submitPriority} />}
+                        {activeReply?.plan && <BudgetCard plan={activeReply.plan} />}
+                        {complete && <ReadyCard state={state} plan={livePlan} />}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {busy && (
+              <div className="ik-turn assistant">
+                <span className="ik-avatar"><Sparkles size={13} /></span>
+                <div className="ik-thinking"><i /><i /><i /></div>
               </div>
             )}
+            <div ref={endRef} />
           </div>
-        </div>
-      </section>
 
-      <footer className="ik-actions">
-        {complete ? (
-          <button className="ik-primary" onClick={() => onDone(acceptAIOnboarding(workspace, today, state))}>
-            Start this paycheck <ArrowRight size={18} />
-          </button>
-        ) : goalDecision ? (
-          <div className="ik-goal-next">
-            <button type="button" onClick={addAnotherGoal}>Add another goal</button>
-            <button type="button" className="primary" onClick={() => submit("Selected: That’s everything.")}>
-              {state.goals.length > 1 ? "Set priorities" : "Continue to paycheck"} <ArrowRight size={17} />
-            </button>
-          </div>
-        ) : priorityStep ? (
-          <button
-            className="ik-primary"
-            type="button"
-            onClick={() => submit(`Priority order: ${state.goals.map((goal) => goal.name).join(", then ")}.`)}
-          >
-            Use this priority order <ArrowRight size={18} />
-          </button>
-        ) : (
-          <>
-            {!busy && quickReplies.length > 0 && !merchantChoices && (
-              <ChoiceGrid
-                replies={quickReplies}
-                selected={selectedReplies}
-                onToggle={toggleReply}
-                compact={phase === "strategy" || phase === "review"}
-              />
-            )}
-            {!busy && (
+          {!complete && !priorityStep && (
+            <footer className="ik-compose-area">
+              {!busy && quickReplies.length > 0 && !merchantChoices && (
+                <div className="ik-suggestions" aria-label="Suggested replies">
+                  {quickReplies.map((reply) => {
+                    const selected = selectedReplies.includes(reply);
+                    return (
+                      <button key={reply} type="button" className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => toggleReply(reply)}>
+                        {selected && <Check size={13} />}{reply}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <form className="ik-composer" onSubmit={(event) => { event.preventDefault(); submitAnswer(); }}>
-                <label>
-                  <span>{selectedReplies.length > 0 ? "Optional" : "Your answer"}</span>
-                  <input
-                    ref={answerInputRef}
-                    value={typed}
-                    onChange={(event) => setTyped(event.target.value)}
-                    placeholder={selectedReplies.length > 0 ? "Include more context?" : "Type something else…"}
-                    aria-label="Your answer"
-                  />
-                </label>
-                <button
-                  type="submit"
-                  disabled={!typed.trim() && selectedReplies.length === 0}
-                  aria-label="Continue"
-                >
-                  <span>{selectedReplies.length > 0 ? "Continue" : "Send"}</span>
-                  <ArrowRight size={17} />
+                <textarea
+                  ref={answerInputRef}
+                  value={typed}
+                  rows={1}
+                  onChange={(event) => setTyped(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      submitAnswer();
+                    }
+                  }}
+                  placeholder={selectedReplies.length ? "Include more context?" : "Message Steward"}
+                  aria-label="Message Steward"
+                  disabled={busy}
+                />
+                <button type="submit" disabled={busy || (!typed.trim() && selectedReplies.length === 0)} aria-label="Send message">
+                  {busy ? <LoaderCircle size={18} /> : <Send size={18} />}
                 </button>
               </form>
-            )}
-          </>
-        )}
-      </footer>
+              <small>Select as many as you want, add context if useful, then send.</small>
+            </footer>
+          )}
+
+          {complete && (
+            <footer className="ik-complete-action">
+              <button onClick={() => onDone(acceptAIOnboarding(workspace, today, state))}>
+                Start this paycheck <ArrowRight size={18} />
+              </button>
+            </footer>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
 
-function stageCopy(phase: OnboardingPhase, state: AIOnboardingState) {
-  if (phase === "goals") return {
-    eyebrow: "Stage one · Your priorities",
-    title: state.goals.length ? "Build a plan around your life." : "What should your money make possible?",
-    description: "Choose freely. Steward will ask only what it needs to turn each goal into a real plan.",
-  };
-  if (phase === "review") return state.incomeConfirmed === true ? {
-    eyebrow: "Stage two · Your snapshot",
-    title: "We found the shape of your month.",
-    description: "Confirm what belongs, flag what doesn’t, and Steward will use the clean picture.",
-  } : {
-    eyebrow: "Stage two · Your snapshot",
-    title: "Let’s confirm the money coming in.",
-    description: "This is based on the deposits found in your connected statements.",
-  };
-  if (phase === "strategy") return {
-    eyebrow: "Stage three · Your choices",
-    title: "Make room without making life miserable.",
-    description: "Steward tests one realistic tradeoff at a time. You stay in control.",
-  };
-  if (phase === "budget") return {
-    eyebrow: "Stage four · Your plan",
-    title: "Every paycheck has a job.",
-    description: "Bills stay protected first. The rest moves toward the priorities you chose.",
-  };
-  if (phase === "complete") return {
-    eyebrow: "Setup complete",
-    title: "Your money has a direction now.",
-    description: "Steward will keep the plan current as new spending arrives.",
-  };
-  return {
-    eyebrow: "Stage five · Your rhythm",
-    title: "Stay informed, not overwhelmed.",
-    description: "Choose how often Steward should surface progress, changes, and useful nudges.",
-  };
+function displayUserAnswer(content: string) {
+  return content
+    .replace(/^Selected:\s*/i, "")
+    .replace(/\.\s*More context:\s*/i, " — ")
+    .replace(/\.\s*$/, "");
 }
 
-function GoalShelf({ state }: { state: AIOnboardingState }) {
+function MoneyMap({ plan, state, busy, compact = false }: { plan: PlanView; state: AIOnboardingState; busy: boolean; compact?: boolean }) {
+  const protectedTotal = plan.buckets.reduce((sum, row) => sum + row.amount, 0);
+  const goalRows = state.goals.map((goal) => plan.claims.find((row) =>
+    goal.linkedAccountId ? row.linkedAccountId === goal.linkedAccountId : row.name.toLowerCase() === goal.name.toLowerCase()));
+  const goalTotal = goalRows.reduce((sum, row) => sum + (row?.amount ?? 0), 0);
+  const free = Math.max(0, plan.income - protectedTotal - goalTotal);
   return (
-    <section className="ik-goal-shelf" aria-label="Goals collected so far">
-      <header><span>Your priorities</span><b>{state.goals.length} saved</b></header>
-      <div>
-        {state.goals.map((goal, index) => (
-          <article key={goal.id}>
-            <span className="ik-goal-rank">{index + 1}</span>
-            <span><b>{goal.name}</b><small>{goal.targetAmount ? formatMoney(goal.targetAmount) : "We’ll size this together"}</small></span>
-            {goal.detailsComplete && <CheckCircle2 size={18} />}
-          </article>
-        ))}
+    <section className={`ik-money-map${compact ? " compact" : ""}${busy ? " updating" : ""}`}>
+      <header><span><i /> Your plan</span><b>{busy ? "Updating" : "Live"}</b></header>
+      <div className="ik-paycheck"><small>This paycheck</small><strong>{formatMoney(plan.income)}</strong></div>
+      <div className="ik-allocation-bar">
+        <i className="required" style={{ flexGrow: Math.max(protectedTotal, 1) }} />
+        <i className="goals" style={{ flexGrow: Math.max(goalTotal, 1) }} />
+        <i className="free" style={{ flexGrow: Math.max(free, 1) }} />
       </div>
+      <div className="ik-money-lines">
+        <span><i className="required" /><b>Required + everyday</b><strong>{formatMoney(protectedTotal)}</strong></span>
+        {state.goals.slice(0, 4).map((goal, index) => (
+          <span key={goal.id}><i className="goals" /><b>{goal.name}</b><strong>{goalRows[index]?.amount ? `+${formatMoney(goalRows[index]!.amount)}` : "Planning"}</strong></span>
+        ))}
+        <span className="free"><i /><b>Free to direct</b><strong>{formatMoney(free)}</strong></span>
+      </div>
+      {state.goals.length === 0
+        ? <p>Your goals will appear here as Steward understands them.</p>
+        : <p>Every answer updates what this paycheck can do.</p>}
     </section>
   );
 }
 
-function PriorityStack({
-  goals,
-  onMove,
-}: {
-  goals: AIOnboardingState["goals"];
-  onMove: (index: number, direction: -1 | 1) => void;
-}) {
+function IncomeCard({ context }: { context: AIOnboardingContext }) {
   return (
-    <section className="ik-priority-stack" aria-label="Goal priority order">
-      <header>
-        <span>Highest priority first</span>
-        <b>Reorder</b>
-      </header>
-      <div>
-        {goals.map((goal, index) => (
-          <article key={goal.id}>
-            <span className="ik-goal-rank">{index + 1}</span>
-            <span>
-              <b>{goal.name}</b>
-              <small>{goal.targetAmount ? formatMoney(goal.targetAmount) : "Flexible target"}</small>
-            </span>
-            <span className="ik-reorder-actions">
-              <button
-                type="button"
-                aria-label={`Move ${goal.name} up`}
-                disabled={index === 0}
-                onClick={() => onMove(index, -1)}
-              ><ChevronUp size={16} /></button>
-              <button
-                type="button"
-                aria-label={`Move ${goal.name} down`}
-                disabled={index === goals.length - 1}
-                onClick={() => onMove(index, 1)}
-              ><ChevronDown size={16} /></button>
-            </span>
-          </article>
-        ))}
-      </div>
-      <footer>Steward funds this list in order after required money is protected.</footer>
-    </section>
-  );
-}
-
-function IncomeDiscovery({ context }: { context: AIOnboardingContext }) {
-  return (
-    <section className="ik-income-card" aria-label="Income Steward found">
-      <span className="ik-discovery-tag"><Sparkles size={12} /> Found in your statements</span>
-      <div className="ik-income-amount">
-        <strong>{formatMoney(context.paycheck.amount)}</strong>
-        <span>per paycheck</span>
-      </div>
-      <div className="ik-income-source">
-        <span className="ik-source-icon"><Landmark size={19} /></span>
-        <span><b>{context.paycheck.merchant ?? "Regular income"}</b><small>{friendlyCadence(context.paycheck.cadence)}</small></span>
-        <ShieldCheck size={18} />
-      </div>
+    <section className="ik-inline-card ik-income-card">
+      <span className="ik-card-icon"><Landmark size={18} /></span>
+      <div><small>Found in your statements</small><b>{context.paycheck.merchant ?? "Regular income"}</b><span>{friendlyCadence(context.paycheck.cadence)}</span></div>
+      <strong>{formatMoney(context.paycheck.amount)}</strong>
     </section>
   );
 }
@@ -535,7 +450,7 @@ const BRAND_MARKS: Record<string, string> = {
   Spotify: "https://cdn.simpleicons.org/spotify/1DB954",
 };
 
-function RecurringReviewCard({
+function RecurringCard({
   charges,
   selectable,
   selected,
@@ -546,51 +461,52 @@ function RecurringReviewCard({
   selected: string[];
   onToggle: (merchant: string) => void;
 }) {
-  const yearlyTotal = charges.reduce((sum, charge) => sum + charge.yearlyCost, 0);
   return (
-    <section className="ik-recurring" aria-label="Recurring charges Steward found">
-      <header>
-        <div><span className="ik-discovery-tag"><Sparkles size={12} /> Detected automatically</span><h2>Recurring charges</h2></div>
-        <span className="ik-yearly"><b>{formatMoney(yearlyTotal)}</b><small>per year</small></span>
-      </header>
-      <div className="ik-recurring-list">
+    <section className="ik-recurring-card">
+      <header><span><Sparkles size={13} /> Detected recurring</span><b>{charges.length} found</b></header>
+      <div>
         {charges.map((charge) => {
-          const logo = BRAND_MARKS[charge.merchant];
           const chosen = selected.includes(charge.merchant);
-          const content = (
+          const body = (
             <>
-              <span className={`ik-merchant-mark ${merchantTone(charge.merchant)}`}>
-                {charge.merchant === "Midtown Fitness"
-                  ? <Dumbbell size={21} aria-hidden="true" />
-                  : <span aria-hidden="true">{charge.merchant.slice(0, 1)}</span>}
-                {logo && <img src={logo} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
+              <span className={`ik-merchant-logo ${merchantTone(charge.merchant)}`}>
+                {charge.merchant === "Midtown Fitness" ? <Dumbbell size={18} /> : charge.merchant.slice(0, 1)}
+                {BRAND_MARKS[charge.merchant] && <img src={BRAND_MARKS[charge.merchant]} alt="" />}
               </span>
-              <span className="ik-merchant-name"><b>{charge.merchant}</b><small>{friendlyCadence(charge.cadence)} · matched 3 times</small></span>
-              <span className="ik-merchant-cost"><b>{formatMoney(charge.amount)}</b><small>/ month</small></span>
-              {selectable && <span className={`ik-select-check${chosen ? " chosen" : ""}`}><Check size={13} /></span>}
+              <span><b>{charge.merchant}</b><small>{friendlyCadence(charge.cadence)}</small></span>
+              <strong>{formatMoney(charge.amount)}</strong>
+              {selectable && <i className={chosen ? "chosen" : ""}>{chosen && <Check size={12} />}</i>}
             </>
           );
-          return selectable ? (
-            <button
-              key={charge.id}
-              type="button"
-              className={chosen ? "chosen" : ""}
-              aria-pressed={chosen}
-              onClick={() => onToggle(charge.merchant)}
-            >{content}</button>
-          ) : <article key={charge.id}>{content}</article>;
+          return selectable
+            ? <button key={charge.id} type="button" aria-pressed={chosen} onClick={() => onToggle(charge.merchant)}>{body}</button>
+            : <article key={charge.id}>{body}</article>;
         })}
       </div>
-      <footer><ShieldCheck size={13} /> Based on recent statement patterns—not guesses.</footer>
+      <footer><ShieldCheck size={12} /> Matched from statement patterns</footer>
     </section>
   );
 }
 
-function findActiveStrategy(
-  context: AIOnboardingContext,
-  state: AIOnboardingState,
-  message: string,
-) {
+function PriorityEditor({ goals, onMove, onSubmit }: { goals: AIOnboardingState["goals"]; onMove: (index: number, direction: -1 | 1) => void; onSubmit: () => void }) {
+  return (
+    <section className="ik-priority-card">
+      <small>Highest priority first</small>
+      {goals.map((goal, index) => (
+        <article key={goal.id}>
+          <i>{index + 1}</i><b>{goal.name}</b>
+          <span>
+            <button type="button" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label={`Move ${goal.name} up`}><ChevronUp size={15} /></button>
+            <button type="button" disabled={index === goals.length - 1} onClick={() => onMove(index, 1)} aria-label={`Move ${goal.name} down`}><ChevronDown size={15} /></button>
+          </span>
+        </article>
+      ))}
+      <button type="button" className="ik-card-action" onClick={onSubmit}>Use this order <ArrowRight size={15} /></button>
+    </section>
+  );
+}
+
+function findActiveStrategy(context: AIOnboardingContext, state: AIOnboardingState, message: string) {
   const unavailable = new Set([...state.acceptedStrategyIds, ...state.declinedStrategyIds]);
   const available = context.strategies.filter((strategy) => !unavailable.has(strategy.id));
   const lower = message.toLowerCase();
@@ -598,226 +514,44 @@ function findActiveStrategy(
     const target = strategy.kind === "cut_bucket"
       ? context.currentBudget.buckets.find((bucket) => bucket.id === strategy.targetId)?.name
       : context.recurringCharges.find((charge) => charge.id === strategy.targetId)?.merchant;
-    return Boolean(target && lower.includes(target.toLowerCase()) && message.includes(formatMoney(strategy.toAmount)));
-  }) ?? available.find((strategy) => {
-    const target = strategy.kind === "cut_bucket"
-      ? context.currentBudget.buckets.find((bucket) => bucket.id === strategy.targetId)?.name
-      : context.recurringCharges.find((charge) => charge.id === strategy.targetId)?.merchant;
     return Boolean(target && lower.includes(target.toLowerCase()));
   }) ?? available[0];
 }
 
-function StrategyCard({
-  strategy,
-  context,
-}: {
-  strategy: OnboardingStrategy;
-  context: AIOnboardingContext;
-}) {
+function StrategyCard({ strategy, context }: { strategy: OnboardingStrategy; context: AIOnboardingContext }) {
   const target = strategy.kind === "cut_bucket"
     ? context.currentBudget.buckets.find((bucket) => bucket.id === strategy.targetId)?.name ?? "Flexible spending"
     : context.recurringCharges.find((charge) => charge.id === strategy.targetId)?.merchant ?? "Subscription";
-  const isCancel = strategy.kind === "cancel_subscription";
   return (
-    <section className="ik-strategy-card" aria-label="Suggested budget tradeoff">
-      <span className="ik-discovery-tag"><Sparkles size={12} /> One possible move</span>
-      <div className="ik-strategy-target">
-        <span className="ik-strategy-icon">{isCancel ? <CreditCard size={22} /> : <Utensils size={22} />}</span>
-        <span><small>{isCancel ? "Recurring charge" : "Flexible bucket"}</small><b>{target}</b></span>
-      </div>
-      <div className="ik-tradeoff">
-        <span><small>Now</small><b>{formatMoney(strategy.fromAmount)}</b></span>
-        <span className="ik-trade-line"><i /><ArrowRight size={16} /><i /></span>
-        <span><small>{isCancel ? "After" : "New target"}</small><b>{formatMoney(strategy.toAmount)}</b></span>
-      </div>
-      <div className="ik-unlocks">
-        <span><CircleDollarSign size={18} /></span>
-        <div><small>This creates</small><b>{formatMoney(strategy.freesPerPaycheck)} more every paycheck</b></div>
+    <section className="ik-strategy-card">
+      <header><span><CreditCard size={17} /></span><div><small>Possible move</small><b>{target}</b></div></header>
+      <div><span><small>Now</small><b>{formatMoney(strategy.fromAmount)}</b></span><ArrowRight size={16} /><span><small>New</small><b>{formatMoney(strategy.toAmount)}</b></span></div>
+      <footer>Frees <b>{formatMoney(strategy.freesPerPaycheck)}</b> each paycheck</footer>
+    </section>
+  );
+}
+
+function BudgetCard({ plan }: { plan: PlanView }) {
+  return (
+    <section className="ik-budget-card">
+      <header><span><Target size={16} /> Proposed paycheck plan</span><b>{formatMoney(plan.income)}</b></header>
+      <div>
+        {plan.buckets.slice(0, 6).map((row) => <span key={row.name}><b>{row.name}</b><strong>{formatMoney(row.amount)}</strong></span>)}
+        {plan.claims.slice(0, 4).map((row) => <span key={row.id} className="goal"><b>{row.name}</b><strong>+{formatMoney(row.amount)}</strong></span>)}
       </div>
     </section>
   );
 }
 
-function PlanCard({ plan }: { plan: PlanView }) {
-  const goalTotal = plan.claims.reduce((sum, row) => sum + row.amount, 0);
-  const protectedTotal = plan.buckets.reduce((sum, row) => sum + row.amount, 0);
+function ReadyCard({ state, plan }: { state: AIOnboardingState; plan: PlanView | null }) {
+  const cadence = state.checkInCadence === "every_other_day" ? "Every other day" : state.checkInCadence === "daily" ? "Daily" : "Weekly";
   return (
-    <section className="ik-plan" aria-label="Proposed budget">
-      <header>
-        <span><small>Every paycheck</small><strong>{formatMoney(plan.income)}</strong></span>
-        <span className="ik-plan-ready"><Check size={13} /> Balanced</span>
-      </header>
-      <div className="ik-money-flow" aria-label="Paycheck allocation">
-        <i className="protected" style={{ flexGrow: Math.max(protectedTotal, 1) }} />
-        <i className="goals" style={{ flexGrow: Math.max(goalTotal, 1) }} />
-      </div>
-      <div className="ik-plan-legend">
-        <span><i className="protected" /> Protected + spending</span>
-        <span><i className="goals" /> Goals</span>
-      </div>
-      <div className="ik-plan-groups">
-        <div>
-          <h3><WalletCards size={15} /> Your buckets</h3>
-          <ul>{plan.buckets.map((row) => <li key={row.name}><span>{row.name}</span><b>{formatMoney(row.amount)}</b></li>)}</ul>
-        </div>
-        {plan.claims.length > 0 && (
-          <div className="ik-goal-allocation">
-            <h3><Target size={15} /> Moving forward</h3>
-            <ul>{plan.claims.map((row) => <li key={row.name}><span>{row.name}</span><b>+{formatMoney(row.amount)}</b></li>)}</ul>
-          </div>
-        )}
-      </div>
-      {plan.savings.length > 0 && <footer>You freed {formatMoney(plan.savings.reduce((sum, row) => sum + row.yearly, 0))} a year from recurring charges.</footer>}
+    <section className="ik-ready-card">
+      <span><CheckCircle2 size={25} /></span>
+      <div><b>Your first plan is ready.</b><small>{state.goals.length} {state.goals.length === 1 ? "goal" : "goals"} prioritized · {cadence} check-ins</small></div>
+      <strong>{plan ? formatMoney(Math.max(0, plan.free)) : "$0"}<small>free this paycheck</small></strong>
     </section>
   );
-}
-
-function LivePlanRail({
-  plan,
-  state,
-  busy,
-  phase,
-}: {
-  plan: PlanView;
-  state: AIOnboardingState;
-  busy: boolean;
-  phase: OnboardingPhase;
-}) {
-  const protectedTotal = plan.buckets.reduce((sum, row) => sum + row.amount, 0);
-  const goalRows = state.goals.map((goal) => plan.claims.find((row) =>
-    goal.linkedAccountId
-      ? row.linkedAccountId === goal.linkedAccountId
-      : row.name.toLowerCase() === goal.name.toLowerCase()));
-  const goalTotal = goalRows.reduce((sum, row) => sum + (row?.amount ?? 0), 0);
-  const free = Math.max(0, plan.income - protectedTotal - goalTotal);
-  const protectedWidth = `${Math.min(100, (protectedTotal / Math.max(plan.income, 1)) * 100)}%`;
-  const goalWidth = `${Math.min(100, (goalTotal / Math.max(plan.income, 1)) * 100)}%`;
-  const freeWidth = `${Math.min(100, (free / Math.max(plan.income, 1)) * 100)}%`;
-  const phaseNote = phase === "goals"
-    ? "Goals will receive what remains after required money."
-    : phase === "review"
-      ? "Confirming your snapshot locks in the required layer."
-      : phase === "strategy"
-        ? "Each accepted choice creates more room here."
-        : "This is the paycheck plan you are building.";
-
-  return (
-    <aside className={`ik-live-plan${busy ? " is-updating" : ""}`} aria-label="Live paycheck plan">
-      <header>
-        <span><i /> Live plan</span>
-        <b>{busy ? "Updating" : "Current"}</b>
-      </header>
-      <div className="ik-live-paycheck">
-        <span>This paycheck</span>
-        <strong>{formatMoney(plan.income)}</strong>
-      </div>
-      <div className="ik-live-meter" aria-label="Current paycheck allocation">
-        <i className="protected" style={{ width: protectedWidth }} />
-        <i className="goals" style={{ width: goalWidth }} />
-        <i className="free" style={{ width: freeWidth }} />
-      </div>
-      <div className="ik-live-lines">
-        <div><span><i className="protected" /> Required + everyday</span><b>{formatMoney(protectedTotal)}</b></div>
-        {state.goals.slice(0, 3).map((goal, index) => {
-          const allocation = goalRows[index]?.amount ?? 0;
-          return (
-            <div key={goal.id} className="goal">
-              <span><i className="goals" /> {goal.name}</span>
-              <b>{allocation > 0 ? `+${formatMoney(allocation)}` : "Set next"}</b>
-            </div>
-          );
-        })}
-        <div className="free"><span><i className="free" /> Free to direct</span><b>{formatMoney(free)}</b></div>
-      </div>
-      <p>{phaseNote}</p>
-    </aside>
-  );
-}
-
-function RhythmPreview() {
-  return (
-    <section className="ik-rhythm-preview" aria-label="Example Steward check-in">
-      <div className="ik-phone-pulse"><BellRing size={20} /><i /></div>
-      <div><span>Steward</span><b>You’re $28 ahead in Dining this week.</b><small>That puts the car fund a little closer.</small></div>
-      <time>9:41</time>
-    </section>
-  );
-}
-
-function CompletionCard({ state, plan }: { state: AIOnboardingState; plan: PlanView | null }) {
-  const cadence = state.checkInCadence === "every_other_day"
-    ? "Every other day"
-    : state.checkInCadence === "daily" ? "Daily" : "Weekly";
-  const goalClaims = plan?.claims.filter((row) => state.goals.some((goal) =>
-    goal.linkedAccountId
-      ? row.linkedAccountId === goal.linkedAccountId
-      : row.name.toLowerCase() === goal.name.toLowerCase())) ?? [];
-  const jobs = [
-    ...(plan?.buckets.slice(0, 2).map((row) => ({ name: `Cover ${row.name}`, amount: row.amount })) ?? []),
-    ...goalClaims.slice(0, 2).map((row) => ({ name: `Move ${row.name} forward`, amount: row.amount })),
-  ];
-  const assigned = [
-    ...(plan?.buckets ?? []),
-    ...goalClaims,
-  ].reduce((sum, job) => sum + job.amount, 0);
-  const free = Math.max(0, (plan?.income ?? 0) - assigned);
-  return (
-    <section className="ik-complete-card">
-      <span className="ik-complete-ring"><Check size={34} /></span>
-      <h2>Your first plan is ready.</h2>
-      <p>{state.goals.length} {state.goals.length === 1 ? "goal" : "goals"} prioritized · {cadence} check-ins</p>
-      <div className="ik-first-jobs">
-        <h3>This paycheck’s job</h3>
-        {jobs.map((job, index) => (
-          <span key={`${job.name}:${index}`}><i>{index + 1}</i><b>{job.name}</b><strong>{formatMoney(job.amount)}</strong></span>
-        ))}
-        <footer><span>Free to spend</span><strong>{formatMoney(free)}</strong></footer>
-      </div>
-    </section>
-  );
-}
-
-function ChoiceGrid({
-  replies,
-  selected,
-  onToggle,
-  compact = false,
-}: {
-  replies: string[];
-  selected: string[];
-  onToggle: (reply: string) => void;
-  compact?: boolean;
-}) {
-  return (
-    <div className={`ik-choices${compact ? " compact" : ""}`} aria-label="Answer choices">
-      {replies.map((reply) => {
-        const chosen = selected.includes(reply);
-        const Icon = iconForReply(reply);
-        return (
-          <button key={reply} type="button" className={chosen ? "chosen" : ""} aria-pressed={chosen} onClick={() => onToggle(reply)}>
-            <span className="ik-choice-icon"><Icon size={18} /></span>
-            <span>{reply}</span>
-            <i>{chosen ? <Check size={13} /> : <ArrowRight size={13} />}</i>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function iconForReply(reply: string): ComponentType<{ size?: number }> {
-  const label = reply.toLowerCase();
-  if (/debt|loan|card/.test(label)) return CreditCard;
-  if (/car|vehicle|auto/.test(label)) return CarFront;
-  if (/home|house/.test(label)) return House;
-  if (/trip|travel|vacation/.test(label)) return Plane;
-  if (/saving|cushion|emergency/.test(label)) return PiggyBank;
-  if (/buy|purchase|clothes|something/.test(label)) return ShoppingBag;
-  if (/daily|week|day/.test(label)) return CalendarDays;
-  if (/yes|accept|use this|correct|right|keep/.test(label)) return CheckCircle2;
-  if (/no|decline|change|another|back|off/.test(label)) return ArrowRight;
-  if (/breathing|bill|spending/.test(label)) return WalletCards;
-  return Target;
 }
 
 function friendlyCadence(cadence: string) {
