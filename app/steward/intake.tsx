@@ -131,7 +131,7 @@ export function IntakeScreen({
   const stateRef = useRef(state);
   const turnsRef = useRef<OnboardingTurn[]>([]);
   const replyIdRef = useRef(0);
-  const endRef = useRef<HTMLDivElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
 
   const context = useMemo(
@@ -218,7 +218,12 @@ export function IntakeScreen({
   }, [runTurn]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: turns.length > 1 ? "smooth" : "auto", block: "end" });
+    const thread = threadRef.current;
+    if (!thread) return;
+    thread.scrollTo({
+      top: thread.scrollHeight,
+      behavior: turns.length > 1 ? "smooth" : "auto",
+    });
   }, [turns, busy, quickReplies]);
 
   useEffect(() => {
@@ -304,7 +309,7 @@ export function IntakeScreen({
             </details>
           )}
 
-          <div className="ik-thread" aria-live="polite">
+          <div ref={threadRef} className="ik-thread" aria-live="polite">
             <div className="ik-intro">
               <span><Sparkles size={18} /></span>
               <div><b>Let’s build your first plan.</b><p>I’ve already read the demo finances. Tell me what you want your money to do.</p></div>
@@ -345,7 +350,6 @@ export function IntakeScreen({
                 <div className="ik-thinking"><i /><i /><i /></div>
               </div>
             )}
-            <div ref={endRef} />
           </div>
 
           {!complete && !priorityStep && (

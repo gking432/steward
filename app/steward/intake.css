@@ -12,7 +12,11 @@
 * { box-sizing: border-box; }
 
 .ik-shell {
-  min-height: 100dvh;
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   background: var(--ik-green);
   padding-top: 64px;
   color: var(--ik-ink);
@@ -52,7 +56,9 @@ button { cursor: pointer; }
 .ik-layout {
   display: grid;
   width: min(1180px, 100%);
-  min-height: calc(100dvh - 64px);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   margin: 0 auto;
   grid-template-columns: 300px minmax(0, 760px);
   justify-content: center;
@@ -60,8 +66,8 @@ button { cursor: pointer; }
   padding: 22px;
 }
 
-.ik-plan-desktop { position: relative; }
-.ik-money-map { position: sticky; top: 86px; overflow: hidden; border: 1px solid rgba(255,255,255,.32); border-radius: 22px; background: rgba(248,250,246,.97); padding: 16px; box-shadow: 0 24px 70px rgba(10,44,29,.2); transition: transform .22s ease, box-shadow .22s ease; }
+.ik-plan-desktop { position: relative; min-height: 0; overflow: hidden; }
+.ik-money-map { position: static; max-height: 100%; overflow: auto; border: 1px solid rgba(255,255,255,.32); border-radius: 22px; background: rgba(248,250,246,.97); padding: 16px; box-shadow: 0 24px 70px rgba(10,44,29,.2); transition: transform .22s ease, box-shadow .22s ease; }
 .ik-money-map.updating { transform: translateY(-2px); box-shadow: 0 27px 80px rgba(10,44,29,.27); }
 .ik-money-map header { display: flex; align-items: center; justify-content: space-between; color: var(--ik-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
 .ik-money-map header span { display: flex; align-items: center; gap: 6px; }
@@ -86,8 +92,8 @@ button { cursor: pointer; }
 .ik-money-lines .free b, .ik-money-lines .free strong { color: var(--ik-ink); font-weight: 700; }
 .ik-money-map > p { margin: 14px 0 0; color: var(--ik-muted); font-size: 9px; line-height: 1.45; }
 
-.ik-conversation { display: flex; min-width: 0; min-height: calc(100dvh - 108px); flex-direction: column; overflow: hidden; border: 1px solid rgba(255,255,255,.25); border-radius: 25px; background: var(--ik-paper); box-shadow: 0 28px 90px rgba(9,42,28,.24); }
-.ik-thread { flex: 1; padding: 30px clamp(18px, 5vw, 54px) 24px; }
+.ik-conversation { display: flex; min-width: 0; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; border: 1px solid rgba(255,255,255,.25); border-radius: 25px; background: var(--ik-paper); box-shadow: 0 28px 90px rgba(9,42,28,.24); }
+.ik-thread { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 30px clamp(18px, 5vw, 54px) 24px; scrollbar-gutter: stable; -webkit-overflow-scrolling: touch; }
 .ik-intro { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 30px; border-bottom: 1px solid var(--ik-line); padding-bottom: 22px; }
 .ik-intro > span, .ik-avatar { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 10px; background: var(--ik-green); color: white; }
 .ik-intro b { display: block; margin-top: 2px; font-size: 15px; }
@@ -176,7 +182,7 @@ button { cursor: pointer; }
 .ik-ready-card > strong { text-align: right; font-size: 16px; }
 .ik-ready-card > strong small { color: var(--ik-muted); font-size: 7.5px; font-weight: 500; }
 
-.ik-compose-area { position: sticky; z-index: 10; bottom: 0; border-top: 1px solid var(--ik-line); background: rgba(246,247,242,.95); padding: 12px clamp(18px, 5vw, 54px) max(13px, env(safe-area-inset-bottom)); backdrop-filter: blur(18px); }
+.ik-compose-area { position: relative; z-index: 10; flex: 0 0 auto; border-top: 1px solid var(--ik-line); background: rgba(246,247,242,.95); padding: 12px clamp(18px, 5vw, 54px) max(13px, env(safe-area-inset-bottom)); backdrop-filter: blur(18px); }
 .ik-suggestions { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 9px; }
 .ik-suggestions button { display: inline-flex; min-height: 35px; align-items: center; gap: 5px; border: 1px solid #bbcec1; border-radius: 999px; background: white; padding: 7px 11px; color: #285640; font-size: 10px; font-weight: 620; }
 .ik-suggestions button:hover, .ik-suggestions button.selected { border-color: #4e8665; background: var(--ik-mint); }
@@ -190,7 +196,7 @@ button { cursor: pointer; }
 .ik-composer button svg.lucide-loader-circle { animation: ik-spin .8s linear infinite; }
 .ik-compose-area > small { display: block; margin-top: 6px; color: #899a91; font-size: 8px; text-align: center; }
 
-.ik-complete-action { position: sticky; bottom: 0; border-top: 1px solid var(--ik-line); background: rgba(246,247,242,.95); padding: 12px clamp(18px,5vw,54px) max(14px,env(safe-area-inset-bottom)); }
+.ik-complete-action { position: relative; flex: 0 0 auto; border-top: 1px solid var(--ik-line); background: rgba(246,247,242,.95); padding: 12px clamp(18px,5vw,54px) max(14px,env(safe-area-inset-bottom)); }
 .ik-complete-action button { display: flex; width: 100%; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 13px; background: var(--ik-green); padding: 13px; color: white; font-size: 11px; font-weight: 700; }
 .ik-plan-mobile { display: none; }
 
@@ -199,9 +205,9 @@ button { cursor: pointer; }
   .ik-topbar { height: 57px; padding-inline: 17px; }
   .ik-stage-status > span { display: none; }
   .ik-stage-status i { width: 16px; }
-  .ik-layout { display: block; min-height: calc(100dvh - 57px); padding: 0; }
+  .ik-layout { display: block; height: 100%; min-height: 0; padding: 0; }
   .ik-plan-desktop { display: none; }
-  .ik-conversation { min-height: calc(100dvh - 57px); border: 0; border-radius: 0; box-shadow: none; }
+  .ik-conversation { height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
   .ik-plan-mobile { display: block; margin: 12px 14px 0; border: 1px solid #d5dfd7; border-radius: 14px; background: white; }
   .ik-plan-mobile summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; color: var(--ik-green); font-size: 9px; list-style: none; }
   .ik-plan-mobile summary::-webkit-details-marker { display: none; }
