@@ -542,7 +542,7 @@ export function normalizeAIOnboardingState(
     (askedAboutRecurringSet && affirmative && !negative) ||
     finishedFlaggedReview;
   const askedAboutBudget = /\b(budget|plan)\b/i.test(priorAssistant);
-  const offeredCurrentBudget = /\b(?:current|existing)\b.{0,24}\bbudget\b|\bwant to use this budget\b/i.test(priorAssistant);
+  const offeredCurrentBudget = /\b(?:current|existing)\b.{0,24}\bbudget\b|\b(?:do you )?want (?:to use )?this budget\b|\buse this budget\b/i.test(priorAssistant);
   const budgetAccepted = previous.budgetAccepted ||
     (askedAboutBudget && affirmative && !negative);
   const askedAboutCadence = /\b(check.?in|daily|weekly|every other day|how often)\b/i.test(priorAssistant);

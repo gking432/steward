@@ -482,7 +482,7 @@ test("accepting a viable current budget settles strategy and budget approval tog
     previous,
     context,
     [
-      { role: "assistant", content: "Your current paycheck budget supports this. Want to use this budget?" },
+      { role: "assistant", content: "You can do this without cutting anything. Do you want this budget?" },
       { role: "user", content: "Accept." },
     ],
   );
