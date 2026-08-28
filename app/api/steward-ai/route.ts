@@ -22,6 +22,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const CANONICAL_AI_ENDPOINT = "https://steward-financial-os.vercel.app/api/steward-ai";
+
 const phraseSchema = z.object({
   kind: z.literal("phrase"),
   headline: z.string().min(1).max(200),
@@ -334,6 +336,33 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request." }, { status: 400 });
   }
   const input = parsed.data;
+
+  // Sites hosts the portfolio copy without duplicating the secret. Route its
+  // onboarding turns through the canonical Vercel function, where the key is
+  // server-owned. The canonical host never forwards to itself.
+  const runtime = env as unknown as Record<string, string | undefined>;
+  if (
+    input.kind === "onboarding" &&
+    !runtime.OPENAI_API_KEY &&
+    new URL(request.url).host !== new URL(CANONICAL_AI_ENDPOINT).host
+  ) {
+    try {
+      const upstream = await fetch(CANONICAL_AI_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (upstream.ok) {
+        return new Response(upstream.body, {
+          status: upstream.status,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      console.error("Canonical onboarding request failed", upstream.status);
+    } catch (error) {
+      console.error("Canonical onboarding request failed", error instanceof Error ? error.name : "UnknownError");
+    }
+  }
 
   if (input.kind === "onboarding") {
     const context = input.context as AIOnboardingContext;
