@@ -15,6 +15,12 @@ import {
 } from "../lib/model/onboarding-ai";
 
 const workspace = () => toModel(demoWorkspace());
+const mappedSpending = (context: ReturnType<typeof buildAIOnboardingContext>) =>
+  context.monthlySpending.map((entry) => ({
+    id: entry.id,
+    normal: true,
+    allocationPerPaycheck: entry.suggestedPerPaycheck,
+  }));
 
 test("binary replies submit immediately while selectable answers wait", () => {
   for (const reply of ["Yes", "No, something is off", "Accept", "Decline"]) {
@@ -34,6 +40,38 @@ test("every AI turn can receive a complete compact financial context", () => {
   assert.ok(context.recurringCharges.some((entry) => entry.merchant === "Netflix"));
   assert.ok(context.strategies.some((entry) => entry.kind === "cut_bucket"));
   assert.ok(context.strategies.some((entry) => entry.kind === "cancel_subscription"));
+});
+
+test("onboarding confirms income before it maps spending or asks about goals", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  assert.equal(onboardingPhase(EMPTY_AI_ONBOARDING_STATE, context), "income");
+  const income = normalizeAIOnboardingState(
+    EMPTY_AI_ONBOARDING_STATE,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: "I found $2,150 per paycheck. Is that your usual take-home pay?" },
+      { role: "user", content: "Yes, that’s right." },
+    ],
+  );
+  assert.equal(income.incomeConfirmed, true);
+  assert.equal(onboardingPhase(income, context), "spending");
+});
+
+test("a normal past expense becomes a per-paycheck bucket only after allocation", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const observed = context.monthlySpending[0];
+  const prior = { ...EMPTY_AI_ONBOARDING_STATE, incomeConfirmed: true };
+  const normal = normalizeAIOnboardingState(prior, prior, context, [
+    { role: "assistant", content: `I found ${observed.category} spending. Is that normal for you?` },
+    { role: "user", content: "Yes, that’s normal." },
+  ]);
+  assert.equal(normal.spendingReviews[0].allocationPerPaycheck, null);
+  const allocated = normalizeAIOnboardingState(normal, normal, context, [
+    { role: "assistant", content: `Should I use $${observed.suggestedPerPaycheck} for the ${observed.category} bucket per paycheck?` },
+    { role: "user", content: `Use $${observed.suggestedPerPaycheck}.` },
+  ]);
+  assert.equal(allocated.spendingReviews[0].allocationPerPaycheck, observed.suggestedPerPaycheck);
 });
 
 test("free-form goals survive while invented amounts and strategies do not", () => {
@@ -94,7 +132,7 @@ test("a sent purchase choice survives an empty model state", () => {
   assert.equal(normalized.goals[0].name, "Trip");
   assert.equal(normalized.goals[0].kind, "purchase");
   assert.equal(normalized.goals[0].detailsComplete, false);
-  assert.equal(onboardingPhase(normalized, context), "goals");
+  assert.equal(onboardingPhase(normalized, context), "income");
 });
 
 test("several sent purchase choices are retained together", () => {
@@ -475,6 +513,7 @@ test("accepting a viable current budget settles strategy and budget approval tog
     goalCollectionComplete: true,
     prioritiesConfirmed: true,
     incomeConfirmed: true,
+    spendingReviews: mappedSpending(context),
     recurringReviewed: true,
   };
   const normalized = normalizeAIOnboardingState(
@@ -554,6 +593,9 @@ test("a correction reopens goal selection instead of advancing", () => {
     }],
     goalCollectionComplete: true,
     prioritiesConfirmed: true,
+    incomeConfirmed: true,
+    spendingReviews: mappedSpending(context),
+    recurringReviewed: true,
   };
   const normalized = normalizeAIOnboardingState(previous, previous, context, [
     { role: "assistant", content: "Would you like to add another goal?" },
@@ -579,6 +621,7 @@ test("completion requires goals, financial review, strategy, budget approval, an
     goalCollectionComplete: true,
     prioritiesConfirmed: true,
     incomeConfirmed: true,
+    spendingReviews: mappedSpending(context),
     recurringReviewed: true,
     strategyComplete: true,
     budgetAccepted: true,

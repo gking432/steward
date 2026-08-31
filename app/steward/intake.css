@@ -77,6 +77,11 @@ button { cursor: pointer; }
 .ik-paycheck { display: grid; gap: 2px; margin-top: 20px; }
 .ik-paycheck small { color: var(--ik-muted); font-size: 10px; }
 .ik-paycheck strong { font-size: 34px; font-weight: 620; letter-spacing: -.06em; }
+.ik-paycheck em { color: var(--ik-muted); font-size: 9px; font-style: normal; }
+.ik-empty-plan { display: grid; justify-items: start; gap: 5px; margin-top: 18px; border: 1px dashed #cad7ce; border-radius: 14px; background: #f8faf7; padding: 16px; color: var(--ik-muted); }
+.ik-empty-plan svg { color: #579071; }
+.ik-empty-plan b { color: var(--ik-ink); font-size: 11px; }
+.ik-empty-plan span { font-size: 9px; line-height: 1.45; }
 .ik-allocation-bar { display: flex; height: 9px; gap: 2px; margin: 14px 0 12px; overflow: hidden; border-radius: 999px; background: #e4e9e4; }
 .ik-allocation-bar i { min-width: 2px; transition: flex-grow .45s cubic-bezier(.22,1,.36,1); }
 .ik-allocation-bar .required, .ik-money-lines i.required { background: #285f46; }
@@ -121,6 +126,16 @@ button { cursor: pointer; }
 .ik-income-card b { margin-top: 2px; font-size: 11px; }
 .ik-income-card div span { color: var(--ik-muted); font-size: 9px; }
 .ik-income-card > strong { font-size: 16px; letter-spacing: -.035em; }
+.ik-spending-card { overflow: hidden; }
+.ik-spending-card > header { display: grid; align-items: center; grid-template-columns: auto 1fr auto; gap: 10px; padding: 12px; }
+.ik-spending-card > header div small, .ik-spending-card > header div b, .ik-spending-card > header > strong small { display: block; }
+.ik-spending-card > header div small { color: var(--ik-muted); font-size: 8px; text-transform: uppercase; letter-spacing: .05em; }
+.ik-spending-card > header div b { margin-top: 2px; font-size: 12px; }
+.ik-spending-card > header > strong { color: var(--ik-green); font-size: 15px; text-align: right; }
+.ik-spending-card > header > strong small { color: var(--ik-muted); font-size: 8px; font-weight: 500; }
+.ik-spending-card > div { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--ik-line); background: #fafbf8; padding: 9px 12px; font-size: 8.5px; }
+.ik-spending-card > div span { color: var(--ik-muted); }
+.ik-spending-card > div b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .ik-recurring-card { overflow: hidden; }
 .ik-recurring-card > header, .ik-budget-card > header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--ik-line); padding: 11px 12px; }

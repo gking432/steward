@@ -207,8 +207,8 @@ function DemoStatementImport({
       </section>
 
       <footer className="dm-action">
-        <p>Next, Steward will ask what matters to you and turn these patterns into a paycheck plan.</p>
-        <button onClick={onContinue}>Goals</button>
+        <p>Next, confirm what is normal, build your paycheck buckets, then set your goals.</p>
+        <button onClick={onContinue}>Build my plan</button>
       </footer>
     </main>
   );

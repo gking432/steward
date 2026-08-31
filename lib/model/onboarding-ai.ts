@@ -38,11 +38,18 @@ export type OnboardingGoal = {
 
 export type CheckInCadence = "daily" | "every_other_day" | "weekly";
 
+export type SpendingReview = {
+  id: string;
+  normal: boolean;
+  allocationPerPaycheck: number | null;
+};
+
 export type AIOnboardingState = {
   goals: OnboardingGoal[];
   goalCollectionComplete: boolean;
   prioritiesConfirmed: boolean;
   incomeConfirmed: boolean | null;
+  spendingReviews: SpendingReview[];
   recurringReviewed: boolean;
   acceptedStrategyIds: string[];
   declinedStrategyIds: string[];
@@ -57,6 +64,7 @@ export const EMPTY_AI_ONBOARDING_STATE: AIOnboardingState = {
   goalCollectionComplete: false,
   prioritiesConfirmed: false,
   incomeConfirmed: null,
+  spendingReviews: [],
   recurringReviewed: false,
   acceptedStrategyIds: [],
   declinedStrategyIds: [],
@@ -99,8 +107,10 @@ export type AIOnboardingContext = {
     minimumPayment: number | null;
   }[];
   monthlySpending: {
+    id: string;
     category: string;
     amount: number;
+    suggestedPerPaycheck: number;
     merchants: string[];
   }[];
   recurringCharges: {
@@ -109,6 +119,7 @@ export type AIOnboardingContext = {
     amount: number;
     cadence: string;
     yearlyCost: number;
+    perPaycheck: number;
   }[];
   currentBudget: {
     incomePerPaycheck: number;
@@ -168,6 +179,18 @@ function paychecksPerYear(workspace: Workspace) {
     : workspace.profile.payFrequency === "Monthly"
       ? 12
       : 26;
+}
+
+function contextCategories(workspace: Workspace, today: string) {
+  return spendingByCategory(workspace, today)
+    .slice(0, 10)
+    .map((entry) => ({
+      id: `spending:${slug(entry.category)}`,
+      category: entry.category,
+      amount: round2(entry.total / 3),
+      suggestedPerPaycheck: round2((entry.total / 3) * 12 / paychecksPerYear(workspace)),
+      merchants: entry.merchants.slice(0, 3),
+    }));
 }
 
 /** Real, bounded changes Steward may negotiate. The model can select; it cannot invent. */
@@ -269,19 +292,14 @@ export function buildAIOnboardingContext(
       apr: account.interestRate ?? null,
       minimumPayment: account.minimumPayment ?? null,
     })),
-    monthlySpending: spendingByCategory(workspace, today)
-      .slice(0, 10)
-      .map((entry) => ({
-        category: entry.category,
-        amount: round2(entry.total / 3),
-        merchants: entry.merchants.slice(0, 3),
-      })),
+    monthlySpending: contextCategories(workspace, today),
     recurringCharges: recurring.map((stream) => ({
       id: stream.key,
       merchant: stream.merchant,
       amount: stream.typicalAmount,
       cadence: stream.cadence,
       yearlyCost: annualCost(stream),
+      perPaycheck: round2(annualCost(stream) / paychecksPerYear(workspace)),
     })),
     currentBudget: {
       incomePerPaycheck: plan?.income ?? workspace.profile.takeHomePay,
@@ -526,6 +544,48 @@ export function normalizeAIOnboardingState(
       !acceptedSet.has(id) &&
       (previous.declinedStrategyIds.includes(id) || (strategyWasDiscussed(id) && strategyNegative)));
   const askedAboutIncome = /\b(paycheck|income|paid|pay)\b/i.test(priorAssistant);
+  const activeSpending = context.monthlySpending.find((entry) =>
+    priorAssistant.includes(entry.category.toLowerCase()));
+  const askedIfSpendingIsNormal = /\b(normal|usual|typical)\b/i.test(priorAssistant);
+  const askedForSpendingAllocation = /\b(allocate|allocation|bucket|per paycheck|each paycheck)\b/i.test(priorAssistant);
+  const unusualSpending = /\b(one.?time|unusual|not normal|not typical|rare|exception)\b/i.test(lastUser);
+  const previousSpendingReviews = previous.spendingReviews.filter((review) =>
+    context.monthlySpending.some((entry) => entry.id === review.id));
+  const spendingReviewById = new Map(previousSpendingReviews.map((review) => [review.id, review]));
+  if (activeSpending && askedIfSpendingIsNormal) {
+    if (unusualSpending || (negative && !affirmative)) {
+      spendingReviewById.set(activeSpending.id, {
+        id: activeSpending.id,
+        normal: false,
+        allocationPerPaycheck: 0,
+      });
+    } else if (affirmative || /\b(normal|usual|typical)\b/i.test(lastUser)) {
+      const existing = spendingReviewById.get(activeSpending.id);
+      spendingReviewById.set(activeSpending.id, {
+        id: activeSpending.id,
+        normal: true,
+        allocationPerPaycheck: existing?.allocationPerPaycheck ?? null,
+      });
+    }
+  }
+  if (activeSpending && askedForSpendingAllocation) {
+    const useSuggested = affirmative || /\b(use|keep|works|that amount|looks good)\b/i.test(lastUser);
+    const allocation = enteredAmount !== null && enteredAmount >= 0
+      ? enteredAmount
+      : useSuggested
+        ? activeSpending.suggestedPerPaycheck
+        : null;
+    if (allocation !== null) {
+      spendingReviewById.set(activeSpending.id, {
+        id: activeSpending.id,
+        normal: true,
+        allocationPerPaycheck: allocation,
+      });
+    }
+  }
+  const spendingReviews = [...spendingReviewById.values()].filter((review) =>
+    review.allocationPerPaycheck === null ||
+    (review.allocationPerPaycheck >= 0 && Number.isFinite(review.allocationPerPaycheck)));
   const askedAboutRecurringSet =
     /\b(all of these|anything look surprising|keep them all|recurring charges)\b/i.test(priorAssistant);
   const recurringProgress = recurringReviewProgress(context, conversation);
@@ -587,6 +647,7 @@ export function normalizeAIOnboardingState(
     goalCollectionComplete,
     prioritiesConfirmed,
     incomeConfirmed,
+    spendingReviews,
     recurringReviewed,
     acceptedStrategyIds: [...new Set(accepted)],
     declinedStrategyIds: [...new Set(declined)],
@@ -603,7 +664,9 @@ export function normalizeAIOnboardingState(
     state.goals.every((goal) => goal.detailsComplete);
   const financesReady =
     !context.scanComplete ||
-    (state.incomeConfirmed === true && state.recurringReviewed);
+    (state.incomeConfirmed === true &&
+      state.spendingReviews.filter((review) => review.allocationPerPaycheck !== null).length >= context.monthlySpending.length &&
+      state.recurringReviewed);
   state.complete = Boolean(
     context.scanComplete &&
     goalsReady &&
@@ -615,19 +678,18 @@ export function normalizeAIOnboardingState(
   return state;
 }
 
-export type OnboardingPhase = "goals" | "review" | "strategy" | "budget" | "checkin" | "complete";
+export type OnboardingPhase = "income" | "spending" | "recurring" | "goals" | "strategy" | "budget" | "checkin" | "complete";
 
 export function onboardingPhase(
   state: AIOnboardingState,
   context: AIOnboardingContext,
 ): OnboardingPhase {
-  const goalsReady =
-    state.goals.length > 0 &&
-    state.goalCollectionComplete &&
-    state.prioritiesConfirmed &&
-    state.goals.every((goal) => goal.detailsComplete);
+  if (!context.scanComplete || state.incomeConfirmed !== true) return "income";
+  if (state.spendingReviews.filter((review) => review.allocationPerPaycheck !== null).length < context.monthlySpending.length) return "spending";
+  if (!state.recurringReviewed) return "recurring";
+  const goalsReady = state.goals.length > 0 && state.goalCollectionComplete &&
+    state.prioritiesConfirmed && state.goals.every((goal) => goal.detailsComplete);
   if (!goalsReady) return "goals";
-  if (!context.scanComplete || state.incomeConfirmed !== true || !state.recurringReviewed) return "review";
   if (!state.strategyComplete) return "strategy";
   if (!state.budgetAccepted) return "budget";
   if (!state.checkInCadence) return "checkin";
@@ -651,16 +713,44 @@ export function previewAIOnboarding(
       .map((strategy) => strategy.id),
   );
   const budgetWorkspace = withRecurringBudgets(workspace, today, cancelled);
+  const reviewedAmounts = new Map(state.spendingReviews.flatMap((review) =>
+    review.allocationPerPaycheck === null ? [] : [[review.id, review.allocationPerPaycheck] as const]));
+  const reviewedCategories = contextCategories(workspace, today);
   const next: Workspace = {
     ...budgetWorkspace,
     buckets: budgetWorkspace.buckets.map((bucket) => {
       const cuts = selected.filter(
         (strategy) => strategy.kind === "cut_bucket" && strategy.targetId === bucket.id,
       );
-      if (!cuts.length || bucket.kind !== "spend") return bucket;
-      return { ...bucket, perCycle: Math.min(...cuts.map((strategy) => strategy.toAmount)) };
+      if (bucket.kind !== "spend") return bucket;
+      const categoryId = `spending:${slug(bucket.category ?? bucket.name)}`;
+      const reviewed = reviewedAmounts.get(categoryId);
+      const cutAmount = cuts.length ? Math.min(...cuts.map((strategy) => strategy.toAmount)) : null;
+      if (cutAmount !== null) return { ...bucket, perCycle: cutAmount };
+      return reviewed === undefined ? bucket : { ...bucket, perCycle: reviewed };
     }),
   };
+
+  const existingSpendIds = new Set(next.buckets.filter((bucket) => bucket.kind === "spend")
+    .flatMap((bucket) => [`spending:${slug(bucket.category ?? bucket.name)}`, `spending:${slug(bucket.name)}`]));
+  next.buckets = [
+    ...next.buckets,
+    ...state.spendingReviews.flatMap((review) => {
+      if (review.allocationPerPaycheck === null || review.allocationPerPaycheck <= 0 || existingSpendIds.has(review.id)) return [];
+      const observed = reviewedCategories.find((entry) => entry.id === review.id);
+      if (!observed) return [];
+      return [{
+        id: `bucket:onboarding:${slug(observed.category)}`,
+        kind: "spend" as const,
+        name: observed.category,
+        category: observed.category,
+        essential: false,
+        source: "derived" as const,
+        perCycle: review.allocationPerPaycheck,
+        rollover: "sweep" as const,
+      }];
+    }),
+  ];
 
   const added: Claim[] = [];
   const prioritizedExisting = new Map<string, number>();

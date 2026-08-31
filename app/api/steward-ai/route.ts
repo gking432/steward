@@ -79,6 +79,11 @@ const onboardingStateSchema = z.object({
   goalCollectionComplete: z.boolean(),
   prioritiesConfirmed: z.boolean(),
   incomeConfirmed: z.boolean().nullable(),
+  spendingReviews: z.array(z.object({
+    id: z.string().max(160),
+    normal: z.boolean(),
+    allocationPerPaycheck: z.number().finite().nonnegative().nullable(),
+  })).max(12),
   recurringReviewed: z.boolean(),
   acceptedStrategyIds: z.array(z.string().max(180)).max(12),
   declinedStrategyIds: z.array(z.string().max(180)).max(12),
@@ -105,8 +110,10 @@ const onboardingContextSchema = z.object({
     minimumPayment: z.number().finite().nonnegative().nullable(),
   })).max(20),
   monthlySpending: z.array(z.object({
+    id: z.string().max(160),
     category: z.string().max(120),
     amount: z.number().finite().nonnegative(),
+    suggestedPerPaycheck: z.number().finite().nonnegative(),
     merchants: z.array(z.string().max(160)).max(3),
   })).max(12),
   recurringCharges: z.array(z.object({
@@ -115,6 +122,7 @@ const onboardingContextSchema = z.object({
     amount: z.number().finite().nonnegative(),
     cadence: z.string().max(40),
     yearlyCost: z.number().finite().nonnegative(),
+    perPaycheck: z.number().finite().nonnegative(),
   })).max(10),
   currentBudget: z.object({
     incomePerPaycheck: z.number().finite().nonnegative(),
@@ -258,6 +266,20 @@ const onboardingOutputSchema = {
         goalCollectionComplete: { type: "boolean" },
         prioritiesConfirmed: { type: "boolean" },
         incomeConfirmed: { type: ["boolean", "null"] },
+        spendingReviews: {
+          type: "array",
+          maxItems: 12,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              id: { type: "string" },
+              normal: { type: "boolean" },
+              allocationPerPaycheck: { type: ["number", "null"] },
+            },
+            required: ["id", "normal", "allocationPerPaycheck"],
+          },
+        },
         recurringReviewed: { type: "boolean" },
         acceptedStrategyIds: { type: "array", items: { type: "string" }, maxItems: 12 },
         declinedStrategyIds: { type: "array", items: { type: "string" }, maxItems: 12 },
@@ -267,7 +289,7 @@ const onboardingOutputSchema = {
         complete: { type: "boolean" },
       },
       required: [
-        "goals", "goalCollectionComplete", "prioritiesConfirmed", "incomeConfirmed",
+        "goals", "goalCollectionComplete", "prioritiesConfirmed", "incomeConfirmed", "spendingReviews",
         "recurringReviewed", "acceptedStrategyIds", "declinedStrategyIds",
         "strategyComplete", "budgetAccepted", "checkInCadence", "complete",
       ],
@@ -284,7 +306,7 @@ const ONBOARDING_PROMPT = [
   "",
   "Personality: calm, sharp, practical, concise, and human. Speak like a trusted assistant who has already studied the finances.",
   "",
-  "Goal: understand what the user wants their money to accomplish, identify realistic tradeoffs from where they are now, build a paycheck budget, and agree on a check-in rhythm.",
+  "Goal: confirm the user's real income and normal spending, understand what they want their money to accomplish, identify realistic tradeoffs, build a paycheck budget, and agree on a check-in rhythm.",
   "",
   "Success criteria:",
   "- Preserve every distinct goal and the user's meaning, including several goals supplied in one answer.",
@@ -305,14 +327,14 @@ const ONBOARDING_PROMPT = [
   "- A debt goal is understood when linked to a known account. Use its supplied balance; never ask the user to restate it.",
   "- If 'credit card' or 'loan' maps to one known account, say which account you matched. If several match, offer all exact account names and allow multiple selection.",
   "- Treat corrections literally. Fix the state and continue from the corrected meaning.",
-  "- Once goals are useful, confirm the detected paycheck. Then present the recurring charges and ask whether anything is wrong; the interface renders the merchant cards.",
+  "- The product confirms income, past spending categories, and recurring charges before this goal interview begins. Never send the user backward to those stages.",
   "- Compare goals with freePerPaycheck. Negotiate only with supplied strategies, one concrete tradeoff at a time. Never repeat a declined strategy.",
   "- When a strategy is settled, set showPlan true and ask whether the user wants that budget.",
   "- After budget approval, explain that Steward will categorize spending into buckets and ask for daily, every-other-day, or weekly check-ins.",
   "- After cadence is chosen, briefly confirm and set complete true.",
   "",
   "State rules:",
-  "- Return the entire updated state every turn. Preserve facts from earlier turns.",
+  "- Return the entire updated state every turn. Preserve facts from earlier turns, including spendingReviews exactly as supplied.",
   "- Never invent a goal, amount, target date, account id, strategy id, or agreement.",
   "- Goal order is priority order. Set prioritiesConfirmed only when clear or when there is one goal.",
   "- targetAmount must be null unless the user supplied it. detailsComplete means the goal is useful enough to plan around; it does not require an amount or date.",
@@ -341,9 +363,12 @@ export async function POST(request: Request) {
   // onboarding turns through the canonical Vercel function, where the key is
   // server-owned. The canonical host never forwards to itself.
   const runtime = env as unknown as Record<string, string | undefined>;
+  const requestHost = new URL(request.url).hostname;
   if (
     input.kind === "onboarding" &&
     !runtime.OPENAI_API_KEY &&
+    requestHost !== "localhost" &&
+    requestHost !== "127.0.0.1" &&
     new URL(request.url).host !== new URL(CANONICAL_AI_ENDPOINT).host
   ) {
     try {
@@ -378,17 +403,17 @@ export async function POST(request: Request) {
       conversation,
     );
 
-    // The first turn is deliberately fixed. It establishes one easy decision,
-    // always offers useful choices, and can never drift into asking for an
-    // amount before Steward even knows what the person wants.
-    if (conversation.length === 0 && previous.goals.length === 0) {
+    // Start with the ledger, not a pre-filled plan. Nothing appears in the
+    // bucket rail until the user confirms it.
+    if (conversation.length === 0 && previous.incomeConfirmed !== true) {
+      const merchant = context.paycheck.merchant ?? "your regular income";
       return Response.json({
         enhanced: true,
-        message: "What would you like Steward to help with first?",
-        quickReplies: ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
+        message: `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that your usual take-home pay?`,
+        quickReplies: ["Yes, that’s right", "No, that’s not right"],
         selectionMode: "multiple",
         showPlan: false,
-        phase: "goals",
+        phase: "income",
         state: previous,
       });
     }
@@ -496,24 +521,73 @@ export async function POST(request: Request) {
           state: previous,
         };
       }
-      if (phase === "review") {
+      if (phase === "income") {
         const merchant = context.paycheck.merchant ?? "your regular income";
-        const recurringWasPresented = conversation.some((turn) =>
-          turn.role === "assistant" && /do you use all of these|anything look surprising/i.test(turn.content));
+        return {
+          enhanced: false,
+          message: `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that your usual take-home pay?`,
+          quickReplies: ["Yes, that’s right", "No, that’s not right"],
+          selectionMode: "multiple",
+          showPlan: false,
+          phase,
+          state: previous,
+        };
+      }
+      if (phase === "spending") {
+        const reviewed = new Map(previous.spendingReviews.map((entry) => [entry.id, entry]));
+        const observed = context.monthlySpending.find((entry) => !reviewed.has(entry.id));
+        const awaitingAllocation = context.monthlySpending.find((entry) => {
+          const entryReview = previous.spendingReviews.find((review) => review.id === entry.id);
+          return entryReview?.normal && entryReview.allocationPerPaycheck === null;
+        });
+        const category = awaitingAllocation ?? observed ?? context.monthlySpending[0];
         const lastUser = [...conversation].reverse().find((turn) => turn.role === "user")?.content ?? "";
-        const reviewProgress = recurringReviewProgress(context, conversation);
-        const lastAssistant = [...conversation].reverse().find((turn) => turn.role === "assistant")?.content ?? "";
-        if (previous.incomeConfirmed !== true) {
+        const wantsDifferentAmount = /different|another amount|change|choose/i.test(lastUser);
+        if (awaitingAllocation) {
           return {
             enhanced: false,
-            message: `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that right?`,
-            quickReplies: ["Yes, that’s right", "No, that’s not right"],
+            message: wantsDifferentAmount
+              ? `What should the ${category.category} bucket be per paycheck?`
+              : `That averages ${formatCurrency(category.suggestedPerPaycheck)} per paycheck. Should I use that for the ${category.category} bucket?`,
+            quickReplies: wantsDifferentAmount
+              ? [`Use ${formatCurrency(category.suggestedPerPaycheck)}`, "I’ll type an amount"]
+              : [`Use ${formatCurrency(category.suggestedPerPaycheck)}`, "Choose another amount"],
             selectionMode: "multiple",
             showPlan: false,
             phase,
             state: previous,
           };
         }
+        if (!category) {
+          return {
+            enhanced: false,
+            message: "I’ve mapped your past spending. Next, let’s check recurring charges.",
+            quickReplies: ["Continue", "Review again"],
+            selectionMode: "multiple",
+            showPlan: false,
+            phase: "recurring" as const,
+            state: previous,
+          };
+        }
+        const merchantDetail = category.merchants.length
+          ? `, mostly ${category.merchants.join(" and ")}`
+          : "";
+        return {
+          enhanced: false,
+          message: `I found about ${formatCurrency(category.amount)} a month in ${category.category}${merchantDetail}. Is that normal for you?`,
+          quickReplies: ["Yes, that’s normal", "No, that was unusual"],
+          selectionMode: "multiple",
+          showPlan: false,
+          phase,
+          state: previous,
+        };
+      }
+      if (phase === "recurring") {
+        const recurringWasPresented = conversation.some((turn) =>
+          turn.role === "assistant" && /do you use all of these|anything look surprising/i.test(turn.content));
+        const lastUser = [...conversation].reverse().find((turn) => turn.role === "user")?.content ?? "";
+        const reviewProgress = recurringReviewProgress(context, conversation);
+        const lastAssistant = [...conversation].reverse().find((turn) => turn.role === "assistant")?.content ?? "";
         if (reviewProgress.pending.length > 0) {
           return {
             enhanced: false,
@@ -586,6 +660,22 @@ export async function POST(request: Request) {
         state: previous,
       };
     };
+
+    const preModelPhase = onboardingPhase(previous, context);
+    if (["income", "spending", "recurring"].includes(preModelPhase)) {
+      return Response.json(fallback());
+    }
+    if (preModelPhase === "goals" && previous.goals.length === 0) {
+      return Response.json({
+        enhanced: true,
+        message: "Now that the basics are mapped, what should your money help you accomplish?",
+        quickReplies: ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
+        selectionMode: "multiple",
+        showPlan: false,
+        phase: "goals",
+        state: previous,
+      });
+    }
 
     const result = await callModel(
       {
@@ -672,40 +762,6 @@ export async function POST(request: Request) {
       message = "What kinds of things are on the list?";
       quickReplies = ["Home items", "Electronics", "Clothes", "A mix"];
       showPlan = false;
-    }
-
-    // Finance review is two separate decisions even if a model tries to merge
-    // them: first the paycheck, then recurring charges.
-    if (phase === "review" && state.incomeConfirmed !== true) {
-      const merchant = context.paycheck.merchant ?? "your regular income";
-      message = `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that right?`;
-      quickReplies = ["Yes, that’s right", "No, that’s not right"];
-      showPlan = false;
-    } else if (phase === "review" && !state.recurringReviewed) {
-      const recurringWasPresented = conversation.some((turn) =>
-        turn.role === "assistant" && /do you use all of these|anything look surprising/i.test(turn.content));
-      const reviewProgress = recurringReviewProgress(context, conversation);
-      const lastAssistant = [...conversation].reverse().find((turn) => turn.role === "assistant")?.content ?? "";
-      if (!recurringWasPresented) {
-        message = context.recurringCharges.length
-          ? "Here’s what I found. Do you use all of these, or does anything look surprising?"
-          : "I didn’t find any recurring charges. Ready to continue?";
-        quickReplies = context.recurringCharges.length
-          ? ["Yes, I use these", "No, something is off"]
-          : ["Yes, continue", "No, go back"];
-        showPlan = false;
-      } else if (reviewProgress.pending.length > 0) {
-        message = `Do you still use ${reviewProgress.pending[0].merchant}?`;
-        quickReplies = ["Yes", "No"];
-        showPlan = false;
-      } else if (
-        /do you use all of these|anything look surprising/i.test(lastAssistant) &&
-        /\b(no|off|surpris|unfamiliar|wrong)\b/i.test(lastUser)
-      ) {
-        message = "Which one looks unfamiliar?";
-        quickReplies = context.recurringCharges.map((charge) => charge.merchant).slice(0, 4);
-        showPlan = false;
-      }
     }
 
     if (

@@ -17,6 +17,7 @@ import {
   Dumbbell,
   Landmark,
   LoaderCircle,
+  ReceiptText,
   Send,
   ShieldCheck,
   Sparkles,
@@ -64,10 +65,12 @@ type OnboardingResponse = {
   state: AIOnboardingState;
 };
 
-const PHASES: OnboardingPhase[] = ["goals", "review", "strategy", "budget", "checkin"];
+const PHASES: OnboardingPhase[] = ["income", "spending", "recurring", "goals", "strategy", "budget", "checkin"];
 const PHASE_LABELS: Record<OnboardingPhase, string> = {
+  income: "Income",
+  spending: "Spending",
+  recurring: "Recurring",
   goals: "Goals",
-  review: "Money",
   strategy: "Tradeoffs",
   budget: "Plan",
   checkin: "Rhythm",
@@ -123,7 +126,7 @@ export function IntakeScreen({
   const [activeReply, setActiveReply] = useState<ActiveReply | null>(null);
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
   const [selectedReplies, setSelectedReplies] = useState<string[]>([]);
-  const [phase, setPhase] = useState<OnboardingPhase>("goals");
+  const [phase, setPhase] = useState<OnboardingPhase>("income");
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const startedRef = useRef(false);
@@ -238,8 +241,10 @@ export function IntakeScreen({
   const currentMessage = activeReply?.message ?? "";
   const merchantChoices = quickReplies.length > 0 && quickReplies.every((reply) =>
     context.recurringCharges.some((charge) => charge.merchant === reply));
-  const showRecurring = phase === "review" && state.incomeConfirmed === true &&
-    !state.recurringReviewed && context.recurringCharges.length > 0;
+  const showRecurring = phase === "recurring" && !state.recurringReviewed && context.recurringCharges.length > 0;
+  const activeSpending = phase === "spending"
+    ? context.monthlySpending.find((entry) => currentMessage.toLowerCase().includes(entry.category.toLowerCase()))
+    : undefined;
   const priorityStep = phase === "goals" && state.goals.length > 1 &&
     /priority|priorities|matters most|put.+order/i.test(currentMessage);
   const activeStrategy = phase === "strategy"
@@ -298,21 +303,19 @@ export function IntakeScreen({
 
       <div className="ik-layout">
         <aside className="ik-plan-desktop">
-          {livePlan && <MoneyMap plan={livePlan} state={state} busy={busy} />}
+          <MoneyMap plan={livePlan} context={context} state={state} busy={busy} />
         </aside>
 
         <section className="ik-conversation" aria-label="Conversation with Steward">
-          {livePlan && (
-            <details className="ik-plan-mobile">
-              <summary><span><WalletCards size={15} /> Plan taking shape</span><b>{formatMoney(livePlan.income)} / paycheck</b></summary>
-              <MoneyMap plan={livePlan} state={state} busy={busy} compact />
-            </details>
-          )}
+          <details className="ik-plan-mobile">
+            <summary><span><WalletCards size={15} /> Buckets taking shape</span><b>{state.incomeConfirmed ? `${formatMoney(context.paycheck.amount)} / paycheck` : "Starting empty"}</b></summary>
+            <MoneyMap plan={livePlan} context={context} state={state} busy={busy} compact />
+          </details>
 
           <div ref={threadRef} className="ik-thread" aria-live="polite">
             <div className="ik-intro">
               <span><Sparkles size={18} /></span>
-              <div><b>Let’s build your first plan.</b><p>I’ve already read the demo finances. Tell me what you want your money to do.</p></div>
+              <div><b>Let’s build your first plan.</b><p>I read the demo statements. We’ll confirm what’s real, build the buckets, then decide what your money should do.</p></div>
             </div>
 
             {turns.map((turn, index) => {
@@ -324,7 +327,8 @@ export function IntakeScreen({
                     <p>{turn.role === "user" ? displayUserAnswer(turn.content) : turn.content}</p>
                     {isLatest && turn.role === "assistant" && !busy && (
                       <>
-                        {phase === "review" && state.incomeConfirmed !== true && <IncomeCard context={context} />}
+                        {phase === "income" && state.incomeConfirmed !== true && <IncomeCard context={context} />}
+                        {activeSpending && <SpendingCard spending={activeSpending} />}
                         {showRecurring && (
                           <RecurringCard
                             charges={context.recurringCharges}
@@ -410,31 +414,53 @@ function displayUserAnswer(content: string) {
     .replace(/\.\s*$/, "");
 }
 
-function MoneyMap({ plan, state, busy, compact = false }: { plan: PlanView; state: AIOnboardingState; busy: boolean; compact?: boolean }) {
-  const protectedTotal = plan.buckets.reduce((sum, row) => sum + row.amount, 0);
-  const goalRows = state.goals.map((goal) => plan.claims.find((row) =>
+function MoneyMap({ plan, context, state, busy, compact = false }: { plan: PlanView | null; context: AIOnboardingContext; state: AIOnboardingState; busy: boolean; compact?: boolean }) {
+  const income = state.incomeConfirmed ? context.paycheck.amount : 0;
+  const spendingRows = state.spendingReviews.flatMap((review) => {
+    if (review.allocationPerPaycheck === null || review.allocationPerPaycheck <= 0) return [];
+    const observed = context.monthlySpending.find((entry) => entry.id === review.id);
+    return observed ? [{ name: observed.category, amount: review.allocationPerPaycheck }] : [];
+  });
+  const recurringRows = state.recurringReviewed
+    ? context.recurringCharges.map((charge) => ({ name: charge.merchant, amount: charge.perPaycheck }))
+    : [];
+  const bucketRows = [...spendingRows, ...recurringRows];
+  const protectedTotal = bucketRows.reduce((sum, row) => sum + row.amount, 0);
+  const goalRows = state.goals.map((goal) => plan?.claims.find((row) =>
     goal.linkedAccountId ? row.linkedAccountId === goal.linkedAccountId : row.name.toLowerCase() === goal.name.toLowerCase()));
   const goalTotal = goalRows.reduce((sum, row) => sum + (row?.amount ?? 0), 0);
-  const free = Math.max(0, plan.income - protectedTotal - goalTotal);
+  const free = Math.max(0, income - protectedTotal - goalTotal);
+  const totalDetected = context.monthlySpending.length + context.recurringCharges.length;
+  const mappedCount = state.spendingReviews.filter((review) => review.allocationPerPaycheck !== null).length +
+    (state.recurringReviewed ? context.recurringCharges.length : 0);
   return (
     <section className={`ik-money-map${compact ? " compact" : ""}${busy ? " updating" : ""}`}>
-      <header><span><i /> Your plan</span><b>{busy ? "Updating" : "Live"}</b></header>
-      <div className="ik-paycheck"><small>This paycheck</small><strong>{formatMoney(plan.income)}</strong></div>
-      <div className="ik-allocation-bar">
-        <i className="required" style={{ flexGrow: Math.max(protectedTotal, 1) }} />
-        <i className="goals" style={{ flexGrow: Math.max(goalTotal, 1) }} />
-        <i className="free" style={{ flexGrow: Math.max(free, 1) }} />
-      </div>
-      <div className="ik-money-lines">
-        <span><i className="required" /><b>Required + everyday</b><strong>{formatMoney(protectedTotal)}</strong></span>
+      <header><span><i /> Your buckets</span><b>{busy ? "Updating" : `${mappedCount}/${totalDetected} mapped`}</b></header>
+      {state.incomeConfirmed ? <>
+        <div className="ik-paycheck"><small>Confirmed income</small><strong>{formatMoney(income)}</strong><em>per paycheck</em></div>
+        <div className="ik-allocation-bar">
+          <i className="required" style={{ flexGrow: Math.max(protectedTotal, 1) }} />
+          <i className="goals" style={{ flexGrow: Math.max(goalTotal, 1) }} />
+          <i className="free" style={{ flexGrow: Math.max(free, 1) }} />
+        </div>
+      </> : <div className="ik-empty-plan"><Landmark size={19} /><b>Start with income</b><span>Buckets appear only after you confirm them.</span></div>}
+      {state.incomeConfirmed && <div className="ik-money-lines">
+        {bucketRows.map((row) => <span key={row.name}><i className="required" /><b>{row.name}</b><strong>{formatMoney(row.amount)}</strong></span>)}
         {state.goals.slice(0, 4).map((goal, index) => (
           <span key={goal.id}><i className="goals" /><b>{goal.name}</b><strong>{goalRows[index]?.amount ? `+${formatMoney(goalRows[index]!.amount)}` : "Planning"}</strong></span>
         ))}
-        <span className="free"><i /><b>Free to direct</b><strong>{formatMoney(free)}</strong></span>
-      </div>
-      {state.goals.length === 0
-        ? <p>Your goals will appear here as Steward understands them.</p>
-        : <p>Every answer updates what this paycheck can do.</p>}
+        <span className="free"><i /><b>Unallocated</b><strong>{formatMoney(free)}</strong></span>
+      </div>}
+      <p>{state.incomeConfirmed ? "Each confirmed answer adds or updates a paycheck bucket." : "Nothing is assumed just because it appeared in a statement."}</p>
+    </section>
+  );
+}
+
+function SpendingCard({ spending }: { spending: AIOnboardingContext["monthlySpending"][number] }) {
+  return (
+    <section className="ik-inline-card ik-spending-card">
+      <header><span className="ik-card-icon"><ReceiptText size={18} /></span><div><small>Past 90 days</small><b>{spending.category}</b></div><strong>{formatMoney(spending.amount)}<small>/ month</small></strong></header>
+      <div><span>Seen at</span><b>{spending.merchants.join(" · ") || "Several merchants"}</b></div>
     </section>
   );
 }
