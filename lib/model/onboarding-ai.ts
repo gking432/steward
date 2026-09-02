@@ -181,6 +181,24 @@ function paychecksPerYear(workspace: Workspace) {
       : 26;
 }
 
+/**
+ * Monthly bills have to fit inside an ordinary month, not an annualized
+ * average. A biweekly worker usually has two checks in a month; the two
+ * three-check months should create surplus instead of covering a silent
+ * shortfall in the other ten months.
+ */
+function paychecksPerNormalMonth(workspace: Workspace) {
+  return workspace.profile.payFrequency === "Weekly"
+    ? 4
+    : workspace.profile.payFrequency === "Monthly"
+      ? 1
+      : 2;
+}
+
+function annualCostPerNormalPaycheck(workspace: Workspace, yearly: number) {
+  return round2(yearly / 12 / paychecksPerNormalMonth(workspace));
+}
+
 function contextCategories(workspace: Workspace, today: string) {
   return spendingByCategory(workspace, today)
     .slice(0, 10)
@@ -188,7 +206,7 @@ function contextCategories(workspace: Workspace, today: string) {
       id: `spending:${slug(entry.category)}`,
       category: entry.category,
       amount: round2(entry.total / 3),
-      suggestedPerPaycheck: round2((entry.total / 3) * 12 / paychecksPerYear(workspace)),
+      suggestedPerPaycheck: round2((entry.total / 3) / paychecksPerNormalMonth(workspace)),
       merchants: entry.merchants.slice(0, 3),
     }));
 }
@@ -225,7 +243,7 @@ export function onboardingStrategies(workspace: Workspace, today: string): Onboa
       targetId: stream.key,
       fromAmount: stream.typicalAmount,
       toAmount: 0,
-      freesPerPaycheck: round2(yearly / paychecksPerYear(workspace)),
+      freesPerPaycheck: annualCostPerNormalPaycheck(workspace, yearly),
       yearlySavings: yearly,
     };
   });
@@ -257,7 +275,7 @@ function withRecurringBudgets(
       category: stream.category,
       essential: false,
       source: "derived" as const,
-      perCycle: round2(annualCost(stream) / paychecksPerYear(workspace)),
+      perCycle: annualCostPerNormalPaycheck(workspace, annualCost(stream)),
       rollover: "sweep" as const,
     }));
   return additions.length
@@ -299,7 +317,7 @@ export function buildAIOnboardingContext(
       amount: stream.typicalAmount,
       cadence: stream.cadence,
       yearlyCost: annualCost(stream),
-      perPaycheck: round2(annualCost(stream) / paychecksPerYear(workspace)),
+      perPaycheck: annualCostPerNormalPaycheck(workspace, annualCost(stream)),
     })),
     currentBudget: {
       incomePerPaycheck: plan?.income ?? workspace.profile.takeHomePay,

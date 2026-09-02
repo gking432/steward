@@ -127,6 +127,7 @@ export function IntakeScreen({
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
   const [selectedReplies, setSelectedReplies] = useState<string[]>([]);
   const [phase, setPhase] = useState<OnboardingPhase>("income");
+  const [visibleTurnStart, setVisibleTurnStart] = useState(0);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const startedRef = useRef(false);
@@ -134,6 +135,7 @@ export function IntakeScreen({
   const stateRef = useRef(state);
   const turnsRef = useRef<OnboardingTurn[]>([]);
   const replyIdRef = useRef(0);
+  const phaseRef = useRef<OnboardingPhase>("income");
   const threadRef = useRef<HTMLDivElement>(null);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -192,10 +194,13 @@ export function IntakeScreen({
         : undefined;
       const assistantTurn: OnboardingTurn = { role: "assistant", content: payload.message };
       const nextTurns = [...conversation, assistantTurn];
+      const enteringGoals = payload.phase === "goals" && phaseRef.current !== "goals";
       turnsRef.current = nextTurns;
       stateRef.current = payload.state;
+      phaseRef.current = payload.phase;
       replyIdRef.current += 1;
       setTurns(nextTurns);
+      if (enteringGoals) setVisibleTurnStart(conversation.length);
       setState(payload.state);
       setPhase(payload.phase);
       setQuickReplies(payload.quickReplies ?? []);
@@ -236,6 +241,7 @@ export function IntakeScreen({
   }, [typed]);
 
   const complete = state.complete;
+  const visibleTurns = turns.slice(visibleTurnStart);
   const displayPhase = phase === "complete" ? "checkin" : phase;
   const phaseIndex = Math.max(0, PHASES.indexOf(displayPhase));
   const currentMessage = activeReply?.message ?? "";
@@ -315,13 +321,15 @@ export function IntakeScreen({
           <div ref={threadRef} className="ik-thread" aria-live="polite">
             <div className="ik-intro">
               <span><Sparkles size={18} /></span>
-              <div><b>Let’s build your first plan.</b><p>I read the demo statements. We’ll confirm what’s real, build the buckets, then decide what your money should do.</p></div>
+              {phase === "goals"
+                ? <div><b>Now let’s talk about your goals.</b><p>Your income and baseline buckets are mapped. Next we’ll decide what the remaining money should accomplish.</p></div>
+                : <div><b>Let’s build your first plan.</b><p>I read the demo statements. We’ll confirm what’s real, build the buckets, then decide what your money should do.</p></div>}
             </div>
 
-            {turns.map((turn, index) => {
-              const isLatest = index === turns.length - 1;
+            {visibleTurns.map((turn, index) => {
+              const isLatest = index === visibleTurns.length - 1;
               return (
-                <div key={`${turn.role}:${index}`} className={`ik-turn ${turn.role}`}>
+                <div key={`${turn.role}:${visibleTurnStart + index}`} className={`ik-turn ${turn.role}`}>
                   {turn.role === "assistant" && <span className="ik-avatar"><Sparkles size={13} /></span>}
                   <div className="ik-turn-body">
                     <p>{turn.role === "user" ? displayUserAnswer(turn.content) : turn.content}</p>

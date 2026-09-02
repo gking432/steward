@@ -42,6 +42,16 @@ test("every AI turn can receive a complete compact financial context", () => {
   assert.ok(context.strategies.some((entry) => entry.kind === "cancel_subscription"));
 });
 
+test("monthly expenses are fully funded by the two checks in an ordinary biweekly month", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const housing = context.monthlySpending.find((entry) => entry.category === "Housing");
+
+  assert.ok(housing);
+  assert.equal(housing.amount, 1600);
+  assert.equal(housing.suggestedPerPaycheck, 800);
+  assert.equal(housing.suggestedPerPaycheck * 2, housing.amount);
+});
+
 test("onboarding confirms income before it maps spending or asks about goals", () => {
   const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
   assert.equal(onboardingPhase(EMPTY_AI_ONBOARDING_STATE, context), "income");

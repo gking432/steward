@@ -186,6 +186,15 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: value % 1 ? 2 : 0,
   }).format(value);
 
+const payCadencePhrase = (cadence: string) =>
+  /biweekly|two weeks/i.test(cadence)
+    ? "every two weeks"
+    : /month/i.test(cadence)
+      ? "each month"
+      : /week/i.test(cadence)
+        ? "each week"
+        : "per paycheck";
+
 async function callModel(
   input: unknown,
   schema: Record<string, unknown>,
@@ -409,7 +418,7 @@ export async function POST(request: Request) {
       const merchant = context.paycheck.merchant ?? "your regular income";
       return Response.json({
         enhanced: true,
-        message: `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that your usual take-home pay?`,
+        message: `I found ${formatCurrency(context.paycheck.amount)} ${payCadencePhrase(context.paycheck.cadence)} from ${merchant}. Is that your usual take-home pay?`,
         quickReplies: ["Yes, that’s right", "No, that’s not right"],
         selectionMode: "multiple",
         showPlan: false,
@@ -525,7 +534,7 @@ export async function POST(request: Request) {
         const merchant = context.paycheck.merchant ?? "your regular income";
         return {
           enhanced: false,
-          message: `I found ${formatCurrency(context.paycheck.amount)} per paycheck from ${merchant}. Is that your usual take-home pay?`,
+          message: `I found ${formatCurrency(context.paycheck.amount)} ${payCadencePhrase(context.paycheck.cadence)} from ${merchant}. Is that your usual take-home pay?`,
           quickReplies: ["Yes, that’s right", "No, that’s not right"],
           selectionMode: "multiple",
           showPlan: false,
@@ -548,7 +557,7 @@ export async function POST(request: Request) {
             enhanced: false,
             message: wantsDifferentAmount
               ? `What should the ${category.category} bucket be per paycheck?`
-              : `That averages ${formatCurrency(category.suggestedPerPaycheck)} per paycheck. Should I use that for the ${category.category} bucket?`,
+              : `To fully cover ${formatCurrency(category.amount)} in a normal month, set aside ${formatCurrency(category.suggestedPerPaycheck)} from each paycheck. Use that for the ${category.category} bucket?`,
             quickReplies: wantsDifferentAmount
               ? [`Use ${formatCurrency(category.suggestedPerPaycheck)}`, "I’ll type an amount"]
               : [`Use ${formatCurrency(category.suggestedPerPaycheck)}`, "Choose another amount"],
@@ -572,9 +581,13 @@ export async function POST(request: Request) {
         const merchantDetail = category.merchants.length
           ? `, mostly ${category.merchants.join(" and ")}`
           : "";
+        const firstCategory = previous.spendingReviews.length === 0;
+        const normalMonthNote = firstCategory && /biweekly|two weeks/i.test(context.paycheck.cadence)
+          ? "I’ll build this around two paychecks in a normal month, so the two extra checks each year stay extra. "
+          : "";
         return {
           enhanced: false,
-          message: `I found about ${formatCurrency(category.amount)} a month in ${category.category}${merchantDetail}. Is that normal for you?`,
+          message: `${normalMonthNote}I found about ${formatCurrency(category.amount)} a month in ${category.category}${merchantDetail}. Is that normal for you?`,
           quickReplies: ["Yes, that’s normal", "No, that was unusual"],
           selectionMode: "multiple",
           showPlan: false,
@@ -665,10 +678,12 @@ export async function POST(request: Request) {
     if (["income", "spending", "recurring"].includes(preModelPhase)) {
       return Response.json(fallback());
     }
-    if (preModelPhase === "goals" && previous.goals.length === 0) {
+    const goalKickoffShown = conversation.some((turn) =>
+      turn.role === "assistant" && /what should your money help you accomplish/i.test(turn.content));
+    if (preModelPhase === "goals" && previous.goals.length === 0 && !goalKickoffShown) {
       return Response.json({
         enhanced: true,
-        message: "Now that the basics are mapped, what should your money help you accomplish?",
+        message: "Great—your baseline is mapped. What should your money help you accomplish?",
         quickReplies: ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
         selectionMode: "multiple",
         showPlan: false,
