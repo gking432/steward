@@ -8,6 +8,7 @@
  */
 
 import {
+  ArrowRight,
   Check,
   CheckCircle2,
   ChevronDown,
