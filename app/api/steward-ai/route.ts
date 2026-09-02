@@ -339,7 +339,7 @@ const ONBOARDING_PROMPT = [
   "- The product confirms income, past spending categories, and recurring charges before this goal interview begins. Never send the user backward to those stages.",
   "- Compare goals with freePerPaycheck. Negotiate only with supplied strategies, one concrete tradeoff at a time. Never repeat a declined strategy.",
   "- When a strategy is settled, set showPlan true and ask whether the user wants that budget.",
-  "- After budget approval, explain that Steward will categorize spending into buckets and ask for daily, every-other-day, or weekly check-ins.",
+  "- After budget approval, explain that Steward will flag unusual spending, report how every bucket is tracking, and answer affordability questions. Offer weekly updates by default, with daily and every-other-day as alternatives.",
   "- After cadence is chosen, briefly confirm and set complete true.",
   "",
   "State rules:",
@@ -451,6 +451,7 @@ export async function POST(request: Request) {
       if (phase === "goals") {
         const unfinished = previous.goals.find((goal) => !goal.detailsComplete);
         const lastUser = [...conversation].reverse().find((turn) => turn.role === "user")?.content.toLowerCase() ?? "";
+        const unfinishedName = unfinished?.name.toLowerCase() ?? "";
         if (previous.goalCollectionComplete && !previous.prioritiesConfirmed && previous.goals.length > 1) {
           return {
             enhanced: false,
@@ -462,7 +463,7 @@ export async function POST(request: Request) {
             state: previous,
           };
         }
-        if (/\bbuy something\b/.test(lastUser)) {
+        if (/\bbuy something\b/.test(lastUser) || /^(buy something|purchase)$/.test(unfinishedName)) {
           return {
             enhanced: false,
             message: "What would you like to buy?",
@@ -473,7 +474,7 @@ export async function POST(request: Request) {
             state: previous,
           };
         }
-        if (/\bpay off debt\b/.test(lastUser)) {
+        if (/\bpay off debt\b/.test(lastUser) || /^(pay off debt|debt)$/.test(unfinishedName)) {
           const debts = context.accounts
             .filter((account) => /credit|loan/i.test(account.type))
             .map((account) => account.name)
@@ -490,7 +491,7 @@ export async function POST(request: Request) {
             state: previous,
           };
         }
-        if (/\bbuild savings\b/.test(lastUser)) {
+        if (/\bbuild savings\b/.test(lastUser) || /^(build savings|savings|save money)$/.test(unfinishedName)) {
           return {
             enhanced: false,
             message: "What should the savings be for?",
@@ -501,7 +502,7 @@ export async function POST(request: Request) {
             state: previous,
           };
         }
-        if (/\bmore breathing room\b/.test(lastUser)) {
+        if (/\bmore breathing room\b/.test(lastUser) || /^(more breathing room|breathing room)$/.test(unfinishedName)) {
           return {
             enhanced: false,
             message: "Where would extra breathing room help most?",
@@ -655,7 +656,7 @@ export async function POST(request: Request) {
       if (phase === "budget") {
         return {
           enhanced: false,
-          message: "Here’s the budget built around what matters to you. Want to use it?",
+          message: "Here’s your budget breakdown. This is what each paycheck will cover. Want to use it?",
           quickReplies: ["Use this budget", "Change the strategy"],
           selectionMode: "multiple",
           showPlan: true,
@@ -663,10 +664,26 @@ export async function POST(request: Request) {
           state: previous,
         };
       }
+      if (phase === "complete") {
+        const cadence = previous.checkInCadence === "daily"
+          ? "daily"
+          : previous.checkInCadence === "every_other_day"
+            ? "every-other-day"
+            : "weekly";
+        return {
+          enhanced: false,
+          message: `You’re all set. I’ll flag unusual spending, send your ${cadence} update, and help whenever you want to know what you can afford.`,
+          quickReplies: [],
+          selectionMode: "multiple",
+          showPlan: false,
+          phase,
+          state: previous,
+        };
+      }
       return {
         enhanced: false,
-        message: "I’ll group each purchase into its budget bucket. How often should I check in?",
-        quickReplies: ["Daily", "Every other day", "Weekly"],
+        message: "I’ll keep you on track. I’ll flag unusual spending, send a weekly update on every bucket, and you can ask what you can afford anytime. Keep weekly updates, or choose a different rhythm?",
+        quickReplies: ["Weekly", "Daily", "Every other day"],
         selectionMode: "multiple",
         showPlan: false,
         phase,
@@ -675,7 +692,7 @@ export async function POST(request: Request) {
     };
 
     const preModelPhase = onboardingPhase(previous, context);
-    if (["income", "spending", "recurring"].includes(preModelPhase)) {
+    if (["income", "spending", "recurring", "budget", "checkin", "complete"].includes(preModelPhase)) {
       return Response.json(fallback());
     }
     const goalKickoffShown = conversation.some((turn) =>
@@ -779,13 +796,27 @@ export async function POST(request: Request) {
       showPlan = false;
     }
 
-    if (
-      phase === "budget" &&
-      (!showPlan || /\b(another option|would you accept|does that feel realistic)\b/i.test(message))
-    ) {
-      message = "Deal. Here’s the budget built around your priorities. Want to use it?";
+    if (phase === "budget") {
+      message = "Here’s your budget breakdown. This is what each paycheck will cover. Want to use it?";
       quickReplies = ["Use this budget", "Try another strategy"];
       showPlan = true;
+    }
+
+    if (phase === "checkin") {
+      message = "I’ll keep you on track. I’ll flag unusual spending, send a weekly update on every bucket, and you can ask what you can afford anytime. Keep weekly updates, or choose a different rhythm?";
+      quickReplies = ["Weekly", "Daily", "Every other day"];
+      showPlan = false;
+    }
+
+    if (phase === "complete") {
+      const cadence = state.checkInCadence === "daily"
+        ? "daily"
+        : state.checkInCadence === "every_other_day"
+          ? "every-other-day"
+          : "weekly";
+      message = `You’re all set. I’ll flag unusual spending, send your ${cadence} update, and help whenever you want to know what you can afford.`;
+      quickReplies = [];
+      showPlan = false;
     }
 
     const allowedOnboardingNumerals = onboardingAllowedNumerals(context, conversation);

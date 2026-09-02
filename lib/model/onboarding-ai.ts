@@ -372,9 +372,30 @@ function inferredGoalsFromAnswer(
   context: AIOnboardingContext,
 ): OnboardingGoal[] {
   const choices = answerChoices(lastUser);
+  const broadGoalQuestion = /what would you like steward to help|what else are you trying|anything else your money|what should your money help/i.test(priorAssistant);
   const purchaseQuestion = /what would you like to buy|what are you planning to buy/i.test(priorAssistant);
   const savingsQuestion = /what (?:should the savings be|are you saving) for/i.test(priorAssistant);
   const debtQuestion = /which debts? should steward include|which debts? should we focus/i.test(priorAssistant);
+  if (broadGoalQuestion) {
+    return choices.flatMap((choice, index) => {
+      const match = [
+        { pattern: /^pay off debt$/i, name: "Pay off debt", kind: "payoff" as const },
+        { pattern: /^(?:buy something|another purchase)$/i, name: "Buy something", kind: "purchase" as const },
+        { pattern: /^build savings$/i, name: "Build savings", kind: "fund" as const },
+        { pattern: /^more breathing room$/i, name: "More breathing room", kind: "commitment" as const },
+      ].find((entry) => entry.pattern.test(choice));
+      if (!match) return [];
+      return [{
+        id: `goal:${slug(match.name)}:${index}`,
+        name: match.name,
+        kind: match.kind,
+        targetAmount: null,
+        targetDate: null,
+        linkedAccountId: null,
+        detailsComplete: false,
+      }];
+    });
+  }
   if (debtQuestion) {
     return context.accounts.flatMap((account, index) => {
       if (!/credit|loan/i.test(account.type)) return [];
@@ -405,7 +426,10 @@ function inferredGoalsFromAnswer(
         targetAmount: null,
         targetDate: null,
         linkedAccountId: null,
-        detailsComplete: false,
+        // A concrete destination is enough for an initial plan. Steward can
+        // refine price and timing later instead of turning onboarding into a
+        // budgeting questionnaire.
+        detailsComplete: !isVagueGoalName(name),
       };
     });
 }
@@ -454,6 +478,7 @@ export function normalizeAIOnboardingState(
   const affirmative = /\b(yes|yeah|yep|right|correct|keep|use|works|okay|ok|deal|accept|good|sounds good|do it)\b/i.test(lastUser);
   const negative = /\b(no|nope|wrong|another|different|decline|reject|don'?t|do not|not that)\b/i.test(lastUser);
   const strategyNegative = negative || /\b(keep|leave)\b.{0,28}\b(current|unchanged|same)\b/i.test(lastUser);
+  const explicitPriorityOrder = /^\s*priority order:/i.test(lastUser);
   const askedForAmount = /\b(amount|cost|how much|roughly)\b/i.test(priorAssistant);
   const enteredAmountMatch = lastUser.match(/(?:\$\s*)?([\d,]+(?:\.\d{1,2})?)\s*(k|thousand)?\b/i);
   const enteredAmount = enteredAmountMatch
@@ -461,13 +486,27 @@ export function normalizeAIOnboardingState(
     : null;
 
   const inferredGoals = inferredGoalsFromAnswer(priorAssistant, lastUser, context);
-  const candidateGoals = Array.isArray(candidate.goals) && candidate.goals.length > 0
+  const rawCandidateGoals = explicitPriorityOrder
+    ? previous.goals
+    : Array.isArray(candidate.goals) && candidate.goals.length > 0
     ? candidate.goals
     : previous.goals;
+  const broadGoal = /^(buy something|purchase|pay off debt|debt|build savings|savings|save money|more breathing room|breathing room)$/i;
+  // A broad multi-select can contain several goals that must be discussed one
+  // at a time. Preserve any still-unresolved selection even if the model only
+  // returns the goal currently being discussed.
+  const candidateGoals = rawCandidateGoals.concat(previous.goals.filter((goal) =>
+    broadGoal.test(goal.name) &&
+    !rawCandidateGoals.some((candidateGoal) => goalIdentity(candidateGoal) === goalIdentity(goal))));
+  const inferredKinds = new Set(inferredGoals.map((goal) => goal.kind));
   const proposedGoals = candidateGoals
     .filter((goal) => {
       if (inferredGoals.length === 0 || !goal || typeof goal !== "object") return true;
-      return !/^(buy something|purchase)$/i.test(clean((goal as Partial<OnboardingGoal>).name));
+      const name = clean((goal as Partial<OnboardingGoal>).name);
+      if (/^(buy something|purchase)$/i.test(name) && inferredKinds.has("purchase")) return false;
+      if (/^(pay off debt|debt)$/i.test(name) && inferredKinds.has("payoff")) return false;
+      if (/^(build savings|savings|save money)$/i.test(name) && inferredKinds.has("fund")) return false;
+      return true;
     })
     .concat(inferredGoals.filter((inferred) =>
       !candidateGoals.some((goal) => goalIdentity(goal) === goalIdentity(inferred))));
@@ -648,7 +687,7 @@ export function normalizeAIOnboardingState(
     /^no\b/i.test(lastUser);
   const correctingGoal = /\b(i said|instead|not that|change|wrong)\b/i.test(lastUser) ||
     /^no\b/i.test(lastUser) && !finishedListingGoals;
-  const goalCollectionComplete = !correctingGoal && (previous.goalCollectionComplete || (
+  const goalCollectionComplete = !correctingGoal && (previous.goalCollectionComplete || explicitPriorityOrder || (
     goals.length > 0 &&
     goals.every((goal) => goal.detailsComplete) &&
     askedForAnotherGoal &&
@@ -657,7 +696,7 @@ export function normalizeAIOnboardingState(
   const askedAboutPriority = /\b(priority|priorities|first|most important|order)\b/i.test(priorAssistant);
   const goalSetChanged = goals.length !== previous.goals.length || goals.some((goal, index) =>
     previous.goals[index]?.id !== goal.id);
-  const prioritiesConfirmed = goals.length < 2 || (!goalSetChanged && previous.prioritiesConfirmed) ||
+  const prioritiesConfirmed = goals.length < 2 || explicitPriorityOrder || (!goalSetChanged && previous.prioritiesConfirmed) ||
     (askedAboutPriority && lastUser.length > 0);
 
   const state: AIOnboardingState = {
@@ -714,6 +753,26 @@ export function onboardingPhase(
   return state.complete ? "complete" : "checkin";
 }
 
+/**
+ * Spending the user calls unusual should not become a permanent category
+ * target, but it also should not disappear from the plan. Steward collects
+ * those observed amounts into one flexible bucket for irregular purchases.
+ */
+export function irregularSpendingPerPaycheck(
+  context: AIOnboardingContext,
+  state: AIOnboardingState,
+) {
+  const observed = state.spendingReviews.reduce((total, review) => {
+    if (review.normal) return total;
+    const category = context.monthlySpending.find((entry) => entry.id === review.id);
+    return total + (category?.suggestedPerPaycheck ?? 0);
+  }, 0);
+  // Unusual history is accounted for without pretending it will all repeat.
+  // Keep a modest flexible allowance, capped at 5% of take-home, and leave the
+  // remainder available for the goals the user is about to set.
+  return round2(Math.min(observed, context.paycheck.amount * 0.05));
+}
+
 /** Apply only accepted, known levers to a preview workspace. */
 export function previewAIOnboarding(
   workspace: Workspace,
@@ -734,6 +793,8 @@ export function previewAIOnboarding(
   const reviewedAmounts = new Map(state.spendingReviews.flatMap((review) =>
     review.allocationPerPaycheck === null ? [] : [[review.id, review.allocationPerPaycheck] as const]));
   const reviewedCategories = contextCategories(workspace, today);
+  const context = buildAIOnboardingContext(workspace, today, true);
+  const miscellaneousPerPaycheck = irregularSpendingPerPaycheck(context, state);
   const next: Workspace = {
     ...budgetWorkspace,
     buckets: budgetWorkspace.buckets.map((bucket) => {
@@ -748,6 +809,28 @@ export function previewAIOnboarding(
       return reviewed === undefined ? bucket : { ...bucket, perCycle: reviewed };
     }),
   };
+
+  if (miscellaneousPerPaycheck > 0) {
+    const existingMiscellaneous = next.buckets.findIndex((bucket) =>
+      bucket.kind === "spend" && slug(bucket.category ?? bucket.name) === "miscellaneous");
+    if (existingMiscellaneous >= 0) {
+      next.buckets[existingMiscellaneous] = {
+        ...next.buckets[existingMiscellaneous],
+        perCycle: miscellaneousPerPaycheck,
+      } as Workspace["buckets"][number];
+    } else {
+      next.buckets.push({
+        id: "bucket:onboarding:miscellaneous",
+        kind: "spend",
+        name: "Miscellaneous",
+        category: "Miscellaneous",
+        essential: false,
+        source: "derived",
+        perCycle: miscellaneousPerPaycheck,
+        rollover: "roll",
+      });
+    }
+  }
 
   const existingSpendIds = new Set(next.buckets.filter((bucket) => bucket.kind === "spend")
     .flatMap((bucket) => [`spending:${slug(bucket.category ?? bucket.name)}`, `spending:${slug(bucket.name)}`]));

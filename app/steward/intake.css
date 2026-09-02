@@ -183,11 +183,18 @@ button { cursor: pointer; }
 
 .ik-budget-card { overflow: hidden; }
 .ik-budget-card > header > b { font-size: 13px; }
-.ik-budget-card > div { display: grid; padding: 5px 12px 9px; }
-.ik-budget-card > div span { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid #edf0ed; padding: 7px 0; font-size: 10px; }
-.ik-budget-card > div span:last-child { border-bottom: 0; }
-.ik-budget-card > div span b { font-weight: 560; }
-.ik-budget-card > div span.goal strong { color: #43825a; }
+.ik-budget-overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding: 11px 12px; background: #f7faf6; }
+.ik-budget-overview span { min-width: 0; border: 1px solid #e1e9e2; border-radius: 11px; background: white; padding: 9px; }
+.ik-budget-overview small, .ik-budget-overview b { display: block; }
+.ik-budget-overview small { overflow: hidden; color: var(--ik-muted); font-size: 7.5px; text-overflow: ellipsis; white-space: nowrap; }
+.ik-budget-overview b { margin-top: 4px; font-size: 14px; letter-spacing: -.03em; }
+.ik-budget-details { display: grid; padding: 5px 12px 9px; }
+.ik-budget-details > small { padding: 9px 0 4px; color: #6f877b; font-size: 7.5px; font-weight: 720; letter-spacing: .06em; text-transform: uppercase; }
+.ik-budget-details span { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid #edf0ed; padding: 7px 0; font-size: 10px; }
+.ik-budget-details span b { font-weight: 560; }
+.ik-budget-details span.goal strong { color: #43825a; }
+.ik-budget-card > footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--ik-line); background: #eff6f0; padding: 11px 12px; color: #397551; font-size: 9px; }
+.ik-budget-card > footer b { color: var(--ik-ink); font-size: 13px; }
 
 .ik-ready-card { display: grid; align-items: center; grid-template-columns: auto 1fr auto; gap: 10px; padding: 12px; }
 .ik-ready-card > span { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 14px; background: var(--ik-mint); color: var(--ik-green); }

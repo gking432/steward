@@ -31,6 +31,7 @@ import {
   acceptAIOnboarding,
   acceptedCancellationStrategies,
   buildAIOnboardingContext,
+  irregularSpendingPerPaycheck,
   onboardingReplySubmitsImmediately,
   previewAIOnboarding,
   type AIOnboardingContext,
@@ -194,13 +195,15 @@ export function IntakeScreen({
         : undefined;
       const assistantTurn: OnboardingTurn = { role: "assistant", content: payload.message };
       const nextTurns = [...conversation, assistantTurn];
-      const enteringGoals = payload.phase === "goals" && phaseRef.current !== "goals";
+      const enteringStage = (
+        payload.phase === "goals" || payload.phase === "budget" || payload.phase === "checkin"
+      ) && phaseRef.current !== payload.phase;
       turnsRef.current = nextTurns;
       stateRef.current = payload.state;
       phaseRef.current = payload.phase;
       replyIdRef.current += 1;
       setTurns(nextTurns);
-      if (enteringGoals) setVisibleTurnStart(conversation.length);
+      if (enteringStage) setVisibleTurnStart(conversation.length);
       setState(payload.state);
       setPhase(payload.phase);
       setQuickReplies(payload.quickReplies ?? []);
@@ -251,7 +254,7 @@ export function IntakeScreen({
   const activeSpending = phase === "spending"
     ? context.monthlySpending.find((entry) => currentMessage.toLowerCase().includes(entry.category.toLowerCase()))
     : undefined;
-  const priorityStep = phase === "goals" && state.goals.length > 1 &&
+  const priorityStep = phase === "goals" && !state.prioritiesConfirmed && state.goals.length > 1 &&
     /priority|priorities|matters most|put.+order/i.test(currentMessage);
   const activeStrategy = phase === "strategy"
     ? findActiveStrategy(context, state, currentMessage)
@@ -293,9 +296,17 @@ export function IntakeScreen({
     setState(next);
   };
 
-  const submitPriority = () => submit(
-    `Priority order: ${state.goals.map((goal) => goal.name).join(", then ")}.`,
-  );
+  const submitPriority = () => {
+    const next = {
+      ...stateRef.current,
+      goals: [...state.goals],
+      goalCollectionComplete: true,
+      prioritiesConfirmed: true,
+    };
+    stateRef.current = next;
+    setState(next);
+    submit(`Priority order: ${next.goals.map((goal) => goal.name).join(", then ")}.`);
+  };
 
   return (
     <main className="ik-shell">
@@ -323,7 +334,11 @@ export function IntakeScreen({
               <span><Sparkles size={18} /></span>
               {phase === "goals"
                 ? <div><b>Now let’s talk about your goals.</b><p>Your income and baseline buckets are mapped. Next we’ll decide what the remaining money should accomplish.</p></div>
-                : <div><b>Let’s build your first plan.</b><p>I read the demo statements. We’ll confirm what’s real, build the buckets, then decide what your money should do.</p></div>}
+                : phase === "budget"
+                  ? <div><b>Here’s your budget breakdown.</b><p>Every dollar from a normal paycheck now has a clear job.</p></div>
+                  : phase === "checkin" || phase === "complete"
+                    ? <div><b>I’ll keep you on track.</b><p>Steward watches the buckets, flags unusual spending, and stays ready when you have a question.</p></div>
+                    : <div><b>Let’s build your first plan.</b><p>I read the demo statements. We’ll confirm what’s real, build the buckets, then decide what your money should do.</p></div>}
             </div>
 
             {visibleTurns.map((turn, index) => {
@@ -432,7 +447,11 @@ function MoneyMap({ plan, context, state, busy, compact = false }: { plan: PlanV
   const recurringRows = state.recurringReviewed
     ? context.recurringCharges.map((charge) => ({ name: charge.merchant, amount: charge.perPaycheck }))
     : [];
-  const bucketRows = [...spendingRows, ...recurringRows];
+  const miscellaneous = irregularSpendingPerPaycheck(context, state);
+  const irregularRows = miscellaneous > 0
+    ? [{ name: "Miscellaneous", amount: miscellaneous }]
+    : [];
+  const bucketRows = [...spendingRows, ...recurringRows, ...irregularRows];
   const protectedTotal = bucketRows.reduce((sum, row) => sum + row.amount, 0);
   const goalRows = state.goals.map((goal) => plan?.claims.find((row) =>
     goal.linkedAccountId ? row.linkedAccountId === goal.linkedAccountId : row.name.toLowerCase() === goal.name.toLowerCase()));
@@ -570,13 +589,24 @@ function StrategyCard({ strategy, context }: { strategy: OnboardingStrategy; con
 }
 
 function BudgetCard({ plan }: { plan: PlanView }) {
+  const bucketTotal = plan.buckets.reduce((sum, row) => sum + row.amount, 0);
+  const goalTotal = plan.claims.reduce((sum, row) => sum + row.amount, 0);
+  const remaining = Math.max(0, plan.income - bucketTotal - goalTotal);
   return (
     <section className="ik-budget-card">
-      <header><span><Target size={16} /> Proposed paycheck plan</span><b>{formatMoney(plan.income)}</b></header>
-      <div>
-        {plan.buckets.slice(0, 6).map((row) => <span key={row.name}><b>{row.name}</b><strong>{formatMoney(row.amount)}</strong></span>)}
-        {plan.claims.slice(0, 4).map((row) => <span key={row.id} className="goal"><b>{row.name}</b><strong>+{formatMoney(row.amount)}</strong></span>)}
+      <header><span><Target size={16} /> Your paycheck plan</span><b>{formatMoney(plan.income)}</b></header>
+      <div className="ik-budget-overview">
+        <span><small>Bills & spending</small><b>{formatMoney(bucketTotal)}</b></span>
+        <span><small>Goals</small><b>{formatMoney(goalTotal)}</b></span>
+        <span><small>Available</small><b>{formatMoney(remaining)}</b></span>
       </div>
+      <div className="ik-budget-details">
+        <small>Budget buckets</small>
+        {plan.buckets.map((row) => <span key={row.name}><b>{row.name}</b><strong>{formatMoney(row.amount)}</strong></span>)}
+        {plan.claims.length > 0 && <small>Goals, in priority order</small>}
+        {plan.claims.map((row) => <span key={row.id} className="goal"><b>{row.name}</b><strong>+{formatMoney(row.amount)}</strong></span>)}
+      </div>
+      <footer><span>Still available this paycheck</span><b>{formatMoney(remaining)}</b></footer>
     </section>
   );
 }

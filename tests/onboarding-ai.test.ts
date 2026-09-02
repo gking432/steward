@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { demoWorkspace, FIXTURE_TODAY } from "../fixtures/golden-workspace";
 import { toModel } from "../lib/model/convert";
+import { planCycle } from "../lib/model/engine";
 import {
   EMPTY_AI_ONBOARDING_STATE,
   acceptAIOnboarding,
@@ -84,6 +85,38 @@ test("a normal past expense becomes a per-paycheck bucket only after allocation"
   assert.equal(allocated.spendingReviews[0].allocationPerPaycheck, observed.suggestedPerPaycheck);
 });
 
+test("unusual spending rolls into one miscellaneous paycheck bucket instead of disappearing", () => {
+  const base = workspace();
+  const context = buildAIOnboardingContext(base, FIXTURE_TODAY, true);
+  const shopping = context.monthlySpending.find((entry) => entry.category === "Shopping")!;
+  const preview = previewAIOnboarding(base, FIXTURE_TODAY, {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    spendingReviews: [{ id: shopping.id, normal: false, allocationPerPaycheck: 0 }],
+  });
+
+  const miscellaneous = preview.buckets.find((bucket) => bucket.name === "Miscellaneous");
+  assert.equal(miscellaneous?.kind, "spend");
+  assert.equal(miscellaneous?.perCycle, shopping.suggestedPerPaycheck);
+});
+
+test("many unusual purchases cannot turn Miscellaneous into an impossible paycheck", () => {
+  const source = workspace();
+  const context = buildAIOnboardingContext(source, FIXTURE_TODAY, true);
+  const state: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    spendingReviews: context.monthlySpending.map((entry) => ({
+      id: entry.id,
+      normal: false,
+      allocationPerPaycheck: 0,
+    })),
+  };
+  const preview = previewAIOnboarding(source, FIXTURE_TODAY, state);
+  const miscellaneous = preview.buckets.find((bucket) => bucket.name === "Miscellaneous");
+
+  assert.equal(miscellaneous?.perCycle, Math.round(context.paycheck.amount * 5) / 100);
+  assert.ok((planCycle(preview, FIXTURE_TODAY)?.shortfall ?? null) === null);
+});
+
 test("free-form goals survive while invented amounts and strategies do not", () => {
   const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
   const validStrategy = context.strategies[0].id;
@@ -141,7 +174,7 @@ test("a sent purchase choice survives an empty model state", () => {
   assert.equal(normalized.goals.length, 1);
   assert.equal(normalized.goals[0].name, "Trip");
   assert.equal(normalized.goals[0].kind, "purchase");
-  assert.equal(normalized.goals[0].detailsComplete, false);
+  assert.equal(normalized.goals[0].detailsComplete, true);
   assert.equal(onboardingPhase(normalized, context), "income");
 });
 
@@ -183,6 +216,130 @@ test("an explicit finish and priority answer advance without model-owned flags",
     { role: "user", content: "Trip, then Emergency cushion." },
   ]);
   assert.equal(prioritized.prioritiesConfirmed, true);
+});
+
+test("the submitted priority editor order cannot be reopened or reordered by the model", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const goals: AIOnboardingState["goals"] = ["Travel", "Cash cushion", "Furniture"].map((name, index) => ({
+    id: `goal:priority:${index}`,
+    name,
+    kind: index === 0 ? "purchase" : "fund",
+    targetAmount: null,
+    targetDate: null,
+    linkedAccountId: null,
+    detailsComplete: true,
+  }));
+  const previous: AIOnboardingState = { ...EMPTY_AI_ONBOARDING_STATE, goals };
+  const normalized = normalizeAIOnboardingState(
+    { ...previous, goals: [...goals].reverse(), prioritiesConfirmed: false },
+    previous,
+    context,
+    [
+      { role: "assistant", content: "What matters most right now? Put these priorities in order." },
+      { role: "user", content: "Priority order: Travel, then Cash cushion, then Furniture." },
+    ],
+  );
+
+  assert.equal(normalized.goalCollectionComplete, true);
+  assert.equal(normalized.prioritiesConfirmed, true);
+  assert.deepEqual(normalized.goals.map((goal) => goal.name), ["Travel", "Cash cushion", "Furniture"]);
+});
+
+test("an unresolved goal from a multi-select survives while another goal is detailed", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const previous: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [
+      {
+        id: "goal:payoff",
+        name: "Pay off debt",
+        kind: "payoff",
+        targetAmount: null,
+        targetDate: null,
+        linkedAccountId: null,
+        detailsComplete: false,
+      },
+      {
+        id: "goal:savings",
+        name: "Build savings",
+        kind: "fund",
+        targetAmount: null,
+        targetDate: null,
+        linkedAccountId: null,
+        detailsComplete: false,
+      },
+    ],
+  };
+  const debt = context.accounts.find((account) => /credit/i.test(account.type));
+  assert.ok(debt);
+  const normalized = normalizeAIOnboardingState(
+    {
+      ...previous,
+      goals: [{
+        id: `goal:${debt.id}`,
+        name: `Pay off ${debt.name}`,
+        kind: "payoff",
+        targetAmount: null,
+        targetDate: null,
+        linkedAccountId: debt.id,
+        detailsComplete: true,
+      }],
+    },
+    previous,
+    context,
+    [
+      { role: "assistant", content: "Which debts should Steward include? Choose one or more." },
+      { role: "user", content: `Selected: ${debt.name}.` },
+    ],
+  );
+
+  assert.ok(normalized.goals.some((goal) => goal.name === `Pay off ${debt.name}`));
+  assert.ok(normalized.goals.some((goal) => goal.name === "Build savings" && !goal.detailsComplete));
+  assert.ok(!normalized.goals.some((goal) => goal.name === "Pay off debt"));
+});
+
+test("a broad multi-select records every selected goal before discussing them", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const normalized = normalizeAIOnboardingState(
+    EMPTY_AI_ONBOARDING_STATE,
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: "What would you like Steward to help with first?" },
+      { role: "user", content: "Selected: Pay off debt, Build savings." },
+    ],
+  );
+
+  assert.deepEqual(normalized.goals.map((goal) => goal.name), ["Pay off debt", "Build savings"]);
+  assert.ok(normalized.goals.every((goal) => !goal.detailsComplete));
+});
+
+test("a concrete savings choice is complete without an unnecessary amount question", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const previous: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:savings",
+      name: "Build savings",
+      kind: "fund",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: false,
+    }],
+  };
+  const normalized = normalizeAIOnboardingState(
+    previous,
+    previous,
+    context,
+    [
+      { role: "assistant", content: "What should the savings be for?" },
+      { role: "user", content: "Selected: Emergency cushion." },
+    ],
+  );
+
+  assert.deepEqual(normalized.goals.map((goal) => goal.name), ["Emergency cushion"]);
+  assert.equal(normalized.goals[0].detailsComplete, true);
 });
 
 test("adding a second goal reopens priority ordering", () => {
