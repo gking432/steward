@@ -15,7 +15,7 @@
  * anything cut is reachable by tapping the block it belongs to.
  */
 
-import { ArrowUpRight, Settings, Sparkles } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Settings, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 import {
   bucketActivity,
@@ -121,17 +121,22 @@ export function HomeScreen({
   const days = Math.max(0, daysBetween(today, cycle.end));
   const allSpend = workspace.buckets
     .filter((bucket) => bucket.kind === "spend")
-    .map((bucket) => bucketActivity(workspace, bucket, cycle));
+    .map((bucket) => bucketActivity(workspace, bucket, cycle))
+    .filter((entry) => entry.planned > 0 || entry.spent > 0);
 
   // Every spend bucket, not the displayed ones. This was summing the slice, so
   // "Left to spend" silently changed with how many rows the list happened to
   // render — a headline figure that disagreed with the drilldown below it.
   const left = allSpend.reduce((sum, entry) => sum + Math.max(0, entry.remaining), 0);
 
-  // Two rows, not three. Three did not fit the no-scroll budget on any phone —
-  // it clipped the last row in half on all of them, which reads as a rendering
-  // fault rather than as a list continuing. "All" is one tap away.
-  const activity = [...allSpend].sort((a, b) => b.percent - a.percent).slice(0, 2);
+  const spent = allSpend.reduce((sum, entry) => sum + entry.spent, 0);
+  const activity = [...allSpend].sort((a, b) => b.percent - a.percent);
+
+  const statusFor = (entry: (typeof activity)[number]) => {
+    if (entry.remaining < 0 || entry.spent > entry.planned) return { label: "Over", tone: "over" };
+    if (entry.hot) return { label: "Watch", tone: "watch" };
+    return { label: "On track", tone: "good" };
+  };
 
   return (
     <div className="hm-screen">
@@ -143,81 +148,61 @@ export function HomeScreen({
         </button>
       </header>
 
-      {/* Steward's take. The read comes before the number. */}
-      <button className={`hm-take ${take.tone}`} onClick={onAsk}>
-        <span className="hm-take-badge">
-          <Sparkles size={13} /> Steward&apos;s take
-        </span>
-        <strong>{take.line}</strong>
-        <p>{take.because}</p>
-        <span className="hm-take-ask">
-          Ask about this <ArrowUpRight size={14} />
-        </span>
-      </button>
-
-      <div className="hm-figures">
-        <button onClick={onOpenBuckets}>
-          <small>Left to spend</small>
-          <strong>{formatMoney(left)}</strong>
-        </button>
-        <button onClick={onOpenBuckets}>
-          <small>Next paycheck</small>
-          <strong>{days}d</strong>
-          <em>{formatMoney(plan.freeCapacity)} free</em>
-        </button>
-      </div>
-
-      <section className="hm-block">
-        <header>
-          <h2>Buckets</h2>
-          <button onClick={onOpenBuckets}>All</button>
-        </header>
-        {activity.map((entry) => (
-          <button className="hm-bucket" key={entry.bucket.id} onClick={() => onOpenBucket(entry.bucket)}>
-            <span>
-              <b>{entry.bucket.name}</b>
-              <small>
-                {formatMoney(entry.spent)} of {formatMoney(entry.planned)}
-              </small>
-            </span>
-            <span className="hm-bucket-bar">
-              <i
-                className={entry.percent > 100 ? "over" : entry.hot ? "hot" : ""}
-                style={{ width: `${Math.min(100, entry.percent)}%` }}
-              />
-            </span>
-            <em>{Math.round(entry.percent)}%</em>
+      <div className="hm-scroll">
+        <section className="hm-dashboard-head">
+          <button className={`hm-take ${take.tone}`} onClick={onAsk}>
+            <span className="hm-take-badge"><Sparkles size={13} /> Steward&apos;s take</span>
+            <strong>{take.line}</strong>
+            <p>{take.because}</p>
+            <span className="hm-take-ask">Ask about this <ArrowUpRight size={14} /></span>
           </button>
-        ))}
-      </section>
 
-      <section className="hm-block hm-grow">
-        <header>
-          <h2>Working toward</h2>
-          <button onClick={onOpenBuckets}>Plan</button>
-        </header>
-        {progress.slice(0, 1).map((entry) => (
-          <div className="hm-goal" key={entry.claim.id}>
-            <span>
-              <b>{entry.claim.name}</b>
-              <small>{entry.arrivalDate ? formatDate(entry.arrivalDate) : "over a year out"}</small>
-            </span>
-            <span className="hm-bucket-bar">
-              <i style={{ width: `${Math.min(100, entry.percent)}%` }} />
-            </span>
+          <div className="hm-figures">
+            <button onClick={onOpenBuckets}><small>Left to spend</small><strong>{formatMoney(left)}</strong><em>this paycheck</em></button>
+            <button onClick={onOpenBuckets}><small>Spent so far</small><strong>{formatMoney(spent)}</strong><em>across every bucket</em></button>
+            <button onClick={onOpenBuckets}><small>Bills covered</small><strong>{formatMoney(plan.reservesTotal)}</strong><em>{plan.shortfall ? "needs attention" : "fully planned"}</em></button>
+            <button onClick={onOpenBuckets}><small>Next paycheck</small><strong>{days}d</strong><em>{formatMoney(plan.freeCapacity)} for goals</em></button>
           </div>
-        ))}
-        {!progress.length && (
-          <p className="hm-muted">Tell Steward what you want and it&apos;ll start funding it.</p>
-        )}
-      </section>
+        </section>
 
-      {insight && (
-        <button className="hm-insight" onClick={onOpenBuckets}>
-          <b>{insight.headline}</b>
-          <small>{insight.detail}</small>
-        </button>
-      )}
+        <div className="hm-dashboard-grid">
+          <section className="hm-panel hm-buckets-panel">
+            <header><div><span className="hm-kicker">This paycheck</span><h1>Every spending bucket</h1></div><button onClick={onOpenBuckets}>Edit plan</button></header>
+            <div className="hm-bucket-grid">
+              {activity.map((entry) => {
+                const status = statusFor(entry);
+                const remaining = entry.remaining >= 0
+                  ? `${formatMoney(entry.remaining)} left`
+                  : `${formatMoney(Math.abs(entry.remaining))} over`;
+                return (
+                  <button className="hm-bucket-card" key={entry.bucket.id} onClick={() => onOpenBucket(entry.bucket)} aria-label={`View ${entry.bucket.name} activity`}>
+                    <span className="hm-bucket-title"><b>{entry.bucket.name}</b><i className={status.tone}>{status.label}</i></span>
+                    <strong>{remaining}</strong>
+                    <small>{formatMoney(entry.spent)} spent of {formatMoney(entry.planned)}</small>
+                    <span className="hm-bucket-bar"><i className={status.tone} style={{ width: `${Math.min(100, entry.percent)}%` }} /></span>
+                    <span className="hm-bucket-open">View purchases <ChevronRight size={14} /></span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <aside className="hm-side">
+            <section className="hm-panel hm-bills">
+              <header><div><span className="hm-kicker">Protected first</span><h2>Bills &amp; minimums</h2></div><button onClick={onOpenBuckets}>Plan</button></header>
+              {plan.reserves.map((entry) => <button key={entry.bucket.id} onClick={onOpenBuckets}><span><b>{entry.bucket.name}</b><small>{entry.bucket.dueDate ? `Due ${formatDate(entry.bucket.dueDate)}` : "This cycle"}</small></span><strong>{formatMoney(entry.required)}</strong></button>)}
+            </section>
+
+            <section className="hm-panel hm-goals">
+              <header><div><span className="hm-kicker">Your priorities</span><h2>Working toward</h2></div><button onClick={onOpenBuckets}>Plan</button></header>
+              {progress.map((entry) => <div className="hm-goal" key={entry.claim.id}><span><b>{entry.claim.name}</b><small>{entry.arrivalDate ? `On track for ${formatDate(entry.arrivalDate)}` : "Building momentum"}</small></span><strong>{Math.round(entry.percent)}%</strong><span className="hm-bucket-bar"><i className="good" style={{ width: `${Math.min(100, entry.percent)}%` }} /></span></div>)}
+              {!progress.length && <p className="hm-muted">Your next free dollars will appear here as they are assigned.</p>}
+            </section>
+
+            {insight && <button className="hm-insight" onClick={onOpenBuckets}><span className="hm-kicker">New insight</span><b>{insight.headline}</b><small>{insight.detail}</small><span>Review <ArrowUpRight size={14} /></span></button>}
+          </aside>
+        </div>
+      </div>
     </div>
   );
 }

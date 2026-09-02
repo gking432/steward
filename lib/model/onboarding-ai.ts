@@ -920,7 +920,20 @@ export function acceptAIOnboarding(
   state: AIOnboardingState,
   now = new Date().toISOString(),
 ): Workspace {
-  const preview = previewAIOnboarding(workspace, today, state);
+  const context = buildAIOnboardingContext(workspace, today, true);
+  const irregularCategories = new Set(state.spendingReviews.flatMap((review) => {
+    if (review.normal) return [];
+    const observed = context.monthlySpending.find((entry) => entry.id === review.id);
+    return observed ? [observed.category] : [];
+  }));
+  const previewBase = previewAIOnboarding(workspace, today, state);
+  const preview: Workspace = {
+    ...previewBase,
+    transactions: previewBase.transactions.map((transaction) =>
+      transaction.type === "expense" && irregularCategories.has(transaction.category)
+        ? { ...transaction, category: "Miscellaneous" }
+        : transaction),
+  };
   const cadence = state.checkInCadence ?? "weekly";
   const completed: Workspace = {
     ...preview,

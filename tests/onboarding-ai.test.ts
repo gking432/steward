@@ -99,6 +99,22 @@ test("unusual spending rolls into one miscellaneous paycheck bucket instead of d
   assert.equal(miscellaneous?.perCycle, shopping.suggestedPerPaycheck);
 });
 
+test("accepted unusual spending appears inside the Miscellaneous ledger", () => {
+  const source = workspace();
+  const context = buildAIOnboardingContext(source, FIXTURE_TODAY, true);
+  const shopping = context.monthlySpending.find((entry) => entry.category === "Shopping");
+  assert.ok(shopping);
+  const state: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    spendingReviews: [{ id: shopping.id, normal: false, allocationPerPaycheck: 0 }],
+    checkInCadence: "weekly",
+  };
+  const accepted = acceptAIOnboarding(source, FIXTURE_TODAY, state);
+  const amazon = accepted.transactions.find((transaction) => transaction.merchant === "Amazon");
+
+  assert.equal(amazon?.category, "Miscellaneous");
+});
+
 test("many unusual purchases cannot turn Miscellaneous into an impossible paycheck", () => {
   const source = workspace();
   const context = buildAIOnboardingContext(source, FIXTURE_TODAY, true);

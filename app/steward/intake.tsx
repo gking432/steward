@@ -137,6 +137,8 @@ export function IntakeScreen({
   const turnsRef = useRef<OnboardingTurn[]>([]);
   const replyIdRef = useRef(0);
   const phaseRef = useRef<OnboardingPhase>("income");
+  const handoffRef = useRef(false);
+  const handoffTimerRef = useRef<number | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -189,9 +191,14 @@ export function IntakeScreen({
       }
       if (!payload?.message || !payload.state) throw new Error("Invalid onboarding response");
 
-      const nextPreview = previewAIOnboarding(workspace, today, payload.state);
+      const priorPhase = phaseRef.current;
+      const cadenceJustChosen = priorPhase === "checkin" && Boolean(payload.state.checkInCadence);
+      const finalState = cadenceJustChosen && !payload.state.complete
+        ? { ...payload.state, complete: true }
+        : payload.state;
+      const nextPreview = previewAIOnboarding(workspace, today, finalState);
       const plan = payload.showPlan
-        ? buildPlanView(workspace, nextPreview, today, payload.state) ?? undefined
+        ? buildPlanView(workspace, nextPreview, today, finalState) ?? undefined
         : undefined;
       const assistantTurn: OnboardingTurn = { role: "assistant", content: payload.message };
       const nextTurns = [...conversation, assistantTurn];
@@ -199,15 +206,21 @@ export function IntakeScreen({
         payload.phase === "goals" || payload.phase === "budget" || payload.phase === "checkin"
       ) && phaseRef.current !== payload.phase;
       turnsRef.current = nextTurns;
-      stateRef.current = payload.state;
-      phaseRef.current = payload.phase;
+      stateRef.current = finalState;
+      phaseRef.current = finalState.complete ? "complete" : payload.phase;
       replyIdRef.current += 1;
       setTurns(nextTurns);
       if (enteringStage) setVisibleTurnStart(conversation.length);
-      setState(payload.state);
-      setPhase(payload.phase);
+      setState(finalState);
+      setPhase(finalState.complete ? "complete" : payload.phase);
       setQuickReplies(payload.quickReplies ?? []);
       setActiveReply({ id: replyIdRef.current, message: payload.message, plan });
+      if (finalState.complete && !handoffRef.current) {
+        handoffRef.current = true;
+        handoffTimerRef.current = window.setTimeout(() => {
+          onDone(acceptAIOnboarding(workspace, today, finalState));
+        }, 700);
+      }
     } catch {
       const assistantTurn: OnboardingTurn = {
         role: "assistant",
@@ -220,13 +233,17 @@ export function IntakeScreen({
       inFlightRef.current = false;
       setBusy(false);
     }
-  }, [context, today, workspace]);
+  }, [context, onDone, today, workspace]);
 
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
     void runTurn();
   }, [runTurn]);
+
+  useEffect(() => () => {
+    if (handoffTimerRef.current !== null) window.clearTimeout(handoffTimerRef.current);
+  }, []);
 
   useEffect(() => {
     const thread = threadRef.current;

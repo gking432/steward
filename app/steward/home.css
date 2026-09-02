@@ -1,411 +1,137 @@
-/**
- * Home.
- *
- * Same immersive surface as Connect and Buckets. Fits a viewport without
- * scrolling; the goals block absorbs spare height so the layout never shows a
- * gap that reads as a rendering fault. Short viewports scroll rather than lose
- * anything.
- */
+/** Post-onboarding dashboard. The viewport stays fixed; this screen owns its scroll. */
 
 .hm-screen {
-  /* Type color for the white tiles. Deep enough to stay legible at 11px
-     without going black, which on this green reads as a different product. */
-  --hm-ink: #1e4a35;
-  --hm-ink-soft: rgba(30, 74, 53, 0.66);
-
+  --hm-ink: #183f2d;
+  --hm-soft: rgba(24, 63, 45, 0.62);
   display: grid;
-
-  /* The fixed nav is reserved by .sw-main-full's bottom padding, which sits
-     OUTSIDE this element. Taking a full 100dvh here therefore overflowed the
-     page by exactly the nav's height on every device, which is the scrolling
-     this screen is supposed to never do. */
   height: calc(100dvh - var(--sw-nav-height));
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  align-content: start;
-  gap: 12px;
-  grid-template-rows: auto auto auto auto 1fr auto;
   background:
-    radial-gradient(120% 80% at 50% 0%, #37704f 0%, transparent 60%),
-    linear-gradient(180deg, #2f654d 0%, #21503c 100%);
-  /* No bottom safe-area inset: the nav below already owns it. */
-  padding: calc(16px + env(safe-area-inset-top)) 16px 14px;
-  color: #f6f8f4;
-}
-
-/*
- * steward.css sets `.sw-app h1, h2, strong, b { color: var(--text) }` for the
- * legacy tree. That is specificity (0,1,1) and it was silently winning over
- * every heading and figure on this screen, painting them near-black on the
- * green — including the ones this file believed it had made light.
- *
- * Home states its own two surfaces explicitly, at (0,2,1) so it wins outright:
- * light type on the green, ink on the white tiles. Deleted with that legacy
- * rule at Phase 10.
- */
-.hm-screen .hm-block h2,
-.hm-screen .hm-bucket b,
-.hm-screen .hm-goal b,
-.hm-screen .hm-insight b,
-.hm-screen .hm-top strong {
-  color: #f6f8f4;
-}
-.hm-screen .hm-take strong,
-.hm-screen .hm-figures strong {
-  color: var(--hm-ink);
+    radial-gradient(90% 70% at 18% 0%, rgba(92, 143, 111, 0.46) 0%, transparent 62%),
+    linear-gradient(155deg, #316c50 0%, #1f4d39 100%);
+  color: #f7f9f5;
 }
 
 .hm-top {
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 0 3px;
+  gap: 10px;
+  border-bottom: 1px solid rgba(247, 249, 245, 0.1);
+  padding: calc(14px + env(safe-area-inset-top)) 18px 13px;
 }
-.hm-top strong {
-  flex: 1;
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.04em;
-}
-.hm-top time {
-  color: rgba(246, 248, 244, 0.58);
-  font-size: 12px;
-}
-.hm-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 9px;
-  background: #f6f8f4;
+.hm-top strong { flex: 1; color: #f7f9f5 !important; font-size: 17px; font-weight: 670; letter-spacing: -0.035em; }
+.hm-mark { width: 27px; height: 27px; border-radius: 9px; background: #f7f9f5; box-shadow: inset 0 0 0 6px #316c50; }
+.hm-settings { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; color: rgba(247, 249, 245, 0.76); }
+.hm-settings:hover { background: rgba(255, 255, 255, 0.08); }
+
+.hm-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 14px 30px;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 }
 
-/* ---------------------------------------------------------- the take --- */
-
-/*
- * Solid white, green type — the card reads as paper laid on the green rather
- * than another wash of it.
- *
- * Tone lives in the badge, not the background. Tinting the whole card gave the
- * screen a second, slightly-off green that looked like a rendering fault rather
- * than a signal, and the tint was doing no work the words weren't already
- * doing.
- */
+.hm-dashboard-head { display: grid; gap: 12px; }
 .hm-take {
   display: grid;
   gap: 7px;
-  border-radius: 20px;
+  border-radius: 22px;
   background: #f7f9f5;
-  padding: 14px 16px 13px;
+  box-shadow: 0 18px 50px rgba(9, 37, 23, 0.12);
+  padding: 17px 18px;
   color: var(--hm-ink);
   text-align: left;
 }
+.hm-take-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--hm-soft); font-size: 10.5px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+.hm-take.watch .hm-take-badge { color: #9c651d; }
+.hm-take.alert .hm-take-badge { color: #a3442d; }
+.hm-take strong { color: var(--hm-ink) !important; font-size: clamp(24px, 6.4vw, 32px); font-weight: 590; letter-spacing: -0.05em; line-height: 1.04; }
+.hm-take p { max-width: 62ch; color: var(--hm-soft); font-size: 13px; line-height: 1.45; }
+.hm-take-ask { display: inline-flex; align-items: center; gap: 5px; color: var(--hm-ink); font-size: 12px; font-weight: 700; }
 
-.hm-take-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--hm-ink-soft);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-.hm-take.watch .hm-take-badge {
-  color: #a86a16;
-}
-.hm-take.alert .hm-take-badge {
-  color: #a83f24;
-}
-.hm-take strong {
-  font-family: var(--font-dm-sans), system-ui, sans-serif;
-  font-size: clamp(21px, 5.9vw, 26px);
-  font-weight: 550;
-  letter-spacing: -0.045em;
-  line-height: 1.08;
-}
-.hm-take p {
-  color: var(--hm-ink-soft);
-  font-size: 13.5px;
-  line-height: 1.4;
-}
-.hm-take-ask {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 3px;
-  color: var(--hm-ink);
-  font-size: 12.5px;
-  font-weight: 650;
-}
+.hm-figures { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hm-figures button { min-width: 0; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 17px; background: rgba(255, 255, 255, 0.09); padding: 13px 14px; color: #f7f9f5; text-align: left; }
+.hm-figures button:hover { background: rgba(255, 255, 255, 0.13); }
+.hm-figures small { display: block; color: rgba(247, 249, 245, 0.65); font-size: 10.5px; font-weight: 700; }
+.hm-figures strong { display: block; overflow: hidden; margin-top: 2px; color: #f7f9f5 !important; font-size: 21px; letter-spacing: -0.04em; text-overflow: ellipsis; white-space: nowrap; }
+.hm-figures em { display: block; overflow: hidden; color: rgba(247, 249, 245, 0.55); font-size: 10.5px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ---------------------------------------------------------- figures --- */
+.hm-dashboard-grid { display: grid; gap: 12px; margin-top: 12px; }
+.hm-panel { border: 1px solid rgba(24, 63, 45, 0.09); border-radius: 22px; background: #f7f9f5; box-shadow: 0 16px 42px rgba(9, 37, 23, 0.1); padding: 16px; color: var(--hm-ink); }
+.hm-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 13px; }
+.hm-panel h1, .hm-panel h2 { color: var(--hm-ink) !important; font-size: 18px; font-weight: 650; letter-spacing: -0.035em; }
+.hm-panel header > button { flex-shrink: 0; border-radius: 999px; background: #e5eee7; padding: 8px 11px; color: #2b684b; font-size: 11px; font-weight: 720; }
+.hm-kicker { display: block; margin-bottom: 2px; color: var(--hm-soft); font-size: 9.5px; font-weight: 780; letter-spacing: 0.09em; text-transform: uppercase; }
 
-.hm-figures {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 1fr 1fr;
-}
-.hm-figures button {
-  min-height: 70px;
-  border-radius: 16px;
-  background: #f7f9f5;
-  padding: 12px 14px;
-  color: var(--hm-ink);
-  text-align: left;
-}
-.hm-figures small {
-  display: block;
-  color: var(--hm-ink-soft);
-  font-size: 11px;
-  font-weight: 650;
-}
-.hm-figures strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 24px;
-  letter-spacing: -0.035em;
-}
-.hm-figures em {
-  color: var(--hm-ink-soft);
-  font-size: 11px;
-  font-style: normal;
+.hm-bucket-grid { display: grid; gap: 9px; }
+.hm-bucket-card { display: grid; gap: 5px; border: 1px solid #dfe7e0; border-radius: 17px; background: #fff; padding: 13px 14px 12px; color: var(--hm-ink); text-align: left; transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease; }
+.hm-bucket-card:hover { border-color: #aac4b2; box-shadow: 0 8px 24px rgba(25, 69, 49, 0.08); transform: translateY(-1px); }
+.hm-bucket-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hm-bucket-title b { overflow: hidden; color: var(--hm-ink) !important; font-size: 13px; font-weight: 670; text-overflow: ellipsis; white-space: nowrap; }
+.hm-bucket-title i { flex-shrink: 0; border-radius: 999px; padding: 4px 7px; font-size: 9px; font-style: normal; font-weight: 780; letter-spacing: 0.04em; text-transform: uppercase; }
+.hm-bucket-title i.good { background: #e2f1e7; color: #257048; }
+.hm-bucket-title i.watch { background: #f8ecd9; color: #98601a; }
+.hm-bucket-title i.over { background: #f8e2dc; color: #a3442d; }
+.hm-bucket-card > strong { color: var(--hm-ink) !important; font-size: 20px; font-weight: 650; letter-spacing: -0.04em; }
+.hm-bucket-card > small { color: var(--hm-soft); font-size: 10.5px; }
+.hm-bucket-bar { overflow: hidden; display: block; height: 5px; border-radius: 999px; background: #e6ebe7; }
+.hm-bucket-bar > i { display: block; height: 100%; border-radius: inherit; background: #4c8a68; }
+.hm-bucket-bar > i.watch { background: #d69743; }
+.hm-bucket-bar > i.over { background: #ce6f52; }
+.hm-bucket-open { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; margin-top: 2px; color: #397455; font-size: 10.5px; font-weight: 700; }
+
+.hm-side { display: grid; align-content: start; gap: 12px; }
+.hm-bills > button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #e3e9e4; padding: 10px 0; text-align: left; }
+.hm-bills > button:first-of-type { border-top: 0; }
+.hm-bills span { min-width: 0; }
+.hm-bills b { display: block; overflow: hidden; color: var(--hm-ink) !important; font-size: 12px; font-weight: 640; text-overflow: ellipsis; white-space: nowrap; }
+.hm-bills small { display: block; color: var(--hm-soft); font-size: 10px; }
+.hm-bills > button > strong { flex-shrink: 0; color: var(--hm-ink) !important; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.hm-goal { display: grid; align-items: center; gap: 6px 10px; grid-template-columns: minmax(0, 1fr) auto; border-top: 1px solid #e3e9e4; padding: 11px 0; }
+.hm-goal:first-of-type { border-top: 0; }
+.hm-goal b { display: block; overflow: hidden; color: var(--hm-ink) !important; font-size: 12.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.hm-goal small { display: block; color: var(--hm-soft); font-size: 10px; }
+.hm-goal > strong { color: #397455 !important; font-size: 12px; }
+.hm-goal .hm-bucket-bar { grid-column: 1 / -1; }
+
+.hm-insight { display: grid; gap: 5px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; background: rgba(255, 255, 255, 0.09); padding: 15px 16px; color: #f7f9f5; text-align: left; }
+.hm-insight .hm-kicker { color: rgba(247, 249, 245, 0.55); }
+.hm-insight b { color: #f7f9f5 !important; font-size: 13px; }
+.hm-insight small { color: rgba(247, 249, 245, 0.68); font-size: 11px; line-height: 1.4; }
+.hm-insight > span:last-child { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; color: rgba(247, 249, 245, 0.88); font-size: 11px; font-weight: 700; }
+.hm-muted { color: var(--hm-soft); font-size: 11.5px; line-height: 1.4; }
+.hm-empty { align-self: center; color: rgba(247, 249, 245, 0.76); text-align: center; }
+
+@media (min-width: 620px) {
+  .hm-scroll { padding: 20px 22px 34px; }
+  .hm-bucket-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* ----------------------------------------------------------- blocks --- */
-
-.hm-block {
-  overflow: hidden;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 13px 14px;
-}
-.hm-block > header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 9px;
-}
-.hm-block h2 {
-  font-family: var(--font-dm-sans), system-ui, sans-serif;
-  font-size: 14.5px;
-  font-weight: 650;
-  letter-spacing: -0.03em;
-}
-.hm-block > header button {
-  min-height: 32px;
-  color: rgba(246, 248, 244, 0.78);
-  font-size: 12.5px;
-  font-weight: 650;
-}
-.hm-grow {
-  /* Enough for the header plus one row. Without a floor this block collapses
-     to its header whenever the content above is tall, which is how it ended up
-     rendering as an empty strip. */
-  min-height: 104px;
-}
-
-.hm-bucket,
-.hm-goal {
-  display: grid;
-  align-items: center;
-  gap: 4px 10px;
-  grid-template-columns: 1fr auto;
-  min-height: 44px;
-  padding: 6px 0;
-  text-align: left;
-}
-.hm-bucket b,
-.hm-goal b {
-  display: block;
-  font-size: 13.5px;
-  font-weight: 600;
-}
-.hm-bucket small,
-.hm-goal small {
-  color: rgba(246, 248, 244, 0.58);
-  font-size: 11.5px;
-}
-.hm-bucket em {
-  color: rgba(246, 248, 244, 0.7);
-  font-size: 12px;
-  font-style: normal;
-  font-variant-numeric: tabular-nums;
-}
-
-.hm-bucket-bar {
-  overflow: hidden;
-  grid-column: 1 / -1;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-}
-.hm-bucket-bar i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: rgba(246, 248, 244, 0.85);
-}
-.hm-bucket-bar i.hot {
-  background: #f0c08a;
-}
-.hm-bucket-bar i.over {
-  background: #eda683;
-}
-
-.hm-insight {
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.07);
-  padding: 12px 14px;
-  text-align: left;
-}
-.hm-insight b {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-}
-.hm-insight small {
-  display: -webkit-box;
-  overflow: hidden;
-  margin-top: 2px;
-  color: rgba(246, 248, 244, 0.62);
-  font-size: 11.5px;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.hm-muted {
-  color: rgba(246, 248, 244, 0.6);
-  font-size: 12.5px;
-}
-.hm-empty {
-  align-self: center;
-  color: rgba(246, 248, 244, 0.75);
-  text-align: center;
-}
-
-/* Short devices scroll rather than lose the recommendation. */
-/*
- * Standard phones (844-class). Natural content runs ~77px over the no-scroll
- * budget here, so spacing tightens across the board. Nothing is dropped at this
- * tier — the recommendation is the most actionable thing on the screen and is
- * worth more than the whitespace it costs.
- */
-@media (max-height: 880px) {
-  .hm-screen {
-    gap: 9px;
-    padding-bottom: 11px;
-  }
-  .hm-take {
-    padding: 12px 15px 11px;
-  }
-  .hm-take strong {
-    font-size: clamp(20px, 5.6vw, 23px);
-  }
-  .hm-figures button {
-    min-height: 62px;
-    padding: 10px 13px;
-  }
-  .hm-block {
-    padding: 11px 13px;
-  }
-  .hm-bucket,
-  .hm-goal {
-    min-height: 38px;
-    padding: 4px 0;
-  }
-  .hm-grow {
-    min-height: 84px;
-  }
-  .hm-insight {
-    padding: 10px 13px;
-  }
-}
-
-/*
- * Short phones (SE-class) tighten up rather than scroll. The previous rule here
- * let the screen grow and scroll instead, which is the one thing Home must not
- * do — so the fix is to spend less height, not more.
- *
- * What gives, in order of least loss: spacing, then type, then the third bucket
- * and the recommendation. Both are reachable one tap away, and neither is worth
- * turning the home screen into a scrolling page for.
- */
-@media (max-height: 720px) {
-  .hm-screen {
-    gap: 8px;
-    padding-top: calc(10px + env(safe-area-inset-top));
-    padding-bottom: 10px;
-  }
-  .hm-take {
-    gap: 5px;
-    padding: 11px 14px 10px;
-  }
-  .hm-take strong {
-    font-size: clamp(18px, 5.2vw, 21px);
-  }
-  .hm-take p {
-    font-size: 12.5px;
-  }
-  .hm-figures button {
-    min-height: 58px;
-    padding: 9px 12px;
-  }
-  .hm-figures strong {
-    font-size: 20px;
-  }
-  .hm-block {
-    padding: 10px 13px;
-  }
-  .hm-bucket,
-  .hm-goal {
-    min-height: 38px;
-    padding: 4px 0;
-  }
-  /* One row per list. At this height two did not fit, and a list whose second
-     row is sliced through the middle looks broken in a way that a list of one
-     does not. */
-  .hm-bucket:nth-of-type(2) {
-    display: none;
-  }
-  .hm-grow {
-    min-height: 70px;
-  }
-  .hm-insight {
-    display: none;
-  }
-}
-
-/* Desktop is a composition, not a phone column. */
 @media (min-width: 900px) {
-  .hm-screen {
-    height: 100dvh;
-    align-content: start;
-    gap: 16px;
-    grid-template-columns: 1.15fr 1fr;
-    grid-template-rows: auto auto auto auto;
-    padding: 32px max(40px, calc((100vw - 1260px) / 2));
-  }
-  .hm-top {
-    grid-column: 1 / -1;
-  }
-  .hm-take {
-    grid-column: 1;
-  }
-  .hm-take strong {
-    font-size: clamp(28px, 2.5vw, 36px);
-  }
-  .hm-figures {
-    grid-column: 2;
-    grid-template-columns: 1fr 1fr;
-  }
-  .hm-insight {
-    grid-column: 1 / -1;
-  }
+  .hm-screen { height: 100dvh; }
+  .hm-top { padding: 18px max(28px, calc((100vw - 1340px) / 2)) 16px; }
+  .hm-scroll { padding: 24px max(28px, calc((100vw - 1340px) / 2)) 42px; }
+  .hm-dashboard-head { grid-template-columns: minmax(0, 1.05fr) minmax(420px, 1fr); }
+  .hm-take { min-height: 172px; align-content: center; padding: 22px 24px; }
+  .hm-take strong { font-size: clamp(30px, 2.5vw, 39px); }
+  .hm-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hm-figures button { padding: 16px; }
+  .hm-figures strong { font-size: 25px; }
+  .hm-dashboard-grid { grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.75fr); align-items: start; gap: 14px; margin-top: 14px; }
+  .hm-panel { padding: 18px; }
+  .hm-bucket-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-.hm-settings {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border-radius: 12px;
-  color: rgba(246, 248, 244, 0.7);
+@media (min-width: 1240px) {
+  .hm-bucket-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 390px) {
+  .hm-scroll { padding-inline: 11px; }
+  .hm-figures button { padding: 11px 12px; }
+  .hm-figures strong { font-size: 19px; }
+  .hm-panel { padding: 14px; }
 }

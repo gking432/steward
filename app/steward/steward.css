@@ -955,9 +955,15 @@
 }
 
 .sw-demo-mode .hm-screen {
-  height: auto;
-  min-height: calc(100dvh - var(--sw-nav-height) - 38px - env(safe-area-inset-top));
-  overflow: visible;
+  height: calc(100dvh - var(--sw-nav-height) - 38px - env(safe-area-inset-top));
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (min-width: 900px) {
+  .sw-demo-mode .hm-screen {
+    height: calc(100dvh - 38px - env(safe-area-inset-top));
+  }
 }
 
 .sw-demo-mode .sw-ledger-screen,
