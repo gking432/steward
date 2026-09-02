@@ -75,7 +75,7 @@ function DemoStatementImport({
   today: string;
   onContinue: () => void;
 }) {
-  const [stage, setStage] = useState<"plaid" | "connecting" | "statements" | "categorizing" | "review">("plaid");
+  const [stage, setStage] = useState<"welcome" | "plaid" | "connecting" | "statements" | "categorizing" | "review">("welcome");
 
   useEffect(() => {
     if (stage === "connecting") {
@@ -101,6 +101,29 @@ function DemoStatementImport({
     mayJune: workspace.transactions.filter((row) => row.date <= "2026-06-30").length,
     july: workspace.transactions.filter((row) => row.date >= "2026-07-01").length,
   }), [workspace.transactions]);
+
+  if (stage === "welcome") {
+    return (
+      <main className="dm-screen dm-welcome">
+        <header className="dm-top"><strong>Steward</strong><span>Interactive demo</span></header>
+        <section className="dm-welcome-copy">
+          <span className="dm-welcome-mark" aria-hidden="true"><Sparkles size={22} /></span>
+          <div>
+            <p className="dm-eyebrow">Your money, with a plan</p>
+            <h1>Make every paycheck do what you want.</h1>
+            <p>
+              Steward finds the patterns in your spending, learns what matters to you,
+              and turns it all into a plan you can actually follow.
+            </p>
+          </div>
+        </section>
+        <footer className="dm-action dm-welcome-action">
+          <button onClick={() => setStage("plaid")}>Get started</button>
+          <small>You&apos;ll connect sample bank data next. Nothing is saved.</small>
+        </footer>
+      </main>
+    );
+  }
 
   if (stage === "plaid") {
     return (
