@@ -8,7 +8,6 @@
  */
 
 import {
-  ArrowRight,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -31,7 +30,9 @@ import {
   acceptAIOnboarding,
   acceptedCancellationStrategies,
   buildAIOnboardingContext,
+  checkInCadenceFromAnswer,
   irregularSpendingPerPaycheck,
+  onboardingPhase,
   onboardingReplySubmitsImmediately,
   previewAIOnboarding,
   type AIOnboardingContext,
@@ -131,6 +132,7 @@ export function IntakeScreen({
   const [visibleTurnStart, setVisibleTurnStart] = useState(0);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
+  const [handoff, setHandoff] = useState(false);
   const startedRef = useRef(false);
   const inFlightRef = useRef(false);
   const stateRef = useRef(state);
@@ -138,6 +140,7 @@ export function IntakeScreen({
   const replyIdRef = useRef(0);
   const phaseRef = useRef<OnboardingPhase>("income");
   const handoffRef = useRef(false);
+  const handoffScreenTimerRef = useRef<number | null>(null);
   const handoffTimerRef = useRef<number | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -173,6 +176,11 @@ export function IntakeScreen({
     setBusy(true);
 
     try {
+      const turnContext = buildAIOnboardingContext(
+        previewAIOnboarding(workspace, today, stateRef.current),
+        today,
+        scanComplete,
+      );
       let payload: OnboardingResponse | null = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const response = await fetch("/api/steward-ai", {
@@ -180,7 +188,7 @@ export function IntakeScreen({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             kind: "onboarding",
-            context,
+            context: turnContext,
             conversation,
             state: stateRef.current,
           }),
@@ -191,10 +199,11 @@ export function IntakeScreen({
       }
       if (!payload?.message || !payload.state) throw new Error("Invalid onboarding response");
 
-      const priorPhase = phaseRef.current;
-      const cadenceJustChosen = priorPhase === "checkin" && Boolean(payload.state.checkInCadence);
-      const finalState = cadenceJustChosen && !payload.state.complete
-        ? { ...payload.state, complete: true }
+      const answeredCadence = checkInCadenceFromAnswer(said ?? "");
+      const cadenceJustChosen = Boolean(answeredCadence) &&
+        onboardingPhase(stateRef.current, turnContext) === "checkin";
+      const finalState = cadenceJustChosen
+        ? { ...payload.state, checkInCadence: answeredCadence, complete: true }
         : payload.state;
       const nextPreview = previewAIOnboarding(workspace, today, finalState);
       const plan = payload.showPlan
@@ -217,9 +226,12 @@ export function IntakeScreen({
       setActiveReply({ id: replyIdRef.current, message: payload.message, plan });
       if (finalState.complete && !handoffRef.current) {
         handoffRef.current = true;
+        handoffScreenTimerRef.current = window.setTimeout(() => {
+          setHandoff(true);
+        }, 500);
         handoffTimerRef.current = window.setTimeout(() => {
           onDone(acceptAIOnboarding(workspace, today, finalState));
-        }, 700);
+        }, 2400);
       }
     } catch {
       const assistantTurn: OnboardingTurn = {
@@ -233,7 +245,7 @@ export function IntakeScreen({
       inFlightRef.current = false;
       setBusy(false);
     }
-  }, [context, onDone, today, workspace]);
+  }, [onDone, scanComplete, today, workspace]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -242,6 +254,7 @@ export function IntakeScreen({
   }, [runTurn]);
 
   useEffect(() => () => {
+    if (handoffScreenTimerRef.current !== null) window.clearTimeout(handoffScreenTimerRef.current);
     if (handoffTimerRef.current !== null) window.clearTimeout(handoffTimerRef.current);
   }, []);
 
@@ -330,6 +343,18 @@ export function IntakeScreen({
     setState(next);
     submit(`Priority order: ${next.goals.map((goal) => goal.name).join(", then ")}.`);
   };
+
+  if (handoff) {
+    return (
+      <main className="ik-dashboard-loading" aria-live="polite" aria-busy="true">
+        <div className="ik-dashboard-loading-mark"><Sparkles size={24} /></div>
+        <p>Your plan is ready</p>
+        <h1>Loading your dashboard</h1>
+        <span>Setting up your buckets, progress, and check-ins.</span>
+        <div className="ik-dashboard-loading-progress"><i /></div>
+      </main>
+    );
+  }
 
   return (
     <main className="ik-shell">
@@ -441,13 +466,6 @@ export function IntakeScreen({
             </footer>
           )}
 
-          {complete && (
-            <footer className="ik-complete-action">
-              <button onClick={() => onDone(acceptAIOnboarding(workspace, today, state))}>
-                Start this paycheck <ArrowRight size={18} />
-              </button>
-            </footer>
-          )}
         </section>
       </div>
     </main>
@@ -476,11 +494,20 @@ function MoneyMap({ plan, context, state, busy, compact = false }: { plan: PlanV
     ? [{ name: "Miscellaneous", amount: miscellaneous }]
     : [];
   const bucketRows = [...spendingRows, ...recurringRows, ...irregularRows];
-  const protectedTotal = bucketRows.reduce((sum, row) => sum + row.amount, 0);
+  const visibleProtectedTotal = bucketRows.reduce((sum, row) => sum + row.amount, 0);
   const goalRows = state.goals.map((goal) => plan?.claims.find((row) =>
     goal.linkedAccountId ? row.linkedAccountId === goal.linkedAccountId : row.name.toLowerCase() === goal.name.toLowerCase()));
   const goalTotal = goalRows.reduce((sum, row) => sum + (row?.amount ?? 0), 0);
-  const free = Math.max(0, income - protectedTotal - goalTotal);
+  // The engine owns available cash. The visible rows are progressive and do
+  // not yet include every reserve, so recomputing from them made this number
+  // disagree with the budget Steward was discussing.
+  const planAvailable = state.incomeConfirmed
+    ? plan?.free ?? context.currentBudget.freePerPaycheck
+    : 0;
+  const free = Math.max(0, planAvailable - goalTotal);
+  const protectedTotal = plan
+    ? Math.max(0, income - planAvailable)
+    : visibleProtectedTotal;
   const totalDetected = context.monthlySpending.length + context.recurringCharges.length;
   const mappedCount = state.spendingReviews.filter((review) => review.allocationPerPaycheck !== null).length +
     (state.recurringReviewed ? context.recurringCharges.length : 0);

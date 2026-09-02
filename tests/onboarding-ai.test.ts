@@ -7,6 +7,7 @@ import {
   EMPTY_AI_ONBOARDING_STATE,
   acceptAIOnboarding,
   buildAIOnboardingContext,
+  checkInCadenceFromAnswer,
   normalizeAIOnboardingState,
   onboardingReplySubmitsImmediately,
   onboardingPhase,
@@ -14,6 +15,13 @@ import {
   recurringReviewProgress,
   type AIOnboardingState,
 } from "../lib/model/onboarding-ai";
+
+test("check-in choices are recognized independently of model-authored phase state", () => {
+  assert.equal(checkInCadenceFromAnswer("Selected: Every other day."), "every_other_day");
+  assert.equal(checkInCadenceFromAnswer("Weekly works for me"), "weekly");
+  assert.equal(checkInCadenceFromAnswer("daily"), "daily");
+  assert.equal(checkInCadenceFromAnswer("Nothing else"), null);
+});
 
 const workspace = () => toModel(demoWorkspace());
 const mappedSpending = (context: ReturnType<typeof buildAIOnboardingContext>) =>
@@ -51,6 +59,24 @@ test("monthly expenses are fully funded by the two checks in an ordinary biweekl
   assert.equal(housing.amount, 1600);
   assert.equal(housing.suggestedPerPaycheck, 800);
   assert.equal(housing.suggestedPerPaycheck * 2, housing.amount);
+});
+
+test("statement categories already covered by bills and subscriptions are not budgeted twice", () => {
+  const base = workspace();
+  const context = buildAIOnboardingContext(base, FIXTURE_TODAY, true);
+  const preview = previewAIOnboarding(base, FIXTURE_TODAY, {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    incomeConfirmed: true,
+    spendingReviews: mappedSpending(context),
+    recurringReviewed: true,
+  });
+  const plan = planCycle(preview, FIXTURE_TODAY)!;
+
+  for (const duplicate of ["Housing", "Debt payments", "Utilities", "Fitness", "Entertainment"]) {
+    assert.equal(preview.buckets.some((bucket) => bucket.kind === "spend" && bucket.name === duplicate), false, duplicate);
+  }
+  assert.ok(plan.reservesTotal + plan.spendTotal <= plan.income);
+  assert.ok(plan.freeCapacity > 0);
 });
 
 test("onboarding confirms income before it maps spending or asks about goals", () => {
@@ -349,6 +375,29 @@ test("a broad multi-select records every selected goal before discussing them", 
   assert.ok(normalized.goals.every((goal) => !goal.detailsComplete));
 });
 
+test("a breathing-room follow-up resolves the broad goal instead of looping", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const previous: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    goals: [{
+      id: "goal:more-breathing-room:0",
+      name: "More breathing room",
+      kind: "commitment",
+      targetAmount: null,
+      targetDate: null,
+      linkedAccountId: null,
+      detailsComplete: false,
+    }],
+  };
+  const normalized = normalizeAIOnboardingState(previous, previous, context, [
+    { role: "assistant", content: "Where would extra breathing room help most?" },
+    { role: "user", content: "Selected: Everyday spending." },
+  ]);
+
+  assert.deepEqual(normalized.goals.map((goal) => goal.name), ["More room for everyday spending"]);
+  assert.equal(normalized.goals[0].detailsComplete, true);
+});
+
 test("a concrete savings choice is complete without an unnecessary amount question", () => {
   const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
   const previous: AIOnboardingState = {
@@ -627,6 +676,23 @@ test("accepted strategies reshape the preview with exact engine-owned amounts", 
   const preview = previewAIOnboarding(base, FIXTURE_TODAY, state);
   assert.equal(preview.buckets.find((bucket) => bucket.id === cut.targetId)?.perCycle, cut.toAmount);
   assert.equal(preview.claims.find((claim) => claim.name === "Japan trip")?.targetAmount, 2500);
+});
+
+test("confirming observed spending cannot accidentally accept a later strategy", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const cancellation = context.strategies.find((entry) => entry.kind === "cancel_subscription")!;
+  const normalized = normalizeAIOnboardingState(
+    { ...EMPTY_AI_ONBOARDING_STATE, acceptedStrategyIds: [cancellation.id] },
+    EMPTY_AI_ONBOARDING_STATE,
+    context,
+    [
+      { role: "assistant", content: `I found ${cancellation.label.replace(/^Cancel /, "")} spending. Is that normal for you?` },
+      { role: "user", content: "Yes, that’s normal." },
+    ],
+  );
+
+  assert.deepEqual(normalized.acceptedStrategyIds, []);
+  assert.equal(normalized.strategyComplete, false);
 });
 
 test("an explicit yes or no records the one strategy Steward just discussed", () => {

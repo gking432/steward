@@ -38,6 +38,14 @@ export type OnboardingGoal = {
 
 export type CheckInCadence = "daily" | "every_other_day" | "weekly";
 
+/** Parse a cadence choice without depending on a model-authored phase. */
+export function checkInCadenceFromAnswer(answer: string): CheckInCadence | null {
+  if (/every[\s-]*other[\s-]*day/i.test(answer)) return "every_other_day";
+  if (/\bdaily\b/i.test(answer)) return "daily";
+  if (/\bweekly\b/i.test(answer)) return "weekly";
+  return null;
+}
+
 export type SpendingReview = {
   id: string;
   normal: boolean;
@@ -379,6 +387,7 @@ function inferredGoalsFromAnswer(
   const purchaseQuestion = /what would you like to buy|what are you planning to buy/i.test(priorAssistant);
   const savingsQuestion = /what (?:should the savings be|are you saving) for/i.test(priorAssistant);
   const debtQuestion = /which debts? should steward include|which debts? should we focus/i.test(priorAssistant);
+  const breathingRoomQuestion = /where would (?:extra )?breathing room help/i.test(priorAssistant);
   if (broadGoalQuestion) {
     return choices.flatMap((choice, index) => {
       const match = [
@@ -414,6 +423,20 @@ function inferredGoalsFromAnswer(
         detailsComplete: true,
       };
     });
+  }
+  if (breathingRoomQuestion) {
+    return choices
+      .filter((answer) => answer && !/^(something else|other)$/i.test(answer))
+      .slice(0, 2)
+      .map((answer, index) => ({
+        id: `goal:breathing-room:${slug(answer)}:${index}`,
+        name: `More room for ${clean(answer).toLowerCase()}`,
+        kind: "commitment" as const,
+        targetAmount: null,
+        targetDate: null,
+        linkedAccountId: null,
+        detailsComplete: true,
+      }));
   }
   if (!purchaseQuestion && !savingsQuestion) return [];
   return choices
@@ -509,6 +532,7 @@ export function normalizeAIOnboardingState(
       if (/^(buy something|purchase)$/i.test(name) && inferredKinds.has("purchase")) return false;
       if (/^(pay off debt|debt)$/i.test(name) && inferredKinds.has("payoff")) return false;
       if (/^(build savings|savings|save money)$/i.test(name) && inferredKinds.has("fund")) return false;
+      if (/^(more breathing room|breathing room)$/i.test(name) && inferredKinds.has("commitment")) return false;
       return true;
     })
     .concat(inferredGoals.filter((inferred) =>
@@ -579,6 +603,10 @@ export function normalizeAIOnboardingState(
       ? context.currentBudget.buckets.find((bucket) => bucket.id === strategy.targetId)?.name
       : context.recurringCharges.find((charge) => charge.id === strategy.targetId)?.merchant;
     if (!target || !priorAssistant.includes(target.toLowerCase())) return false;
+    // Mentioning a merchant or category during statement review is not a
+    // tradeoff proposal. Without this guard, "yes, that's normal" could be
+    // misread as accepting a later cancellation or cut.
+    if (!/\b(cancel|cut|reduce|bring|lower|free|save)\b/i.test(priorAssistant)) return false;
     return strategy.kind === "cancel_subscription" ||
       allowedNumerals([priorAssistant]).has(String(strategy.toAmount));
   };
@@ -666,15 +694,8 @@ export function normalizeAIOnboardingState(
   const budgetAccepted = previous.budgetAccepted ||
     (askedAboutBudget && affirmative && !negative);
   const askedAboutCadence = /\b(check.?in|daily|weekly|every other day|how often)\b/i.test(priorAssistant);
-  const checkInCadence: CheckInCadence | null = previous.checkInCadence ?? (
-    askedAboutCadence && /every other day/i.test(lastUser)
-      ? "every_other_day"
-      : askedAboutCadence && /\bdaily\b/i.test(lastUser)
-        ? "daily"
-        : askedAboutCadence && /\bweekly\b/i.test(lastUser)
-          ? "weekly"
-          : null
-  );
+  const checkInCadence: CheckInCadence | null = previous.checkInCadence ??
+    (askedAboutCadence ? checkInCadenceFromAnswer(lastUser) : null);
   const keepCurrentSpending = /\b(keep|leave)\b.{0,24}\b(spending|budget|things|same|current)\b/i.test(lastUser);
   const reopenStrategy = askedAboutBudget && /\b(no|change|different|another|tradeoff)\b/i.test(lastUser);
   const strategyComplete = !reopenStrategy && (
@@ -797,6 +818,20 @@ export function previewAIOnboarding(
     review.allocationPerPaycheck === null ? [] : [[review.id, review.allocationPerPaycheck] as const]));
   const reviewedCategories = contextCategories(workspace, today);
   const context = buildAIOnboardingContext(workspace, today, true);
+  const recurringMerchants = new Set(
+    context.recurringCharges.map((charge) => charge.merchant.toLowerCase()),
+  );
+  const representedByExistingPlan = new Set([
+    "spending:housing",
+    "spending:debt-payments",
+    "spending:utilities",
+  ]);
+  for (const category of reviewedCategories) {
+    if (category.merchants.length > 0 && category.merchants.every((merchant) =>
+      recurringMerchants.has(merchant.toLowerCase()))) {
+      representedByExistingPlan.add(category.id);
+    }
+  }
   const miscellaneousPerPaycheck = irregularSpendingPerPaycheck(context, state);
   const next: Workspace = {
     ...budgetWorkspace,
@@ -840,7 +875,12 @@ export function previewAIOnboarding(
   next.buckets = [
     ...next.buckets,
     ...state.spendingReviews.flatMap((review) => {
-      if (review.allocationPerPaycheck === null || review.allocationPerPaycheck <= 0 || existingSpendIds.has(review.id)) return [];
+      if (
+        review.allocationPerPaycheck === null ||
+        review.allocationPerPaycheck <= 0 ||
+        existingSpendIds.has(review.id) ||
+        representedByExistingPlan.has(review.id)
+      ) return [];
       const observed = reviewedCategories.find((entry) => entry.id === review.id);
       if (!observed) return [];
       return [{
