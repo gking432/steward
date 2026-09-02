@@ -76,7 +76,10 @@ export const EMPTY_AI_ONBOARDING_STATE: AIOnboardingState = {
 
 /** Binary decisions are complete answers; choice lists remain editable. */
 export function onboardingReplySubmitsImmediately(reply: string) {
-  return /^(yes|no|accept|decline)\b/i.test(reply.trim());
+  const value = reply.trim();
+  return /^(yes|no|accept|decline)\b/i.test(value) ||
+    /^use\s+\$?\d/i.test(value) ||
+    /^(?:use|choose) another amount$/i.test(value);
 }
 
 export type OnboardingStrategy = {
@@ -603,7 +606,7 @@ export function normalizeAIOnboardingState(
   const askedAboutIncome = /\b(paycheck|income|paid|pay)\b/i.test(priorAssistant);
   const activeSpending = context.monthlySpending.find((entry) =>
     priorAssistant.includes(entry.category.toLowerCase()));
-  const askedIfSpendingIsNormal = /\b(normal|usual|typical)\b/i.test(priorAssistant);
+  const askedIfSpendingIsNormal = /\b(?:is|was) that\b.{0,28}\b(normal|usual|typical)\b|\b(normal|usual|typical)\b.{0,20}\bfor you\b/i.test(priorAssistant);
   const askedForSpendingAllocation = /\b(allocate|allocation|bucket|per paycheck|each paycheck)\b/i.test(priorAssistant);
   const unusualSpending = /\b(one.?time|unusual|not normal|not typical|rare|exception)\b/i.test(lastUser);
   const previousSpendingReviews = previous.spendingReviews.filter((review) =>

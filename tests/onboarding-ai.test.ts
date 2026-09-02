@@ -24,10 +24,10 @@ const mappedSpending = (context: ReturnType<typeof buildAIOnboardingContext>) =>
   }));
 
 test("binary replies submit immediately while selectable answers wait", () => {
-  for (const reply of ["Yes", "No, something is off", "Accept", "Decline"]) {
+  for (const reply of ["Yes", "No, something is off", "Accept", "Decline", "Use $75", "Use 56.50", "Choose another amount", "Use another amount"]) {
     assert.equal(onboardingReplySubmitsImmediately(reply), true, reply);
   }
-  for (const reply of ["Travel Rewards Card", "Vehicle", "I’m not sure yet"]) {
+  for (const reply of ["Travel Rewards Card", "Vehicle", "I’m not sure yet", "Use this budget"]) {
     assert.equal(onboardingReplySubmitsImmediately(reply), false, reply);
   }
 });
@@ -83,6 +83,25 @@ test("a normal past expense becomes a per-paycheck bucket only after allocation"
     { role: "user", content: `Use $${observed.suggestedPerPaycheck}.` },
   ]);
   assert.equal(allocated.spendingReviews[0].allocationPerPaycheck, observed.suggestedPerPaycheck);
+});
+
+test("choosing another amount keeps the category open for a typed allocation", () => {
+  const context = buildAIOnboardingContext(workspace(), FIXTURE_TODAY, true);
+  const observed = context.monthlySpending[0];
+  const previous: AIOnboardingState = {
+    ...EMPTY_AI_ONBOARDING_STATE,
+    spendingReviews: [{ id: observed.id, normal: true, allocationPerPaycheck: null }],
+  };
+  const normalized = normalizeAIOnboardingState(previous, previous, context, [
+    {
+      role: "assistant",
+      content: `To fully cover ${observed.amount} in a normal month, use ${observed.suggestedPerPaycheck} for ${observed.category} per paycheck?`,
+    },
+    { role: "user", content: "Selected: Choose another amount." },
+  ]);
+
+  assert.equal(normalized.spendingReviews[0].normal, true);
+  assert.equal(normalized.spendingReviews[0].allocationPerPaycheck, null);
 });
 
 test("unusual spending rolls into one miscellaneous paycheck bucket instead of disappearing", () => {

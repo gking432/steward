@@ -557,10 +557,10 @@ export async function POST(request: Request) {
           return {
             enhanced: false,
             message: wantsDifferentAmount
-              ? `What should the ${category.category} bucket be per paycheck?`
+              ? `What amount would you like to use for ${category.category} per paycheck?`
               : `To fully cover ${formatCurrency(category.amount)} in a normal month, set aside ${formatCurrency(category.suggestedPerPaycheck)} from each paycheck. Use that for the ${category.category} bucket?`,
             quickReplies: wantsDifferentAmount
-              ? [`Use ${formatCurrency(category.suggestedPerPaycheck)}`, "I’ll type an amount"]
+              ? []
               : [`Use ${formatCurrency(category.suggestedPerPaycheck)}`, "Choose another amount"],
             selectionMode: "multiple",
             showPlan: false,

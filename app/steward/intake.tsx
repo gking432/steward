@@ -260,11 +260,17 @@ export function IntakeScreen({
     answerInputRef.current.scrollTop = 0;
   }, [typed]);
 
+  useEffect(() => {
+    if (busy || !/^what amount would you like to use/i.test(activeReply?.message ?? "")) return;
+    answerInputRef.current?.focus();
+  }, [activeReply, busy]);
+
   const complete = state.complete;
   const visibleTurns = turns.slice(visibleTurnStart);
   const displayPhase = phase === "complete" ? "checkin" : phase;
   const phaseIndex = Math.max(0, PHASES.indexOf(displayPhase));
   const currentMessage = activeReply?.message ?? "";
+  const amountPrompt = /^what amount would you like to use/i.test(currentMessage);
   const merchantChoices = quickReplies.length > 0 && quickReplies.every((reply) =>
     context.recurringCharges.some((charge) => charge.merchant === reply));
   const showRecurring = phase === "recurring" && !state.recurringReviewed && context.recurringCharges.length > 0;
@@ -422,7 +428,8 @@ export function IntakeScreen({
                       submitAnswer();
                     }
                   }}
-                  placeholder={selectedReplies.length ? "Include more context?" : "Message Steward"}
+                  placeholder={amountPrompt ? "Enter amount" : selectedReplies.length ? "Include more context?" : "Message Steward"}
+                  inputMode={amountPrompt ? "decimal" : "text"}
                   aria-label="Message Steward"
                   disabled={busy}
                 />
