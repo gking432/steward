@@ -7,6 +7,7 @@ import {
   EMPTY_AI_ONBOARDING_STATE,
   acceptAIOnboarding,
   buildAIOnboardingContext,
+  checkInCadenceAnswerCompletes,
   checkInCadenceFromAnswer,
   normalizeAIOnboardingState,
   onboardingReplySubmitsImmediately,
@@ -21,6 +22,20 @@ test("check-in choices are recognized independently of model-authored phase stat
   assert.equal(checkInCadenceFromAnswer("Weekly works for me"), "weekly");
   assert.equal(checkInCadenceFromAnswer("daily"), "daily");
   assert.equal(checkInCadenceFromAnswer("Nothing else"), null);
+});
+
+test("a weekly answer after the cadence question always triggers the dashboard handoff", () => {
+  assert.equal(
+    checkInCadenceAnswerCompletes(
+      "Selected: Weekly.",
+      "I’ll keep you on track. How often should I check in: weekly, daily, or every other day?",
+    ),
+    true,
+  );
+  assert.equal(
+    checkInCadenceAnswerCompletes("Weekly", "How much do you spend weekly?"),
+    false,
+  );
 });
 
 const workspace = () => toModel(demoWorkspace());

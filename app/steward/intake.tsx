@@ -30,9 +30,9 @@ import {
   acceptAIOnboarding,
   acceptedCancellationStrategies,
   buildAIOnboardingContext,
+  checkInCadenceAnswerCompletes,
   checkInCadenceFromAnswer,
   irregularSpendingPerPaycheck,
-  onboardingPhase,
   onboardingReplySubmitsImmediately,
   previewAIOnboarding,
   type AIOnboardingContext,
@@ -200,10 +200,17 @@ export function IntakeScreen({
       if (!payload?.message || !payload.state) throw new Error("Invalid onboarding response");
 
       const answeredCadence = checkInCadenceFromAnswer(said ?? "");
-      const cadenceJustChosen = Boolean(answeredCadence) &&
-        onboardingPhase(stateRef.current, turnContext) === "checkin";
-      const finalState = cadenceJustChosen
-        ? { ...payload.state, checkInCadence: answeredCadence, complete: true }
+      const priorAssistant = [...conversation].reverse()
+        .find((turn) => turn.role === "assistant")?.content ?? "";
+      const handoffReady = payload.phase === "complete" ||
+        payload.state.complete ||
+        checkInCadenceAnswerCompletes(said ?? "", priorAssistant);
+      const finalState = handoffReady
+        ? {
+            ...payload.state,
+            checkInCadence: answeredCadence ?? payload.state.checkInCadence,
+            complete: true,
+          }
         : payload.state;
       const nextPreview = previewAIOnboarding(workspace, today, finalState);
       const plan = payload.showPlan

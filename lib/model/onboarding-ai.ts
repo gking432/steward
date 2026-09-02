@@ -46,6 +46,12 @@ export function checkInCadenceFromAnswer(answer: string): CheckInCadence | null 
   return null;
 }
 
+/** A cadence answer closes onboarding when it follows the cadence question. */
+export function checkInCadenceAnswerCompletes(answer: string, priorAssistant: string) {
+  return checkInCadenceFromAnswer(answer) !== null &&
+    /\b(check.?in|how often|rhythm)\b|\bweekly\b.{0,80}\bdaily\b|\bdaily\b.{0,80}\bweekly\b/i.test(priorAssistant);
+}
+
 export type SpendingReview = {
   id: string;
   normal: boolean;
