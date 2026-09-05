@@ -32,7 +32,7 @@ cycle uses deltas over the union of old and new targets, including removed lines
 `planCycle`, `allocate`, and `buildPaydayProposal` own the numbers. Proposal building
 removes the current cycle's existing allocations from the funding basis before
 recomputing, so a replacement does not allocate a second paycheck. Plan and Ask
-use this result. ReviewSetup presents full obligations, annualized usual rates,
+use this result. ConversationSetup presents full obligations, annualized usual rates,
 current contributions and catch-up reasons before confirming.
 
 Current liquidity is separate from expected paycheck capacity. Missing or stale
@@ -76,7 +76,8 @@ header on the public Vercel adapter does not authenticate a user.
 Paid AI is opt-in with bounded request bodies, two concurrent generations per
 process, 50 calls per process/day, and capped output tokens. Those process limits
 are backstops, not durable multi-instance billing controls. A shared budget and
-operational policy are required before public enablement.
+operational policy remain prerequisites for a broader multi-tenant release. The
+portfolio demo is enabled with these instance backstops.
 
 Purchase scenarios use the same projection loop and calendar as the baseline,
 with only an explicit first-cycle capacity reduction. Spending covered by a
@@ -87,3 +88,11 @@ Detected fixed subscriptions are recurring reserve obligations, with their full
 charge, cadence, and next due date. Legacy automatically generated merchant
 spending buckets migrate at load boundaries while retaining IDs. They are excluded
 from discretionary overspending alerts.
+
+The primary onboarding UI is ConversationSetup. POST /api/steward-chat uses the
+Responses API to produce a structured ChatDraft with user evidence. The server
+validates it and workspaceFromChat constructs a reviewable preview without writing
+state. PlanCycle and evaluatePurchase compute the displayed financial results.
+Only explicit client confirmation applies the draft to the revisioned workspace.
+Ask uses the same model endpoint and retains explicitly labeled deterministic
+calculation fallback during provider failure. See AI_SYSTEM.md for live evidence.

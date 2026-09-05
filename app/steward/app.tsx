@@ -988,12 +988,14 @@ export function StewardApp({
   fixedToday,
   demoMode = false,
   manualMode = false,
+  showStatementImport = false,
 }: {
   initialState: StewardState;
   syncWithServer?: boolean;
   fixedToday?: string;
   demoMode?: boolean;
   manualMode?: boolean;
+  showStatementImport?: boolean;
 }) {
   const { workspace, update, loading, saveState, setWorkspaceFromServer, retrySave } = useWorkspace(
     initialState,
@@ -1054,7 +1056,7 @@ export function StewardApp({
     );
   }
 
-  if (demoMode && hasData && !workspace.profile.onboardingComplete && !demoStatementsReviewed) {
+  if (showStatementImport && demoMode && hasData && !workspace.profile.onboardingComplete && !demoStatementsReviewed) {
     return (
       <DemoStatementImport
         workspace={workspace}

@@ -7,8 +7,8 @@ Its financial calculations are deterministic. Planning and confirming allocation
 ## Try it
 
 - `/fixture`: immediately explore the dated synthetic household.
-- `/demo`: review sample statements, correct amounts together, choose a priority,
-  inspect the actual paycheck proposal (including catch-up amounts), and confirm.
+- `/demo`: talk with the AI assistant, negotiate priorities, then review the
+  calculated paycheck proposal (including catch-up amounts) and confirm.
 - `/manual`: build a session-only plan without a bank connection.
 - `/`: load a private workspace when verified identity and storage are configured;
   sample/manual entry stays available while loading.
@@ -32,7 +32,7 @@ Private drafts remain in memory after a failed save; export before closing.
   explicit retry/export recovery. Private endpoints fail closed by default.
 - Read-only bank sync implementation with pagination restart, deduplication,
   preservation of user corrections, and atomic conditional transaction/cursor commit.
-- Native accessible dialogs and deterministic Ask follow-ups and goal proposals.
+- Native accessible dialogs, model-led conversations, and calculated goal proposals.
 
 ## Run and verify
 
@@ -56,10 +56,10 @@ use requires verification of that gateway contract. `local` is an explicit local
 adapter and is rejected when NODE_ENV is production.
 
 AI generation is off unless `STEWARD_AI_ENABLED=true` and an OpenAI key are both
-configured. Critical purchase verdict wording is deterministic. Optional generation
+configured. Critical purchase verdict wording is deterministic. Conversation generation
 has per-process request/concurrency/call/token limits; a shared gateway spend limit
-is still required before enabling it on a public multi-instance deployment.
-The main onboarding and Ask purchase journeys work without AI calls.
+remains necessary before a broader multi-tenant release. This portfolio demo is enabled with those instance backstops.
+The main onboarding and Ask paths use the OpenAI Responses API to interpret conversation. The financial engine calculates results. AI failure is explicit, with retry and manual calculation paths.
 
 Bank routes require verified identity, D1, Plaid credentials, and encryption setup.
 No real accounts were connected during the September review implementation. Live
@@ -78,3 +78,11 @@ manual review. See the dated review checklist for remaining calendar limits.
 - [AI behavior](AI_SYSTEM.md)
 - [Verification report](outputs/steward-verification.md)
 - [Security](SECURITY.md)
+
+## Conversational onboarding
+
+Start at `/demo` to talk with Steward about priorities and build a draft. Inspect
+statements at `/demo?statements=1`, or skip onboarding with `/fixture`. Review the
+calculated plan and catch-up amounts before confirming. Model calls are enabled
+on the Vercel deployment. See AI_SYSTEM.md for the actual nine-turn live evaluation
+and its limits. This is a working AI portfolio demo, not evidence of user adoption.

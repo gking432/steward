@@ -11,13 +11,15 @@ import { StewardApp } from "../steward/app";
 
 export const dynamic = "force-dynamic";
 
-export default function DemoSteward() {
+export default async function DemoSteward({searchParams}:{searchParams:Promise<{statements?:string}>}) {
+  const params=await searchParams;
   return (
     <StewardApp
       initialState={demoWorkspace()}
       syncWithServer={false}
       fixedToday={FIXTURE_TODAY}
       demoMode
+      showStatementImport={params.statements === "1"}
     />
   );
 }

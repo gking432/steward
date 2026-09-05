@@ -24,6 +24,7 @@ export function validateChatDraft(raw:unknown, workspace:Workspace, turns:ChatTu
  for(const goal of draft.goals){
   if(!evidence(goal.evidence))throw Error('Goal needs user evidence');
   if(goal.date && !Number.isFinite(Date.parse(goal.date)))throw Error('Invalid goal date');
+  if(goal.accountId && !workspace.accounts.some(a=>a.id===goal.accountId))throw Error('Unknown account');
   if(goal.kind==='payoff' && !workspace.claims.some(c=>c.kind==='payoff'&&c.linkedAccountId===goal.accountId))throw Error('Choose a known debt');
  }
  for(const edit of draft.bucketEdits){if(!workspace.buckets.some(b=>b.id===edit.id)||!evidence(edit.evidence))throw Error('Unknown or unsupported bill edit');}
@@ -43,7 +44,7 @@ export function workspaceFromChat(base:Workspace,today:string,draft:ChatDraft,se
    if(debt){next={...next,claims:next.claims.map(c=>c.id===debt.id?{...c,rank,status:'active'}:c)};continue;}
    const existing=next.claims.find(c=>c.id===`claim:chat:${g.id}`||c.name.toLowerCase()===g.name.toLowerCase());
    if(existing){next={...next,claims:next.claims.map(c=>c.id===existing.id?{...c,name:g.name,targetAmount:g.amount??c.targetAmount,openEnded:g.kind==='fund'&&g.amount===null,status:'active',rank:setup?rank:c.rank,wantBy:g.date??c.wantBy}:c)};continue;}
-   next={...next,claims:[...next.claims,{id:`claim:chat:${g.id}`,name:g.name,kind:g.kind,targetAmount:g.amount??0,openEnded:g.kind==='fund'&&g.amount===null,fundedAmount:0,rank,status:g.amount!==null||g.kind==='fund'?'active':'someday',horizon:'arrival',divisible:g.kind==='fund',delayCost:g.date?{type:'deadline',date:g.date}:{type:'none'},wantBy:g.date??undefined,protected:false}]};
+   next={...next,claims:[...next.claims,{id:`claim:chat:${g.id}`,name:g.name,kind:g.kind,targetAmount:g.amount??0,openEnded:g.kind==='fund'&&g.amount===null,fundedAmount:0,linkedAccountId:g.accountId??undefined,rank,status:g.amount!==null||g.kind==='fund'?'active':'someday',horizon:'arrival',divisible:g.kind==='fund',delayCost:g.date?{type:'deadline',date:g.date}:{type:'none'},wantBy:g.date??undefined,protected:false}]};
  }
  return {...next,revision:(base.revision??0)+1};
 }

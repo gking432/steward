@@ -1,12 +1,12 @@
 # Project status — September 5, 2026
 
-Steward is a deterministic budgeting application with synthetic sample and manual
+Steward is an AI-led conversational budgeting application with deterministic calculations with synthetic sample and manual
 session modes. It is not certified for general public banking use.
 
 Implemented: canonical revisioned financial state, explicit bill and goal drafts,
 reviewed onboarding/catch-up amounts, open-ended savings, current-liquidity guards,
 allocation replacement, category corrections and splits, safe exports, serialized
-save acknowledgements, conditional bank cursor commits, and bounded optional AI.
+save acknowledgements, conditional bank cursor commits, and a live Responses API conversation. Nine scripted live turns passed; see AI_SYSTEM.md.
 Stored check-in preferences do not deliver email or push notifications.
 
 See [the 35-item review checklist](docs/steward-review-checklist.md) for each
