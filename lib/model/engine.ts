@@ -111,12 +111,17 @@ export function currentCycle(workspace: Workspace, today: string): Cycle | null 
  * landing before the next payday must be covered from money already in hand, so
  * the minimum is 1 and the whole amount is required this cycle.
  */
+export function billAmount(bucket: Bucket): number {
+  return bucket.scheduledAmount && bucket.dueDate && bucket.dueDate >= bucket.scheduledAmount.effectiveDate
+    ? bucket.scheduledAmount.amount : bucket.amountDue ?? 0;
+}
+
 export function reserveRequirement(
   bucket: Bucket,
   workspace: Workspace,
   today: string,
 ): { required: number; cyclesRemaining: number; outstanding: number; steadyRate: number } {
-  const amountDue = bucket.amountDue ?? 0;
+  const amountDue = billAmount(bucket);
   const outstanding = Math.max(0, amountDue - (bucket.reserved ?? 0));
 
   const paydays = bucket.dueDate
@@ -321,7 +326,7 @@ export function steadyFreeCapacity(workspace: Workspace) {
     .filter((bucket) => bucket.kind === "reserve" && bucket.frequency !== "one-time")
     .reduce(
       (sum, bucket) =>
-        sum + (bucket.amountDue ?? 0) / cyclesPerPeriod(bucket.frequency, workspace),
+        sum + billAmount(bucket) / cyclesPerPeriod(bucket.frequency, workspace),
       0,
     );
   const spend = workspace.buckets
@@ -550,7 +555,7 @@ export function projectArrivals(
           return {
             ...bucket,
             dueDate: nextDueDate(bucket.dueDate, bucket.frequency),
-            reserved: round2(Math.max(0, reserved - (bucket.amountDue ?? 0))),
+            reserved: round2(Math.max(0, reserved - billAmount(bucket))),
           };
         }
         return { ...bucket, reserved };

@@ -1241,7 +1241,7 @@ export function ConversationSetup({
   );
 }
 
-function IncomeFacts({
+export function IncomeFacts({
   workspace,
   onSave,
 }: {
@@ -1303,7 +1303,7 @@ function IncomeFacts({
     </form>
   );
 }
-function BucketFacts({
+export function BucketFacts({
   workspace,
   group,
   onSave,

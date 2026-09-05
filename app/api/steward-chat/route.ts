@@ -19,6 +19,7 @@ const inputSchema = z.object({
   workspace: workspaceSchema,
   today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   mode: z.enum(["setup", "ask"]),
+  experience: z.literal("conversation").optional(),
   stage: z.string().max(30).optional(),
   confirmed: z.array(z.string().max(30)).max(3).optional(),
   draft: chatDraftSchema,
@@ -30,7 +31,7 @@ const inputSchema = z.object({
       }),
     )
     .min(1)
-    .max(30),
+    .max(100),
 });
 const nullableNumber = { type: ["number", "null"] };
 const nullableString = { type: ["string", "null"] };
@@ -65,9 +66,10 @@ const properties = {
       properties: {
         id: { type: "string" },
         amount: { type: "number" },
+        effectiveDate: nullableString,
         evidence: { type: "string" },
       },
-      required: ["id", "amount", "evidence"],
+      required: ["id", "amount", "effectiveDate", "evidence"],
     },
   },
   income: nullableNumber,
@@ -86,6 +88,9 @@ const properties = {
     ],
   },
   readyToReview: { type: "boolean" },
+  responseKind: { type: "string", enum: ["explore", "clarify", "update", "proposal"] },
+  preferences: { type: "array", items: { type: "string" } },
+  pictureConfirmed: { type: "boolean" },
   timing: {
     anyOf: [
       { type: "null" },
@@ -138,7 +143,7 @@ export async function POST(request: Request) {
   );
   if (!parsed.success)
     return Response.json({ error: "Invalid conversation." }, { status: 400 });
-  const { workspace, today, draft, turns, mode, stage, confirmed } =
+  const { workspace, today, draft, turns, mode, stage, confirmed, experience } =
     parsed.data;
   const plan = planCycle(workspace, today);
   const calculatedDraft = workspaceFromChat(
@@ -259,7 +264,10 @@ export async function POST(request: Request) {
   };
   const result = await planningConversation(
     context,
-    instructions,
+    instructions + (experience === "conversation" ? `
+This is the conversational onboarding experience. Distinguish exploratory motivation from a concrete plan request. responseKind=explore for feelings, values, tentative desires: retain BOTH cushion/security and going-out/enjoyment in preferences, acknowledge both and ask one useful question about target versus comfortable contribution. Do NOT create a new goal, change an allocation, or set readyToReview for an exploratory sentence without a concrete target/contribution or explicit instruction to allocate. Preserve existing draft fields. Preferences are qualitative context, not financial instructions. Do not demand approval of an interpretation. Clear questions after their answers; never ask again for an amount, timing or priority already supplied. Concrete multi-detail answers can form a proposal directly. responseKind=proposal and readyToReview=true only when the user has supplied enough to calculate a plan. A clear fact correction is responseKind=update; preserve goals and preferences and acknowledge it as an update to the session's planning numbers, not a bank or saved-plan action. Ambiguity is responseKind=clarify: leave the uncertain fact unchanged, ask ONE targeted question. pictureConfirmed retains previous state and becomes true when user confirms their starting picture; if confirmedGroups has all three it is true. After confirmation ask why they came and what would feel better, unless they already told you.
+Bill edits support effectiveDate YYYY-MM-DD: null means current full amount. For rent goes up NEXT MONTH, use the first day of next calendar month relative to context.today: the new amount applies to the first bill due on/after that date, never to the current bill. Preserve all existing scheduled edits when changing unrelated facts. If the effective time cannot be resolved, ask before editing. The UI displays the exact amount and effective date; briefly explain in words that the current bill is unchanged and later bills/projections reflect the change. Ask if the rest of the picture looks right when not yet confirmed. Do not expose candidate, tool, validation or internal terminology. Proposals always require a final Use this plan button; a model never accepts a plan.
+` : ""),
     tools,
     execute,
     stage === "tradeoffs"

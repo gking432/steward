@@ -43,6 +43,7 @@ export const chatDraftSchema = z
           .object({
             id: z.string().max(120),
             amount: money,
+            effectiveDate: date.nullable().optional(),
             evidence: z.string().min(1).max(1000),
           })
           .strict(),
@@ -55,6 +56,9 @@ export const chatDraftSchema = z
       .strict()
       .nullable(),
     readyToReview: z.boolean(),
+    responseKind: z.enum(["explore", "clarify", "update", "proposal"]).optional(),
+    preferences: z.array(z.string().max(300)).max(8).optional(),
+    pictureConfirmed: z.boolean().optional(),
     timing: z
       .object({
         nextPayday: date.nullable(),
@@ -112,6 +116,8 @@ export function validateChatDraft(
       !evidence(edit.evidence)
     )
       throw Error("Unknown or unsupported bill edit");
+    if (edit.effectiveDate && workspace.buckets.find(b => b.id === edit.id)?.kind !== "reserve")
+      throw Error("Effective dates are supported for bills only");
   }
   if (draft.timing && !evidence(draft.timing.evidence))
     throw Error("Pay timing needs evidence");
@@ -143,8 +149,12 @@ export function workspaceFromChat(
     };
   for (const edit of draft.bucketEdits) {
     const b = next.buckets.find((b) => b.id === edit.id);
-    if (b)
+    if (b && edit.effectiveDate) {
+      next = { ...next, buckets: next.buckets.map(row => row.id === b.id
+        ? { ...row, scheduledAmount: { amount: edit.amount, effectiveDate: edit.effectiveDate! } } : row) };
+    } else if (b) {
       next = editPlanRow(next, { id: b.id, name: b.name, amount: edit.amount });
+    }
   }
   const selected = new Set(
     draft.goals.filter((g) => g.accountId).map((g) => g.accountId),

@@ -50,6 +50,7 @@ import type { StewardState } from "../../lib/steward-types";
 import { BucketsScreen } from "./buckets";
 import { ConnectScreen } from "./connect";
 import { Modal } from "./dialog";
+import { OnboardingConversation } from "./onboarding-conversation";
 import { ConversationSetup } from "./conversation-setup";
 import { clearPlanningDrafts, type SessionIntent } from "../../lib/model/planning-session";
 import { HomeScreen } from "./home";
@@ -910,7 +911,7 @@ export function StewardApp({
   // rest of the app opens only once you agree to it.
   if (!workspace.profile.onboardingComplete) {
     return (
-      <ConversationSetup workspace={workspace} today={today} onDone={(next) => update(() => next)} manual={manualMode}
+      <OnboardingConversation workspace={workspace} today={today} onDone={(next) => update(() => next)} manual={manualMode}
       />
     );
   }

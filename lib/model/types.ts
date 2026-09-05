@@ -68,6 +68,8 @@ export type Bucket = {
 
   /** `reserve`: the full amount owed on `dueDate`. */
   amountDue?: number;
+  /** Full bill changes from the first obligation on or after this date. */
+  scheduledAmount?: { amount: number; effectiveDate: string };
   /** `reserve`: ISO date the money leaves. */
   dueDate?: string;
   /** `reserve`: how much has been set aside so far toward `amountDue`. */

@@ -324,4 +324,5 @@ export function clearPlanningDrafts(
   for (const intent of ["setup", "priority", "paycheck", "purchase"])
     storage.removeItem(`steward-planning:${pathname}:${intent}`);
   storage.removeItem(`steward-chat:${pathname}`);
+  storage.removeItem(`steward-onboarding:${pathname}`);
 }
