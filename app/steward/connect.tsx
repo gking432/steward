@@ -26,14 +26,15 @@ export function ConnectScreen() {
       </header>
 
       <div className="cx-copy">
-        <h1>Let&apos;s see where your money actually goes.</h1>
+        <h1>Let&apos;s build your plan through a conversation.</h1>
         <p>
           Explore synthetic statements or build a manual plan. Real bank connections are unavailable on this demo deployment.
         </p>
       </div>
 
       <footer className="cx-action">
-        <a className="cx-demo" href="/fixture">Explore a sample plan</a>
+        <a className="cx-demo" href="/demo">Talk to Steward · try AI onboarding</a>
+        <a className="cx-demo cx-secondary" href="/fixture">Explore a sample plan</a>
         <a className="cx-demo cx-secondary" href="/manual">Build a manual plan</a>
         <button className="cx-bank-disabled" disabled>
           <Landmark size={18} />

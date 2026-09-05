@@ -53,7 +53,7 @@ import type { StewardState } from "../../lib/steward-types";
 import { BucketsScreen } from "./buckets";
 import { ConnectScreen } from "./connect";
 import { Modal } from "./dialog";
-import { ReviewSetup } from "./review-setup";
+import { ConversationSetup } from "./conversation-setup";
 import { AskScreen } from "./ask";
 import { HomeScreen } from "./home";
 import { SettingsSheet } from "./settings";
@@ -119,7 +119,7 @@ function DemoStatementImport({
         </section>
         <footer className="dm-action dm-welcome-action">
           <a className="bk-primary" href="/fixture">Explore a sample plan</a>
-          <button onClick={() => setStage("plaid")}>Build a plan from sample statements</button>
+          <button onClick={() => setStage("plaid")}>Build a plan from sample statements · chat with Steward</button>
           <small>You&apos;ll review synthetic bank data next. The finished plan stays in this tab.</small>
         </footer>
       </main>
@@ -1069,7 +1069,7 @@ export function StewardApp({
   // rest of the app opens only once you agree to it.
   if (!workspace.profile.onboardingComplete) {
     return (
-      <ReviewSetup workspace={workspace} today={today} onDone={(next) => update(() => next)} manual={manualMode}
+      <ConversationSetup workspace={workspace} today={today} onDone={(next) => update(() => next)} manual={manualMode}
       />
     );
   }

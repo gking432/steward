@@ -31,6 +31,7 @@ import {
 import { formatDate, formatMoney } from "../../lib/model/engine";
 import type { Workspace } from "../../lib/model/types";
 import "./ask.css";
+import { EMPTY_CHAT_DRAFT, type ChatDraft } from "../../lib/model/chat-plan";
 import { resolveFollowup, type PendingIntent } from "../../lib/model/conversation";
 
 type Message = {
@@ -41,6 +42,7 @@ type Message = {
   /** A claim this message is about, so "sooner?" has something to act on. */
   claimId?: string;
   options?: Acceleration;
+  planProposal?: { workspace: Workspace; revision: number };
   proposal?: { claim: Workspace["claims"][number]; revision: number };
   debtChoices?: { id: string; name: string }[];
 };
@@ -74,6 +76,8 @@ export function AskScreen({
       text: "Tell me what you want and I'll show you how to get there. Or ask what this paycheck should do.",
     },
   ]);
+  const [chatDraft,setChatDraft]=useState<ChatDraft>(EMPTY_CHAT_DRAFT);
+  const [aiStatus,setAiStatus]=useState("AI conversation · calculated answers");
   const [pending, setPending] = useState<PendingIntent | null>(null);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -170,6 +174,22 @@ export function AskScreen({
 
     const lower = text.toLowerCase();
     try {
+      try {
+        const response=await fetch('/api/steward-chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({workspace,today,mode:'ask',draft:chatDraft,turns:[...messages.map(m=>({role:m.from==='you'?'user':'assistant',content:m.text.slice(0,1200)})),{role:'user',content:text}].slice(-30)}),signal:AbortSignal.timeout(25000)});
+        const result=await response.json();
+        if(response.ok){
+          setChatDraft(result.draft);setAiStatus('AI conversation · calculated answers');
+          setMessages(current=>current.map(m=>({...m,proposal:undefined,planProposal:undefined})));
+          if(result.draft.purchase?.amount){await answerPurchase(result.draft.purchase.name,result.draft.purchase.amount);return;}
+          const changes=result.draft.goals.length||result.draft.bucketEdits.length||result.draft.income!==null;
+          say({from:'steward',text:result.draft.message,
+            lines:changes?[...result.draft.goals.map((g:ChatDraft['goals'][number])=>`${g.name}: ${g.amount===null?'open target':formatMoney(g.amount)}${g.date?` by ${g.date}`:''}`),...result.draft.bucketEdits.map((e:ChatDraft['bucketEdits'][number])=>`${workspace.buckets.find(b=>b.id===e.id)?.name}: ${formatMoney(e.amount)}`),...(result.draft.income===null?[]:[`Take-home per paycheck: ${formatMoney(result.draft.income)}`]),'Draft only. Review before applying.']:undefined,
+            planProposal:changes&&!result.draft.goals.some((g:ChatDraft['goals'][number])=>g.kind==='purchase'&&!g.amount)?{workspace:result.preview,revision:result.sourceRevision}:undefined});
+          return;
+        }
+        setAiStatus('AI unavailable · calculation tools');
+        say({from:'steward',text:result.error??'AI is unavailable. The calculation tools below still work.'});
+      } catch {setAiStatus('AI unavailable · calculation tools');say({from:'steward',text:'The AI connection failed. I can still check explicit purchases with the calculation engine.'});}
       const followup = resolveFollowup(pending, text);
       if (followup && 'cancelled' in followup) { setPending(null); setPendingDebtIds([]); setMessages(current => current.map(m => ({ ...m, proposal: undefined }))); say({from:"steward",text:"Cancelled. Your plan is unchanged."}); return; }
       if (followup && 'amount' in followup) { if (followup.kind === 'purchase') await answerPurchase(followup.name, followup.amount); else answerWant(followup.name, followup.amount, followup.wantBy); return; }
@@ -291,6 +311,12 @@ export function AskScreen({
               </ul>
             )}
 
+            {message.planProposal && <div className="ak-debt-choices"><button onClick={()=>{
+              if(message.planProposal!.revision!==(workspace.revision??0)){say({from:'steward',text:'Your plan changed. Ask again to review a fresh draft.'});return;}
+              update(()=>message.planProposal!.workspace);setChatDraft(EMPTY_CHAT_DRAFT);setPending(null);
+              setMessages(current=>current.map(m=>({...m,planProposal:undefined,proposal:undefined})));
+              say({from:'steward',text:'Applied the reviewed draft to this session. Check the save status for persistence.'});
+            }}>Apply reviewed draft</button><button onClick={()=>{setChatDraft(EMPTY_CHAT_DRAFT);setMessages(current=>current.map(m=>({...m,planProposal:undefined})));}}>Cancel draft</button></div>}
             {message.proposal && <div className="ak-debt-choices">
               <button onClick={() => {
                 if (message.proposal!.revision !== (workspace.revision ?? 0)) { say({from:"steward",text:"Your plan changed. Ask again to review an updated proposal."}); return; }
@@ -384,7 +410,7 @@ export function AskScreen({
         </button>
       </form>
       <p className="ak-fineprint">
-        Steward works from your own numbers. Planning guidance, not financial advice.
+        {aiStatus}. Planning guidance, not financial advice.
       </p>
     </div>
   );
