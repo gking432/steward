@@ -1,36 +1,101 @@
-# AI system
+# How Steward’s AI works
 
-Steward uses the OpenAI Responses API for its main onboarding conversation and
-natural-language Ask requests. The model maintains structured, unconfirmed goals,
-amount corrections, priorities, and purchase intent across the transcript. The
-front door is `/demo`; the statement inspection is optional.
+Steward’s primary experience is a staged planning session, backed by the live
+OpenAI Responses API. The model interprets priorities, extracts candidate facts,
+handles corrections and topic changes, asks about ambiguity, and selects narrowly
+scoped tools. The application owns stage transitions, financial arithmetic,
+persistence, and approval.
 
-The model receives messages and selected plan facts, not bank credentials. Output
-uses a strict JSON schema, then application validation checks known IDs, amounts,
-and user-quoted evidence. Evidence checks establish provenance, not a mathematical
-proof of semantic correctness; the user reviews interpretations before applying.
+## A session, not a free-writing agent
 
-The financial engine owns allocations, liquidity, goal dates and purchase verdicts.
-The model's conversational text cannot apply changes. Financial figures and verdicts
-are rendered from deterministic cards. Confirmation uses the reviewed workspace
-revision. A failed or rejected model call is visible; onboarding keeps its draft
-and offers retry/manual review, while Ask explicitly labels calculation fallback.
+`PlanningSession` separates:
 
-Configuration: server-only OPENAI_API_KEY and STEWARD_AI_ENABLED=true. The default
-model is gpt-5.6-sol. Vercel production has AI enabled. Requests have bounded input,
-a twenty-second provider timeout, strict output schema, a 2,400-token output cap,
-and store:false. Existing routes retain their own output caps. In-process limits
-allow two concurrent generations, fifty calls per day, and twenty endpoint
-requests per minute. These are instance backstops, not a shared deployment-wide
-spending guarantee; a durable global budget remains production-readiness work.
+- Source financial context and the workspace revision/date it came from.
+- User-confirmed income, bill, and spending groups.
+- Candidate `ChatDraft` interpretations, including exact user-quoted evidence.
+- Accepted intent, unresolved questions, and deterministic projection assumptions.
+- A previous scenario for comparison and the identity of the exact reviewed plan.
 
-## Actual live evaluation
+The canvas progresses through starting point, financial rhythm, priorities,
+building, trade-offs, and review. Home continues with contextual priority,
+paycheck, and purchase sessions. Back retains completed work. A versioned,
+validated sessionStorage snapshot restores drafts in the same tab. Earlier fact
+edits invalidate confirmation/review and recalculate downstream results.
 
-On September 5, 2026, nine scripted turns passed against an actual Vercel candidate
-using the configured OpenAI model: open-ended savings, multiple goals, correction,
-priority ordering, selective cancellation, missing purchase price, numeric reply
-with deterministic verdict, topic switch, and correction on the new topic.
-Run `npx tsx scripts/eval-conversation.ts DEPLOYMENT_URL` to repeat. The report at
-`outputs/live-conversation-evaluation.json` records provider model and response IDs,
-usage, latency, inputs and outputs. This is a small functional evaluation, not a
-claim of production accuracy, user adoption, or broad adversarial robustness.
+## Model tools
+
+The server exposes strict JSON-schema function tools through Responses:
+
+| Tool | Permitted result |
+| --- | --- |
+| `read_context` | Return selected financial context with confirmation status. |
+| `propose_update` | Validate a complete candidate interpretation and calculate its draft allocations. |
+| `calculate_plan` | Run the deterministic paycheck engine on the current candidate. |
+| `compare_scenarios` | Return engine-calculated before/after contributions and projected arrival dates. |
+| `prepare_review` | Return proposal metadata and an explicit requirement for user approval. |
+
+No tool writes a workspace, accesses banking credentials, transfers money, or pays
+bills. Function call outputs and reasoning items are returned to the model through
+a bounded tool loop. The UI records completed tool names in session history.
+Only a successful validated `propose_update` can become a candidate. The application
+requires that tool on every turn and `compare_scenarios` in the trade-off stage.
+Other tool selection remains model-driven. A rejected tool result is returned to
+the model for repair within the same round/time bounds; rejected calls never count
+as successful tool completion.
+
+The model receives user messages and selected plan/account information. Raw
+transaction descriptions are excluded. Imported names and all transcript content
+remain untrusted data under the developer contract. Exact user evidence, known
+IDs, calendar dates, cents, and field allowlists are checked after generation.
+Evidence proves provenance, not semantic truth: the user sees and confirms the
+interpretation before final review. Financial numbers and dates in assistant prose
+are suppressed; numerical explanations, affordability checks, allocations, and
+comparison cards come from the engine.
+
+## Approval and financial ownership
+
+`planCycle`, `buildPaydayProposal`, `projectArrivals`, and `evaluatePurchase` own
+calculations. Projections assume unchanged future income and spending. Current
+cash remains separate from projected income and proposed/confirmed earmarks.
+
+Approval requires the exact reviewed candidate, confirmed financial groups,
+resolved required questions, acknowledged assumptions, a matching source revision
+and planning date, and a plan without a shortfall. `confirmProposal` then applies
+validated allocation deltas to the canonical workspace. It never moves bank money.
+A stale review cannot be applied. Model `readyToReview` is not authorization.
+
+## Failure, configuration, and bounds
+
+The Vercel demo has server-only `OPENAI_API_KEY` and `STEWARD_AI_ENABLED=true`.
+`OPENAI_MODEL` is optional; the default is `gpt-5.6-sol`. Local AI requires those same
+server settings. Without them, the interface explicitly says AI is unavailable
+and offers retry plus manual facts, priorities, comparisons, and purchase checks.
+Interrupted requests retain the prior candidate; late responses cannot overwrite a
+newer session. Manual actions are labeled manual, never live AI.
+
+Each planning request has a 40-second provider-loop timeout, up to four provider
+responses, up to six function calls, and a 2,400-token output cap per response.
+The client stops waiting after 45 seconds and supports an immediate Stop action.
+Responses use `store:false`. Request-body, transcript, and schema sizes are bounded.
+Process-local limits allow two concurrent generation sessions, fifty sessions/day,
+and twenty endpoint requests/minute. They are instance backstops, not a durable
+multi-instance spend guarantee; a shared budget remains broader-release work.
+
+## Evaluation evidence
+
+Run `npx tsx scripts/eval-conversation.ts DEPLOYMENT_URL` against a protected Vercel
+candidate using the authenticated CLI. This invokes the actual configured model
+with synthetic data, recording model IDs, response IDs, completed tools, usage,
+latency, and individual results in `outputs/live-conversation-evaluation.json`.
+Expected extraction/actions are executable assertions; assistant claims and tool
+names have shared forbidden/allowlist checks. See
+[the live evaluation report](docs/live-conversation-evaluation.md) for actual results.
+
+Deterministic tests and mocked provider protocol tests are reported separately.
+They cover stage guards, confirmations, stale reviews, serialization, comparisons,
+invalid output, prompt-injection provenance, timeout, unsupported tools, and call
+limits. The financial regression suite also covers budgeted spending, completed
+goals, recurring charges, insufficient/stale cash, and topic corrections.
+
+This is a functional portfolio implementation and a bounded synthetic evaluation,
+not evidence of adoption, broad model accuracy, or production banking operations.

@@ -1,17 +1,19 @@
 # Project status — September 5, 2026
 
-Steward is an AI-led conversational budgeting application with deterministic calculations with synthetic sample and manual
-session modes. It is not certified for general public banking use.
+Steward is an AI-led staged planning application with deterministic calculations,
+synthetic sample data, and manual session modes. It is not certified for general public banking use.
 
 Implemented: canonical revisioned financial state, explicit bill and goal drafts,
 reviewed onboarding/catch-up amounts, open-ended savings, current-liquidity guards,
 allocation replacement, category corrections and splits, safe exports, serialized
-save acknowledgements, conditional bank cursor commits, and a live Responses API conversation. Nine scripted live turns passed; see AI_SYSTEM.md.
+save acknowledgements, conditional bank cursor commits, and a live Responses API function-tool workflow. Session state distinguishes
+candidates, confirmed choices, assumptions, comparisons, and exact approved plans.
+See AI_SYSTEM.md and docs/live-conversation-evaluation.md for actual evaluation evidence.
 Stored check-in preferences do not deliver email or push notifications.
 
 See [the 35-item review checklist](docs/steward-review-checklist.md) for each
 implementation, verification status, and specific limitation. Local test/build and
-browser evidence is in `outputs/steward-verification.md`.
+staged-session browser evidence is in `outputs/steward-staged-verification.md`.
 
 Private deployment needs a verified Sites identity boundary and D1; arbitrary
 forwarded identity headers are not a public authentication mechanism. The Vercel

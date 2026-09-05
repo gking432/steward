@@ -1,14 +1,14 @@
 # Steward
 
-Steward is a calm paycheck-planning assistant with Home, Plan, Activity, and Ask.
+Steward is a calm paycheck-planning assistant with staged AI sessions and an ongoing Home, Plan, and Activity workspace.
 Its financial calculations are deterministic. Planning and confirming allocations
 **earmark money only**; they never transfer funds, pay debt, or prove a bill was paid.
 
 ## Try it
 
 - `/fixture`: immediately explore the dated synthetic household.
-- `/demo`: talk with the AI assistant, negotiate priorities, then review the
-  calculated paycheck proposal (including catch-up amounts) and confirm.
+- `/demo`: confirm sample facts, explain your priorities to live AI, build a
+  calculated plan, compare trade-offs, and explicitly approve its allocations.
 - `/manual`: build a session-only plan without a bank connection.
 - `/`: load a private workspace when verified identity and storage are configured;
   sample/manual entry stays available while loading.
@@ -32,7 +32,9 @@ Private drafts remain in memory after a failed save; export before closing.
   explicit retry/export recovery. Private endpoints fail closed by default.
 - Read-only bank sync implementation with pagination restart, deduplication,
   preservation of user corrections, and atomic conditional transaction/cursor commit.
-- Native accessible dialogs, model-led conversations, and calculated goal proposals.
+- Application-owned session stages, strict model function tools, candidate fact
+  confirmation, before/after scenarios, guarded approval, and manual failure recovery.
+- Contextual Home sessions for priority changes, paycheck review, and purchases.
 
 ## Run and verify
 
@@ -59,7 +61,7 @@ AI generation is off unless `STEWARD_AI_ENABLED=true` and an OpenAI key are both
 configured. Critical purchase verdict wording is deterministic. Conversation generation
 has per-process request/concurrency/call/token limits; a shared gateway spend limit
 remains necessary before a broader multi-tenant release. This portfolio demo is enabled with those instance backstops.
-The main onboarding and Ask paths use the OpenAI Responses API to interpret conversation. The financial engine calculates results. AI failure is explicit, with retry and manual calculation paths.
+The main planning sessions use OpenAI Responses function calling to interpret conversation and invoke narrow planning tools. The financial engine calculates results. AI failure is explicit, with retry and manual calculation paths.
 
 Bank routes require verified identity, D1, Plaid credentials, and encryption setup.
 No real accounts were connected during the September review implementation. Live

@@ -89,10 +89,31 @@ charge, cadence, and next due date. Legacy automatically generated merchant
 spending buckets migrate at load boundaries while retaining IDs. They are excluded
 from discretionary overspending alerts.
 
-The primary onboarding UI is ConversationSetup. POST /api/steward-chat uses the
-Responses API to produce a structured ChatDraft with user evidence. The server
-validates it and workspaceFromChat constructs a reviewable preview without writing
-state. PlanCycle and evaluatePurchase compute the displayed financial results.
-Only explicit client confirmation applies the draft to the revisioned workspace.
-Ask uses the same model endpoint and retains explicitly labeled deterministic
-calculation fallback during provider failure. See AI_SYSTEM.md for live evidence.
+## Staged planning and AI tools
+
+`PlanningSession` is a versioned application-owned state machine, separate from the
+canonical workspace. It tracks source revision/date, financial fact confirmations,
+candidate interpretation, accepted intent, unresolved questions, comparison baseline,
+and exact review identity. Back preserves completed work; fact changes invalidate
+downstream approval. Demo/manual drafts persist per route and session intent in
+sessionStorage, with schema validation and explicit storage errors.
+
+`ConversationSetup` renders a central stage canvas, compact progress, editable fact
+groups, priority controls, calculated allocation bars, before/after cards, and an
+exact approval review. Transcript and completed tool history are secondary views.
+Home opens contextual sessions for priority changes, paycheck review, and purchases.
+The optional sample statement route renders real fixture summaries without fake waits.
+
+`POST /api/steward-chat` uses Responses function calling, not regex interpretation,
+for the main natural-language workflow. The bounded `runToolLoop` preserves reasoning
+items and returns application tool results to the model. The five allowed tools read
+context, propose candidates, calculate, compare, and prepare review metadata. None
+can write canonical state. Strict schema plus evidence/ID/date/cent validation guards
+the model boundary; application-generated cards own all financial numbers.
+
+`approveSession` requires the exact review identity, matching workspace revision and
+planning date, confirmed facts and intent, acknowledged assumptions, resolved required
+questions, and an engine-valid plan. It then calls the existing delta-based allocation
+command. Accounts and transaction facts are never changed by planning approval.
+Provider failure leaves prior work intact and manual controls remain usable.
+See AI_SYSTEM.md and docs/live-conversation-evaluation.md for protocol and evidence.
