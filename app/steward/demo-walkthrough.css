@@ -689,3 +689,10 @@
   .dw-shell[data-demo-phase="1"] .dw-avatar,
   .dw-shell[data-demo-phase="1"] .dw-description { display: none; }
 }
+
+@media (max-height: 700px) {
+  .dc-answer dl > div { padding: 7px 0; }
+  .dc-answer h2 { margin-bottom: 8px; }
+  .dc-pages { margin-top: 7px; }
+  .dc-review { margin-bottom: 9px; }
+}
