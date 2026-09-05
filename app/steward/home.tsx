@@ -89,6 +89,7 @@ export function HomeScreen({
   onOpenBucket,
   onAsk,
   onSettings,
+  onSession,
 }: {
   workspace: Workspace;
   today: string;
@@ -96,6 +97,7 @@ export function HomeScreen({
   onOpenBucket: (bucket: Bucket) => void;
   onAsk: () => void;
   onSettings: () => void;
+  onSession: (intent:"priority"|"paycheck"|"purchase")=>void;
 }) {
   const plan = planCycle(workspace, today);
   const cycle = currentCycle(workspace, today);
@@ -167,6 +169,7 @@ export function HomeScreen({
           </div>
         </section>
 
+        <section className="hm-session-actions" aria-label="Continue planning"><button onClick={()=>onSession("priority")}><Sparkles size={17}/><span>Adjust a priority<small>Rebalance what matters next</small></span><ArrowUpRight size={16}/></button><button onClick={()=>onSession("paycheck")}><span>Review this paycheck<small>Check allocations with your context</small></span><ArrowUpRight size={16}/></button><button onClick={()=>onSession("purchase")}><span>Explore a purchase<small>See the cost and the trade-off</small></span><ArrowUpRight size={16}/></button></section>
         <div className="hm-dashboard-grid">
           <section className="hm-panel hm-buckets-panel">
             <header><div><span className="hm-kicker">This paycheck</span><h1>Every spending bucket</h1></div><button onClick={onOpenBuckets}>Edit plan</button></header>

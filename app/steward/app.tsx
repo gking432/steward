@@ -12,14 +12,11 @@
 
 import {
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   CreditCard,
-  FileText,
   Landmark,
   ListChecks,
-  LoaderCircle,
   Receipt,
   ShieldCheck,
   Sparkles,
@@ -47,14 +44,14 @@ import {
   type Verdict,
 } from "../../lib/model/decide";
 import { fallbackIntent, type IntentDraft } from "../../lib/model/ai";
-import { incomeObservations, spendingByCategory } from "../../lib/model/observations";
+import { spendingByCategory } from "../../lib/model/observations";
 import type { Bucket, Claim, Workspace } from "../../lib/model/types";
 import type { StewardState } from "../../lib/steward-types";
 import { BucketsScreen } from "./buckets";
 import { ConnectScreen } from "./connect";
 import { Modal } from "./dialog";
 import { ConversationSetup } from "./conversation-setup";
-import { AskScreen } from "./ask";
+import type { SessionIntent } from "../../lib/model/planning-session";
 import { HomeScreen } from "./home";
 import { SettingsSheet } from "./settings";
 import { SplitSheet } from "./split";
@@ -75,167 +72,8 @@ function DemoStatementImport({
   today: string;
   onContinue: () => void;
 }) {
-  const [stage, setStage] = useState<"welcome" | "plaid" | "connecting" | "statements" | "categorizing" | "review">("welcome");
-
-  useEffect(() => {
-    if (stage === "connecting") {
-      const timer = window.setTimeout(() => setStage("statements"), 3000);
-      return () => window.clearTimeout(timer);
-    }
-    if (stage === "statements") {
-      const timer = window.setTimeout(() => setStage("categorizing"), 3000);
-      return () => window.clearTimeout(timer);
-    }
-    if (stage === "categorizing") {
-      const timer = window.setTimeout(() => setStage("review"), 3000);
-      return () => window.clearTimeout(timer);
-    }
-  }, [stage]);
-
-  const categories = useMemo(
-    () => spendingByCategory(workspace, today).slice(0, 5),
-    [workspace, today],
-  );
-  const income = useMemo(() => incomeObservations(workspace, today).primary, [workspace, today]);
-  const statementCounts = useMemo(() => ({
-    mayJune: workspace.transactions.filter((row) => row.date <= "2026-06-30").length,
-    july: workspace.transactions.filter((row) => row.date >= "2026-07-01").length,
-  }), [workspace.transactions]);
-
-  if (stage === "welcome") {
-    return (
-      <main className="dm-screen dm-welcome">
-        <header className="dm-top"><strong>Steward</strong><span>Interactive demo</span></header>
-        <section className="dm-welcome-copy">
-          <span className="dm-welcome-mark" aria-hidden="true"><Sparkles size={22} /></span>
-          <div>
-            <p className="dm-eyebrow">Your money, with a plan</p>
-            <h1>Make every paycheck do what you want.</h1>
-            <p>
-              Steward finds the patterns in your spending, learns what matters to you,
-              and turns it all into a plan you can actually follow.
-            </p>
-          </div>
-        </section>
-        <footer className="dm-action dm-welcome-action">
-          <a className="bk-primary" href="/fixture">Explore a sample plan</a>
-          <button onClick={() => setStage("plaid")}>Build a plan from sample statements · chat with Steward</button>
-          <small>You&apos;ll review synthetic bank data next. The finished plan stays in this tab.</small>
-        </footer>
-      </main>
-    );
-  }
-
-  if (stage === "plaid") {
-    return (
-      <main className="dm-plaid-screen">
-        <section className="dm-plaid-card">
-          <header><span className="dm-plaid-mark">P</span><strong>Plaid</strong><small>Demo connection</small></header>
-          <div className="dm-plaid-copy">
-            <p className="dm-plaid-kicker">Simulated connection · no bank request</p>
-            <h1>First National</h1>
-            <p>Your demo login is ready. Review the details, then connect the sample accounts.</p>
-          </div>
-          <dl className="dm-plaid-details">
-            <div><dt>Username</dt><dd>steward_demo</dd></div>
-            <div><dt>Password</dt><dd>••••••••••••</dd></div>
-          </dl>
-          <div className="dm-plaid-accounts">
-            <span><CheckCircle2 size={17} /><b>Everyday Checking</b><small>••4821</small></span>
-            <span><CheckCircle2 size={17} /><b>Savings</b><small>••9014</small></span>
-            <span><CheckCircle2 size={17} /><b>Travel Rewards</b><small>••1738</small></span>
-          </div>
-          <button onClick={() => setStage("connecting")}>Connect accounts</button>
-          <p className="dm-plaid-fine">Demo credentials only. No real financial information is used.</p>
-        </section>
-      </main>
-    );
-  }
-
-  if (stage !== "review") {
-    const index = stage === "connecting" ? 0 : stage === "statements" ? 1 : 2;
-    const title =
-      stage === "connecting"
-        ? "Connecting your accounts…"
-        : stage === "statements"
-          ? "Reading May 3 – June 30…"
-          : "Reading July 1 – August 1…";
-    const importRows = index === 0
-      ? workspace.accounts.slice(0, 3).map((account) => ({
-          id: account.id,
-          label: account.name,
-          detail: formatMoney(account.balance),
-        }))
-      : index === 1
-        ? [
-            { id: "may", label: "May 3 – May 31", detail: "Statement data" },
-            { id: "june", label: "June 1 – June 30", detail: "Statement data" },
-            { id: "may-june", label: "May and June", detail: `${statementCounts.mayJune} transactions total` },
-          ]
-        : workspace.transactions.slice(0, 3).map((row) => ({
-            id: row.id,
-            label: row.merchant,
-            detail: `${formatDate(row.date)} · ${formatMoney(row.amount)}`,
-          }));
-    return (
-      <main className="dm-screen dm-loading">
-        <header className="dm-top"><strong>Steward</strong><span>Demo mode</span></header>
-        <section className="dm-loading-card" aria-live="polite">
-          <span className="dm-import-icon"><LoaderCircle size={26} className="cx-spin" /></span>
-          <div className="dm-loading-copy">
-            <p className="dm-eyebrow">Reading synthetic statements</p>
-            <h1>{title}</h1>
-          </div>
-          <div className="dm-progress">
-            {[0, 1, 2].map((step) => <i key={step} className={step < index ? "complete" : step === index ? "active" : ""} />)}
-          </div>
-          <ul className="dm-checks">
-            <li className="done"><CheckCircle2 size={17} /> First National · {workspace.accounts.length} accounts</li>
-            <li className={index > 1 ? "done" : index === 1 ? "active" : ""}><FileText size={17} /> May and June statements · {statementCounts.mayJune} transactions</li>
-            <li className={index >= 2 ? "active" : ""}><FileText size={17} /> July statement · {statementCounts.july} transactions</li>
-          </ul>
-          <div className="dm-import-rows">
-            {importRows.map((row) => (
-              <span key={row.id}><b>{row.label}</b><small>{row.detail}</small></span>
-            ))}
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <main className="dm-screen dm-review">
-      <header className="dm-top"><strong>Steward</strong><span>Demo mode</span></header>
-      <section className="dm-review-copy">
-        <p className="dm-eyebrow">Statements analyzed</p>
-        <h1>Here&apos;s what Steward found.</h1>
-        <p>
-          I read {workspace.transactions.length} transactions across {workspace.accounts.length} accounts.
-          This is your average monthly spending from the last 90 days.
-        </p>
-      </section>
-
-      <section className="dm-findings" aria-label="Statement findings">
-        {categories.map((entry) => (
-          <article key={entry.category}>
-            <span><strong>{entry.category}</strong><small>{entry.merchants.slice(0, 2).join(" · ")}</small></span>
-            <b>{formatMoney(entry.total / 3)}<small>/mo</small></b>
-          </article>
-        ))}
-        {income && (
-          <p className="dm-income">
-            <CheckCircle2 size={17} /> I also found a regular {formatMoney(income.typicalAmount)} paycheck from {income.merchant}.
-          </p>
-        )}
-      </section>
-
-      <footer className="dm-action">
-        <p>Next, confirm what is normal, build your paycheck buckets, then set your goals.</p>
-        <button onClick={onContinue}>Build my plan</button>
-      </footer>
-    </main>
-  );
+  const categories=spendingByCategory(workspace,today);
+  return <main className="dm-screen dm-review"><header className="dm-top"><strong>Steward</strong><span>Synthetic statement overview</span></header><section className="dm-review-copy"><h1>A starting point you can inspect.</h1><p>{workspace.transactions.length} synthetic transactions across {workspace.accounts.length} sample accounts. These are deterministic summaries of sample records.</p></section><section className="dm-findings">{categories.map(c=><article key={c.category}><span><strong>{c.category}</strong><small>{c.merchants.slice(0,2).join(' · ')}</small></span><b>{formatMoney(c.total)}<small>observed total</small></b></article>)}</section><footer className="dm-action"><button onClick={onContinue}>Continue to the planning session</button></footer></main>;
 }
 
 /* ------------------------------------------------------------- primitives */
@@ -1004,6 +842,7 @@ export function StewardApp({
   const [tab, setTab] = useState<Tab>("home");
   const [buyOpen, setBuyOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
+  const [sessionIntent,setSessionIntent]=useState<SessionIntent>("priority");
   const [splitting, setSplitting] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
@@ -1076,12 +915,14 @@ export function StewardApp({
     );
   }
 
+  if(askOpen)return <ConversationSetup key={sessionIntent} workspace={workspace} today={today} intent={sessionIntent} manual={manualMode} onCancel={()=>setAskOpen(false)} onDone={next=>{update(()=>next);setAskOpen(false);}}/>;
+
   return (
     <div className={`sw-app${demoMode ? " sw-demo-mode" : ""}`}>
       {demoMode && (
         <aside className="sw-demo-bar" aria-label="Demo mode">
           <span><strong>Demo · synthetic data · {today}</strong> · saved in this tab</span>
-          <a href="/demo" onClick={() => {sessionStorage.removeItem("steward-demo:/fixture");sessionStorage.removeItem("steward-demo:/demo");}}>Start over</a>
+          <a href="/demo" onClick={() => {sessionStorage.removeItem("steward-demo:/fixture");sessionStorage.removeItem("steward-demo:/demo");sessionStorage.removeItem("steward-planning:/demo:setup");}}>Start over</a>
         </aside>
       )}
       {(saveState === "offline" || saveState === "conflict") && (
@@ -1103,7 +944,8 @@ export function StewardApp({
               setFocusBucket(bucket);
               setTab("activity");
             }}
-            onAsk={() => setAskOpen(true)}
+            onAsk={() => {setSessionIntent("priority");setAskOpen(true);}}
+            onSession={intent=>{setSessionIntent(intent);setAskOpen(true);}}
             onSettings={() => setSettingsOpen(true)}
           />
         )}
@@ -1174,7 +1016,7 @@ export function StewardApp({
         ) : null;
       })()}
 
-      <Modal open={askOpen} className="ak-modal" label="Ask Steward" onClose={()=>setAskOpen(false)}><AskScreen workspace={workspace} today={today} update={update} onClose={() => setAskOpen(false)} /></Modal>
+
 
       {buyOpen && (
         <BuySheet workspace={workspace} today={today} update={update} onClose={() => setBuyOpen(false)} />

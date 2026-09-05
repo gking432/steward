@@ -135,3 +135,4 @@
   .hm-figures strong { font-size: 19px; }
   .hm-panel { padding: 14px; }
 }
+.hm-session-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0 24px}.hm-session-actions button{display:flex;align-items:center;gap:12px;text-align:left;border:1px solid #c7d3bd;border-radius:12px;background:#e8efdf;color:#254d35;padding:18px;font:inherit;cursor:pointer}.hm-session-actions span{flex:1;font-size:14px;font-weight:600}.hm-session-actions small{display:block;font-size:11px;font-weight:400;margin-top:5px;line-height:1.5}@media(max-width:700px){.hm-session-actions{grid-template-columns:1fr;gap:8px}.hm-session-actions button{padding:15px}.hm-session-actions span{font-size:13px}}
