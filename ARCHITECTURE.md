@@ -77,3 +77,13 @@ Paid AI is opt-in with bounded request bodies, two concurrent generations per
 process, 50 calls per process/day, and capped output tokens. Those process limits
 are backstops, not durable multi-instance billing controls. A shared budget and
 operational policy are required before public enablement.
+
+Purchase scenarios use the same projection loop and calendar as the baseline,
+with only an explicit first-cycle capacity reduction. Spending covered by a
+matched everyday bucket consumes its remaining allowance; only the excess reduces
+goal capacity. Current liquidity remains a separate gate.
+
+Detected fixed subscriptions are recurring reserve obligations, with their full
+charge, cadence, and next due date. Legacy automatically generated merchant
+spending buckets migrate at load boundaries while retaining IDs. They are excluded
+from discretionary overspending alerts.

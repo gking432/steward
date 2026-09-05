@@ -1,4 +1,4 @@
-export type PendingIntent = { kind: 'purchase' | 'goal'; name: string; missing: 'amount' };
+export type PendingIntent = { kind: 'purchase' | 'goal'; name: string; missing: 'amount'; wantBy?: string };
 /** Resolve short answers before extracting a fresh intent. */
 export function resolveFollowup(pending: PendingIntent | null, text: string) {
   if (/^(cancel|never mind|nevermind|stop)$/i.test(text.trim())) return { cancelled: true as const };

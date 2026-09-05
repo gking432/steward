@@ -227,10 +227,13 @@ export function fallbackIntent(utterance: string, today: string): IntentDraft | 
 
   // Strip the amount and leading intent words to leave something name-shaped.
   const name = text
+    .replace(/^can i (?:buy|afford)\s*/i, "")
     .replace(/\$\s*[\d,]+(?:\.\d{1,2})?/g, "")
     .replace(/^\s*(i\s+want\s+(to\s+)?|i'?d\s+like\s+(to\s+)?|save\s+for\s+|pay\s+off\s+)/i, "")
     .replace(/\b(by|before)\s+\w+\s*$/i, "")
     .replace(/^\s*(in|for|on|to|a|an|the)\s+/i, "")
+    .replace(/\s+(?:for|at|costing)\s*[?]?\s*$/i, "")
+    .replace(/[?]$/, "")
     .replace(/\s{2,}/g, " ")
     .trim()
     .replace(/^[a-z]/, (letter) => letter.toUpperCase());

@@ -109,6 +109,7 @@ export function AskScreen({
   };
 
   const answerPurchase = async (item: string, price: number) => {
+    setPending({kind:"purchase", name:item, missing:"amount"});
     const verdict = evaluatePurchase(workspace, today, { item, price });
     if (!verdict) {
       say({ from: "steward", text: "I need your pay schedule before I can answer that." });
@@ -123,6 +124,8 @@ export function AskScreen({
   };
 
   const answerWant = (name: string, amount: number, wantBy?: string) => {
+    setPending({kind:"goal", name, missing:"amount", wantBy});
+    setMessages(current => current.map(message => ({...message, proposal:undefined})));
     const rank = workspace.claims.filter((claim) => claim.status === "active").length;
     const claim = claimFromPurchase({ item: name, price: amount, wantBy, rank });
     const projected: Workspace = { ...workspace, claims: [...workspace.claims, claim] };
@@ -169,7 +172,9 @@ export function AskScreen({
     try {
       const followup = resolveFollowup(pending, text);
       if (followup && 'cancelled' in followup) { setPending(null); setPendingDebtIds([]); setMessages(current => current.map(m => ({ ...m, proposal: undefined }))); say({from:"steward",text:"Cancelled. Your plan is unchanged."}); return; }
-      if (followup && 'amount' in followup) { if (followup.kind === 'purchase') await answerPurchase(followup.name, followup.amount); else answerWant(followup.name, followup.amount); return; }
+      if (followup && 'amount' in followup) { if (followup.kind === 'purchase') await answerPurchase(followup.name, followup.amount); else answerWant(followup.name, followup.amount, followup.wantBy); return; }
+      setPending(null);
+      setMessages(current => current.map(message => ({...message,proposal:undefined})));
       const isDebtIntent = /card|loan|debt|pay\s*off|paid off/.test(lower);
       if (pendingDebtIds.length) {
         const resolution = resolveDebtMention(workspace, text, pendingDebtIds);
@@ -289,12 +294,13 @@ export function AskScreen({
             {message.proposal && <div className="ak-debt-choices">
               <button onClick={() => {
                 if (message.proposal!.revision !== (workspace.revision ?? 0)) { say({from:"steward",text:"Your plan changed. Ask again to review an updated proposal."}); return; }
+                setPending(null);
                 update(current => ({...current, claims:[...current.claims,message.proposal!.claim]}));
                 setMessages(current => current.map(m => m.id === message.id ? {...m,proposal:undefined} : m));
                 say({from:"steward",text:`Added ${message.proposal!.claim.name} to this session's plan. See the save status for persistence.`});
               }}>Apply goal</button>
               <button onClick={() => { setInput(`I want ${message.proposal!.claim.name} for $${message.proposal!.claim.targetAmount}`); setMessages(current => current.map(m => m.id === message.id ? {...m,proposal:undefined} : m)); }}>Edit</button>
-              <button onClick={() => setMessages(current => current.map(m => m.id === message.id ? {...m,proposal:undefined} : m))}>Cancel</button>
+              <button onClick={() => { setPending(null); setMessages(current => current.map(m => m.id === message.id ? {...m,proposal:undefined} : m)); }}>Cancel</button>
             </div>}
             {message.debtChoices && (
               <div className="ak-debt-choices">

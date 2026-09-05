@@ -506,6 +506,7 @@ export function projectArrivals(
   workspace: Workspace,
   today: string,
   policy: AllocationPolicy = defaultPolicy,
+  firstCycleSpend = 0,
 ): Arrival[] {
   const horizonCycles = cyclesInMonths(workspace, policy.maxProjectionMonths);
   const funded = new Map<string, number>();
@@ -519,7 +520,7 @@ export function projectArrivals(
   for (let step = 0; step < horizonCycles; step += 1) {
     const plan = planCycle(simulated, cursorToday);
     if (!plan) break;
-    const result = allocate(simulated, plan.freeCapacity, cursorToday, policy);
+    const result = allocate(simulated, Math.max(0, round2(plan.freeCapacity - (step === 0 ? firstCycleSpend : 0))), cursorToday, policy);
 
     for (const allocation of result.allocations) {
       const id = allocation.claim.id;

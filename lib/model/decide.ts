@@ -88,7 +88,9 @@ export function evaluatePurchase(
   // 2 — the everyday bucket this would come out of, if any.
   const bucket = input.bucketId
     ? workspace.buckets.find((entry) => entry.id === input.bucketId)
-    : undefined;
+    : workspace.buckets.find(entry => entry.kind === "spend" && [entry.name, entry.category].some(name => name?.toLowerCase() === input.item.toLowerCase().replace(/^(some|a|an) /, "")));
+  const remainingAllowance = bucket?.kind === "spend" ? Math.max(0, bucketActivity(workspace, bucket, cycle).remaining) : 0;
+  const additionalSpend = round2(Math.max(0, price - remainingAllowance));
   if (bucket) {
     const activity = bucketActivity(workspace, bucket, cycle);
     const after = round2(activity.remaining - price);
@@ -118,14 +120,14 @@ export function evaluatePurchase(
     ...workspace,
     profile: { ...workspace.profile },
   };
-  const consequences = simulateSpend(reduced, today, price, before, policy);
+  const consequences = simulateSpend(reduced, today, additionalSpend, before, policy);
 
-  const fitsInFreeCapacity = price <= plan.freeCapacity + 0.01;
+  const fitsInFreeCapacity = additionalSpend <= plan.freeCapacity + 0.01;
   const bucketOver = checks.some((check) => check.status === "warn" && check.label === bucket?.name);
   const delayed = consequences.filter((change) => change.direction === "later");
 
   let answer: Verdict["answer"];
-  if (!Number.isFinite(price) || price <= 0 || !liquidity.known || price > liquidity.available || !fitsInFreeCapacity || plan.freeCapacity <= 0) answer = "wait";
+  if (!Number.isFinite(price) || price <= 0 || !liquidity.known || price > liquidity.available || !fitsInFreeCapacity) answer = "wait";
   else if (bucketOver || delayed.length > 0) answer = "yes-but";
   else answer = "yes";
 
@@ -148,7 +150,9 @@ export function evaluatePurchase(
         .join(" · ")
     : answer === "wait"
       ? `${formatMoney(liquidity.available)} is verified for spending today; ${formatMoney(plan.freeCapacity)} is expected paycheck capacity. Future dates assume income arrives and bills are accurate.`
-      : "Nothing you're working toward moves.";
+      : bucketOver
+        ? `${formatMoney(additionalSpend)} would come from this paycheck's goal capacity because it exceeds ${bucket!.name}'s allowance. No projected goal dates move.`
+        : "Nothing you're working toward moves.";
 
   return {
     answer,
@@ -174,25 +178,11 @@ function simulateSpend(
   before: Arrival[],
   policy: AllocationPolicy,
 ): DateChange[] {
-  const plan = planCycle(workspace, today);
-  if (!plan) return [];
-  const reducedCapacity = Math.max(0, round2(plan.freeCapacity - price));
-
-  // Apply one cycle at the reduced capacity, then project normally from there.
-  const result = allocate(workspace, reducedCapacity, today, policy);
-  const advanced: Workspace = {
-    ...workspace,
-    claims: workspace.claims.map((claim) => ({
-      ...claim,
-      fundedAmount: round2(
-        claim.fundedAmount +
-          (result.allocations.find((entry) => entry.claim.id === claim.id)?.amount ?? 0),
-      ),
-    })),
-  };
-  const nextToday = upcomingPaydays(workspace, today, 1)[0] ?? today;
-  const after = projectArrivals(advanced, nextToday, policy);
-  return diffArrivals(before, after);
+  // Both scenarios traverse exactly the same calendar and obligation rollovers.
+  // Keep first-cycle completions in the same projection instead of dropping
+  // already-funded claims when starting a second projection next payday.
+  if (price <= 0) return [];
+  return diffArrivals(before, projectArrivals(workspace, today, policy, price));
 }
 
 /**

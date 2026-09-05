@@ -2,7 +2,8 @@
 
 Arithmetic, verdicts, dates, target IDs, and state changes belong to deterministic
 code. The primary onboarding review and Ask purchase follow-ups require no model.
-Ask keeps pending purchase context; numeric replies and cancellation are resolved
+Ask keeps the most recent purchase or goal context, replaces superseded proposals,
+and retains deadlines through amount corrections; numeric replies and cancellation are resolved
 before generic intent extraction. A proposed new goal needs an explicit Apply.
 Critical affordability wording uses the structured verdict directly, including
 current-liquidity uncertainty. It is never entrusted to numeric-only prose guards.

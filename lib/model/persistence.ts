@@ -1,3 +1,4 @@
+import { migrateRecurringReserves } from './recurring-reserves';
 import type { Workspace } from './types';
 import type { StewardState } from '../steward-types';
 import { toModel } from './convert';
@@ -5,7 +6,7 @@ import { toModel } from './convert';
 /** One-way import boundary. Current state is never converted during editing. */
 export function migrateWorkspace(value: Workspace | StewardState): Workspace {
   const result = 'modelVersion' in value ? structuredClone(value) : toModel(value);
-  return { ...result, revision: result.revision ?? 0 };
+  return migrateRecurringReserves({ ...result, revision: result.revision ?? 0 });
 }
 
 /** Serialized, coalescing writes. Older responses cannot acknowledge new work. */

@@ -17,6 +17,7 @@ import {
   spendingByCategory,
   subscriptions,
 } from "./observations";
+import { recurringReserve } from "./recurring-reserves";
 import type { Claim, Workspace } from "./types";
 
 export type OnboardingRole = "assistant" | "user";
@@ -275,7 +276,7 @@ function withRecurringBudgets(
 ): Workspace {
   const existingNames = new Set(
     workspace.buckets
-      .filter((bucket) => bucket.kind === "spend")
+      .filter((bucket) => bucket.kind === "spend" || bucket.merchantKey)
       .flatMap((bucket) => [bucket.name.toLowerCase(), bucket.category?.toLowerCase() ?? ""]),
   );
   const additions = subscriptions(workspace, today)
@@ -285,7 +286,7 @@ function withRecurringBudgets(
         !existingNames.has(stream.merchant.toLowerCase()) &&
         !existingNames.has(stream.category.toLowerCase()),
     )
-    .map((stream) => ({
+    .map((stream) => recurringReserve({
       id: `bucket:onboarding:${slug(stream.key)}`,
       kind: "spend" as const,
       name: stream.merchant,
@@ -295,7 +296,7 @@ function withRecurringBudgets(
       source: "derived" as const,
       perCycle: annualCostPerNormalPaycheck(workspace, annualCost(stream)),
       rollover: "sweep" as const,
-    }));
+    }, stream, today));
   return additions.length
     ? { ...workspace, buckets: [...workspace.buckets, ...additions] }
     : workspace;
