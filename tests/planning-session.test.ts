@@ -5,6 +5,7 @@ import { toModel } from "../lib/model/convert";
 import { EMPTY_CHAT_DRAFT, validateChatDraft } from "../lib/model/chat-plan";
 import {
   approveSession,
+  clearPlanningDrafts,
   comparePlans,
   createSession,
   hasCandidates,
@@ -240,4 +241,23 @@ test("ongoing sessions reuse a saved goal ID when renaming and preserve earmarks
     claim.fundedAmount,
   );
   assert.equal(preview.claims.find((c) => c.id === claim.id)?.pinned, 0);
+});
+
+test("Start over retires every contextual draft on that route without clearing another workspace", () => {
+  const entries = new Set(
+    ["setup", "priority", "paycheck", "purchase"].map(
+      (i) => `steward-planning:/demo:${i}`,
+    ),
+  );
+  entries.add("steward-planning:/manual:setup");
+  entries.add("steward-chat:/demo");
+  clearPlanningDrafts(
+    {
+      removeItem: (key) => {
+        entries.delete(key);
+      },
+    },
+    "/demo",
+  );
+  assert.deepEqual([...entries], ["steward-planning:/manual:setup"]);
 });

@@ -315,3 +315,13 @@ export function comparePlans(
     };
   });
 }
+
+/** Reset only this route's planning history; unrelated manual/sample routes survive. */
+export function clearPlanningDrafts(
+  storage: Pick<Storage, "removeItem">,
+  pathname: string,
+) {
+  for (const intent of ["setup", "priority", "paycheck", "purchase"])
+    storage.removeItem(`steward-planning:${pathname}:${intent}`);
+  storage.removeItem(`steward-chat:${pathname}`);
+}

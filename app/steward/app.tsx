@@ -51,7 +51,7 @@ import { BucketsScreen } from "./buckets";
 import { ConnectScreen } from "./connect";
 import { Modal } from "./dialog";
 import { ConversationSetup } from "./conversation-setup";
-import type { SessionIntent } from "../../lib/model/planning-session";
+import { clearPlanningDrafts, type SessionIntent } from "../../lib/model/planning-session";
 import { HomeScreen } from "./home";
 import { SettingsSheet } from "./settings";
 import { SplitSheet } from "./split";
@@ -922,7 +922,7 @@ export function StewardApp({
       {demoMode && (
         <aside className="sw-demo-bar" aria-label="Demo mode">
           <span><strong>Demo · synthetic data · {today}</strong> · saved in this tab</span>
-          <a href="/demo" onClick={() => {sessionStorage.removeItem("steward-demo:/fixture");sessionStorage.removeItem("steward-demo:/demo");sessionStorage.removeItem("steward-planning:/demo:setup");}}>Start over</a>
+          <a href="/demo" onClick={() => {sessionStorage.removeItem("steward-demo:/fixture");sessionStorage.removeItem("steward-demo:/demo");clearPlanningDrafts(sessionStorage,"/demo");clearPlanningDrafts(sessionStorage,"/fixture");}}>Start over</a>
         </aside>
       )}
       {(saveState === "offline" || saveState === "conflict") && (
@@ -996,9 +996,10 @@ export function StewardApp({
           onReset={async () => {
             // Clear the stored workspace, then return to first run. Without
             // this there is no way back to Connect once anything is saved.
-            if (!syncWithServer) {sessionStorage.removeItem('steward-demo:' + location.pathname);window.location.href=demoMode ? '/demo' : '/manual';return;}
+            if (!syncWithServer) {clearPlanningDrafts(sessionStorage,location.pathname);sessionStorage.removeItem('steward-demo:' + location.pathname);window.location.href=demoMode ? '/demo' : '/manual';return;}
             const response=await fetch("/api/steward", { method: "DELETE" });
             if(!response.ok) throw Error('Deletion failed');
+            clearPlanningDrafts(sessionStorage,location.pathname);
             window.location.href='/';
           }}
         />

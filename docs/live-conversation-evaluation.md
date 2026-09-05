@@ -56,7 +56,7 @@ reclassified as passes.
 
 ## Separate deterministic and browser verification
 
-The final application build passed 242 deterministic/protocol tests and six
+The final application build passed 243 deterministic/protocol tests and six
 production-server HTTP checks. Mocked provider tests cover timeout, rejected-output
 repair, unsupported tools, required-tool enforcement, and round limits; these do
 not count toward the eighteen live cases.
@@ -87,6 +87,9 @@ passed all six HTTP checks. Screenshots are in the local
 `outputs/steward-review-assets/staged-*.png` evidence files. Subsequent release copy
 explicitly labels comparison dates as projections and clarifies that declining
 extra debt repayment retains required minimums; no model or engine behavior changed.
+
+The reset regression also verifies that Start over retires all setup, priority,
+paycheck, and purchase drafts for the reset route while preserving other workspaces.
 
 ## Limits
 
