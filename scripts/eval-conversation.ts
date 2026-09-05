@@ -120,6 +120,20 @@ async function run(
     tools: result.tools,
     grounded,
   });
+  writeFileSync(
+    "outputs/live-conversation-evaluation.json",
+    JSON.stringify(
+      {
+        deployment,
+        ranAt: new Date().toISOString(),
+        passed: results.filter((r) => r.pass).length,
+        total: results.length,
+        results,
+      },
+      null,
+      2,
+    ),
+  );
   console.log(
     JSON.stringify({
       name,
