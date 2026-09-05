@@ -9,7 +9,7 @@ import {
 import type { Workspace } from "./types";
 import { billAmount, planCycle } from "./engine";
 
-export function openConversation(workspace: Workspace, today: string) {
+export function openConversation(workspace: Workspace, today: string): PlanningSession {
   const session = createSession(workspace, today);
   return { ...session, stage: "rhythm" as const };
 }
