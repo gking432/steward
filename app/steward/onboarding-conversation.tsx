@@ -290,7 +290,7 @@ export function OnboardingConversation({
         draft.responseKind !== "clarify" &&
         (changes.length ||
           draft.income !== before.draft.income ||
-          JSON.stringify(draft.timing) !== JSON.stringify(before.draft.timing))
+          JSON.stringify(draft.timing ?? null) !== JSON.stringify(before.draft.timing ?? null))
       ) {
         reply.card = {
           kind: "correction",
