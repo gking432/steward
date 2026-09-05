@@ -1,6 +1,6 @@
 # How Steward’s AI works
 
-Steward’s onboarding is a persistent conversation with financial cards, backed by the live
+Steward’s demo starts with a deterministic sample-account walkthrough, then opens a goal conversation backed by the live
 OpenAI Responses API. The model interprets priorities, extracts candidate facts,
 handles corrections and topic changes, asks about ambiguity, and selects narrowly
 scoped tools. The application owns stage transitions, financial arithmetic,
@@ -16,7 +16,7 @@ persistence, and approval.
 - Accepted intent, unresolved questions, and deterministic projection assumptions.
 - A previous scenario for comparison and the identity of the exact reviewed plan.
 
-Onboarding keeps its transcript visible through Your picture, Your goals, Your plan, and Review. Clear facts update the session directly; exploration and ambiguity cannot introduce new allocations or uncertain fact changes. The initial synthetic findings are calculated locally, not presented as a live-model generation. Home continues with contextual priority,
+Onboarding uses Get started → sample account connection → one finding at a time → goal chat. The chat keeps its transcript in session state and uses message/detail pagination, so neither onboarding nor chat requires scrolling. Clear facts update the session directly; exploration and ambiguity cannot introduce new allocations or uncertain fact changes. The initial synthetic findings are calculated locally, not presented as a live-model generation. Home continues with contextual priority,
 paycheck, and purchase sessions. Back retains completed work. A versioned,
 validated sessionStorage snapshot restores drafts in the same tab. Earlier fact
 edits invalidate confirmation/review and recalculate downstream results.

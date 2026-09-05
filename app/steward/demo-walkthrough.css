@@ -1,0 +1,686 @@
+.dw-shell,
+.dc-shell {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  overflow: hidden;
+  background: #f3f5ef;
+  color: #183c30;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 40px 15px;
+  --green: #204d3b;
+  --lime: #d9efad;
+}
+.dw-shell button,
+.dc-shell button,
+.dc-shell input {
+  font: inherit;
+}
+.dw-shell header,
+.dc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  flex: none;
+}
+.dw-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 650;
+  font-size: 21px;
+  letter-spacing: -0.6px;
+}
+.dw-demo {
+  font-size: 11px;
+  border: 1px solid #64837040;
+  border-radius: 30px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+.dw-dark {
+  background: radial-gradient(
+    ellipse at 70% 20%,
+    #346347 0%,
+    #214b3a 42%,
+    #173b2e 100%
+  );
+  color: #f3f6e9;
+}
+.dw-dark .dw-demo {
+  border-color: #bdd2bd40;
+  color: #d4e0cf;
+}
+.dw-scene {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  max-width: 740px;
+  width: 100%;
+  margin: 0 auto;
+  animation: dw-enter 0.25s ease-out;
+}
+.dw-avatar {
+  height: 58px;
+  width: 58px;
+  border-radius: 20px;
+  background: #e1ead8;
+  display: grid;
+  place-items: center;
+  margin-bottom: 22px;
+}
+.dw-avatar svg {
+  width: 25px;
+  height: 25px;
+}
+.dw-dark .dw-avatar {
+  background: #ffffff12;
+  color: #d9efad;
+  box-shadow: 0 0 70px #bde39318;
+}
+.dw-eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.9px;
+  font-weight: 600;
+  opacity: 0.6;
+  margin: 0 0 12px;
+}
+.dw-scene h1 {
+  font-size: clamp(30px, 4.3vw, 54px);
+  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: -1.9px;
+  white-space: pre-line;
+  margin: 0;
+  text-wrap: balance;
+}
+.dw-description {
+  font-size: 15px;
+  line-height: 1.6;
+  opacity: 0.72;
+  max-width: 420px;
+  margin: 22px 0 0;
+  text-wrap: balance;
+}
+.dw-amount {
+  font-size: clamp(54px, 7vw, 88px);
+  letter-spacing: -4px;
+  line-height: 1.12;
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+  margin: 28px 0 0;
+}
+.dw-amount span {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 0;
+  margin-top: 9px;
+  opacity: 0.6;
+}
+.dw-shell footer {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 300px) 48px;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.dw-next {
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-height: 52px;
+  padding: 12px 26px;
+  border-radius: 30px;
+  background: var(--green);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 550 !important;
+}
+.dw-dark .dw-next {
+  background: var(--lime);
+  color: #193c2c;
+}
+.dw-back,
+.dc-history button,
+.dc-pages button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  min-width: 36px;
+  min-height: 36px;
+}
+.dw-back {
+  border: 1px solid #7b988044;
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+}
+.dw-step {
+  font-size: 11px;
+  opacity: 0.5;
+}
+.dw-footnote {
+  text-align: center;
+  font-size: 10px;
+  opacity: 0.4;
+  padding-top: 17px;
+  flex: none;
+}
+.dw-accounts {
+  width: min(360px, 100%);
+  display: grid;
+  gap: 9px;
+  margin-top: 25px;
+}
+.dw-accounts > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff0c;
+  border: 1px solid #ffffff17;
+  border-radius: 14px;
+  padding: 11px 14px;
+  text-align: left;
+}
+.dw-bank-icon {
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 35px;
+  border-radius: 10px;
+  background: #ffffff0d;
+  color: #d9efad;
+}
+.dw-accounts strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+.dw-accounts small {
+  display: block;
+  font-size: 10px;
+  color: #b2cbb7;
+  margin-top: 2px;
+}
+.dw-accounts > div > svg {
+  margin-left: auto;
+  color: #d9efad;
+}
+.dw-disclosure {
+  font-size: 11px;
+  opacity: 0.58;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 13px 0 0;
+  max-width: 360px;
+}
+.dw-breakdown {
+  width: min(390px, 100%);
+  margin-top: 22px;
+  display: grid;
+}
+.dw-breakdown > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid #244e3020;
+  gap: 15px;
+  font-size: 14px;
+}
+.dw-breakdown strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+}
+.dw-shell button:focus-visible,
+.dc-shell button:focus-visible,
+.dc-shell input:focus-visible {
+  outline: 2px solid #91ac6a;
+  outline-offset: 3px;
+}
+.dw-shell button:disabled,
+.dc-shell button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.dc-shell {
+  align-items: center;
+  background: radial-gradient(ellipse at 50% 0%, #e6eddf, #f4f6f0 62%);
+}
+.dc-header {
+  max-width: 940px;
+}
+.dc-history {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(660px, 100%);
+  font-size: 11px;
+  color: #81917d;
+  margin-top: 13px;
+  flex: none;
+}
+.dc-stage {
+  width: min(660px, 100%);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 22px;
+  padding: 15px 0;
+}
+.dc-user {
+  margin: 0 0 0 auto;
+  max-width: 85%;
+  padding: 12px 18px;
+  border-radius: 18px 18px 4px 18px;
+  background: #e2eadb;
+  font-size: 13px;
+  color: #56704f;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.5;
+}
+.dc-user span {
+  font-weight: 650;
+  margin-right: 9px;
+}
+.dc-deck {
+  min-height: 0;
+  width: 100%;
+}
+.dc-speaker {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  color: #6e8169;
+  margin-bottom: 17px;
+}
+.dc-speaker > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  background: #204d3b;
+  color: #d9efad;
+  border-radius: 12px;
+}
+.dc-answer {
+  animation: dw-enter 0.2s ease-out;
+}
+.dc-answer > p {
+  font-size: clamp(18px, 2.2vw, 27px);
+  line-height: 1.45;
+  letter-spacing: -0.55px;
+  margin: 0;
+  text-wrap: pretty;
+}
+.dc-answer h2 {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7d63;
+  margin: 0 0 15px;
+}
+.dc-answer dl {
+  margin: 0;
+  background: #ffffffa0;
+  border: 1px solid #d5dfcd;
+  border-radius: 19px;
+  padding: 4px 22px;
+}
+.dc-answer dl > div {
+  padding: 17px 0;
+  border-bottom: 1px solid #dce5d6;
+}
+.dc-answer dl > div:last-child {
+  border: 0;
+}
+.dc-answer dt {
+  font-size: 12px;
+  color: #71816b;
+}
+.dc-answer dd {
+  margin: 7px 0 0;
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.dc-pages {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 17px;
+  color: #7a8c72;
+  font-size: 11px;
+}
+.dc-pages button:last-child {
+  margin-left: auto;
+  gap: 9px;
+  font-size: 12px;
+  background: #e2ead9;
+  border-radius: 20px;
+  padding: 7px 14px;
+}
+.dc-bottom {
+  width: min(660px, 100%);
+  flex: none;
+}
+.dc-composer {
+  border: 1px solid #becdb4;
+  border-radius: 22px;
+  background: #fffef9;
+  box-shadow: 0 5px 35px #28492009;
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  gap: 10px;
+}
+.dc-composer input {
+  border: 0;
+  background: none;
+  min-width: 0;
+  flex: 1;
+  padding: 8px 9px;
+  color: #244a36;
+  font-size: 15px;
+  outline: 0;
+}
+.dc-composer input::placeholder {
+  color: #94a18d;
+}
+.dc-composer button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: #204d3b;
+  color: #f5f7ed;
+  width: 39px;
+  height: 39px;
+  cursor: pointer;
+}
+.dc-footnote {
+  text-align: center;
+  color: #97a28d;
+  font-size: 10px;
+  margin: 11px 0 0;
+}
+.dc-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #70816a;
+  margin-bottom: 12px;
+}
+.dc-status > button {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  text-decoration: underline;
+  color: inherit;
+  cursor: pointer;
+}
+.dc-error {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: #fff2df;
+  padding: 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+.dc-error button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: #735929;
+}
+.dc-storage {
+  font-size: 10px;
+  margin: 4px;
+  color: #946747;
+}
+.dc-review {
+  border: 0;
+  background: #204d3b;
+  color: white;
+  border-radius: 22px;
+  padding: 10px 17px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin: 0 0 14px auto;
+  font-size: 13px !important;
+  cursor: pointer;
+}
+.dc-approval {
+  margin-top: 15px;
+}
+.dc-approval label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12px;
+  color: #617459;
+  margin: 12px 0;
+}
+.dc-approval input {
+  accent-color: #204d3b;
+}
+.dc-approval .dw-next {
+  min-height: 44px;
+  font-size: 14px;
+}
+.dc-shell .dc-answer p {
+  overflow-wrap: anywhere;
+}
+@keyframes dw-enter {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 600px) {
+  .dw-shell,
+  .dc-shell {
+    padding: 20px 22px 15px;
+  }
+  .dw-brand {
+    font-size: 19px;
+  }
+  .dw-demo {
+    font-size: 9px;
+  }
+  .dw-scene h1 {
+    font-size: 34px;
+    letter-spacing: -1.2px;
+  }
+  .dw-avatar {
+    margin-bottom: 21px;
+    width: 50px;
+    height: 50px;
+    border-radius: 17px;
+  }
+  .dw-description {
+    font-size: 14px;
+    margin-top: 18px;
+  }
+  .dw-shell footer {
+    grid-template-columns: 36px minmax(0, 1fr) 30px;
+    width: 100%;
+    gap: 12px;
+  }
+  .dw-next {
+    font-size: 14px;
+    padding: 12px 18px;
+    gap: 10px;
+  }
+  .dw-back {
+    width: 34px;
+    height: 34px;
+  }
+  .dw-amount {
+    font-size: 67px;
+    letter-spacing: -3px;
+  }
+  .dw-disclosure {
+    font-size: 10px;
+    line-height: 1.5;
+  }
+  .dc-stage {
+    gap: 18px;
+    padding: 12px 0;
+  }
+  .dc-answer > p {
+    font-size: 21px;
+    line-height: 1.45;
+    letter-spacing: -0.4px;
+  }
+  .dc-answer dd {
+    font-size: 18px;
+  }
+  .dc-history {
+    font-size: 10px;
+  }
+  .dc-user {
+    font-size: 12px;
+    padding: 9px 14px;
+  }
+  .dc-composer input {
+    font-size: 16px;
+  }
+  .dc-footnote {
+    font-size: 9px;
+  }
+  .dc-speaker {
+    margin-bottom: 13px;
+  }
+  .dc-error {
+    font-size: 11px;
+  }
+  .dw-accounts {
+    margin-top: 20px;
+    gap: 7px;
+  }
+  .dw-accounts > div {
+    padding: 9px 11px;
+  }
+  .dw-breakdown > div {
+    padding: 9px 0;
+  }
+}
+@media (max-height: 700px) {
+  .dw-shell,
+  .dc-shell {
+    padding-top: 15px;
+    padding-bottom: 10px;
+  }
+  .dw-avatar {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 12px;
+  }
+  .dw-scene h1 {
+    font-size: 30px;
+  }
+  .dw-description {
+    margin-top: 12px;
+    font-size: 13px;
+  }
+  .dw-amount {
+    font-size: 58px;
+    margin-top: 16px;
+  }
+  .dw-accounts {
+    margin-top: 14px;
+    gap: 5px;
+  }
+  .dw-accounts > div {
+    padding: 7px 11px;
+  }
+  .dw-breakdown {
+    margin-top: 12px;
+  }
+  .dw-breakdown > div {
+    padding: 7px 0;
+    font-size: 13px;
+  }
+  .dw-footnote {
+    padding-top: 10px;
+  }
+  .dc-stage {
+    gap: 10px;
+    padding: 6px 0;
+  }
+  .dc-answer > p {
+    font-size: 18px;
+    line-height: 1.4;
+  }
+  .dc-answer dd {
+    font-size: 16px;
+  }
+  .dc-answer dl > div {
+    padding: 10px 0;
+  }
+  .dc-speaker {
+    margin-bottom: 10px;
+  }
+  .dc-pages {
+    margin-top: 10px;
+  }
+  .dc-history {
+    margin-top: 5px;
+  }
+  .dc-approval label {
+    font-size: 11px;
+  }
+  .dc-composer {
+    padding: 6px;
+  }
+  .dc-footnote {
+    margin-top: 7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dw-scene,
+  .dc-answer {
+    animation: none;
+  }
+}

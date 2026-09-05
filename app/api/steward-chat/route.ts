@@ -279,7 +279,7 @@ Bill edits support effectiveDate YYYY-MM-DD: null means current full amount. For
       {
         origin: "unavailable",
         error:
-          "The AI conversation is unavailable right now. Your draft is unchanged. Retry or review the plan manually.",
+          "The AI conversation is unavailable right now. Your draft is unchanged. Please retry.",
       },
       { status: 503 },
     );

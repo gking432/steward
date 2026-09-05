@@ -83,7 +83,7 @@ manual review. See the dated review checklist for remaining calendar limits.
 
 ## Conversational onboarding
 
-Start at `/demo`: Steward presents derived sample findings immediately, then helps you shape a plan through one persistent conversation. Inspect
+Start at `/demo`: Get started, connect sample accounts, step through cash, income and spending findings, then chat with Steward about your goals. The walkthrough and chat fit the viewport without scrolling. Inspect
 statements at `/demo?statements=1`, or skip onboarding with `/fixture`. Review the
 calculated plan and catch-up amounts before confirming. Model calls are enabled
 on the Vercel deployment. See [conversational onboarding verification](docs/conversational-onboarding.md) for the six-turn live acceptance suite and public-browser checks, and AI_SYSTEM.md for the broader evaluation history and limits. This is a working AI portfolio demo, not evidence of user adoption.

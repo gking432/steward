@@ -911,8 +911,7 @@ export function StewardApp({
   // rest of the app opens only once you agree to it.
   if (!workspace.profile.onboardingComplete) {
     return (
-      <OnboardingConversation workspace={workspace} today={today} onDone={(next) => update(() => next)} manual={manualMode}
-      />
+      manualMode ? <ConversationSetup workspace={workspace} today={today} onDone={(next) => update(() => next)} manual/> : <OnboardingConversation workspace={workspace} today={today} onDone={(next) => update(() => next)}/>
     );
   }
 

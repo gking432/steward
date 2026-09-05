@@ -8,7 +8,7 @@ reviewed onboarding/catch-up amounts, open-ended savings, current-liquidity guar
 allocation replacement, category corrections and splits, safe exports, serialized
 save acknowledgements, conditional bank cursor commits, and a live Responses API function-tool workflow. Session state distinguishes
 candidates, confirmed choices, assumptions, comparisons, and exact approved plans.
-Onboarding now keeps conversation and financial cards visible through four stages, supports future-effective bill corrections, and separates exploration from proposed allocations. See docs/conversational-onboarding.md for the latest six live-model turns and full public-browser onboarding checks; AI_SYSTEM.md and docs/live-conversation-evaluation.md retain earlier evaluation evidence.
+Demo onboarding now begins with Get started and a sample account connection, presents one financial finding per screen, then opens the live goal chat. Findings, messages and plan details use Next/Back controls without scrolling. Future-effective bill corrections and the separation of exploration from proposed allocations remain. See docs/conversational-onboarding.md for the latest six live-model turns and full public-browser onboarding checks; AI_SYSTEM.md and docs/live-conversation-evaluation.md retain earlier evaluation evidence.
 Stored check-in preferences do not deliver email or push notifications.
 
 See [the 35-item review checklist](docs/steward-review-checklist.md) for each

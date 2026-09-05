@@ -1,23 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { z } from "zod";
 import {
   ArrowUp,
   Check,
-  ChevronDown,
-  Pencil,
+  ArrowLeft,
+  ArrowRight,
   RotateCcw,
   Sparkles,
-  X,
 } from "lucide-react";
 import type { Workspace } from "../../lib/model/types";
 import { chatDraftSchema, type ChatTurn } from "../../lib/model/chat-plan";
 import {
   approveSession,
   assumptions,
-  comparePlans,
   sessionSchema,
   sessionWorkspace,
   type PlanningSession,
@@ -33,10 +30,8 @@ import {
 } from "../../lib/model/onboarding-conversation";
 import { buildPaydayProposal } from "../../lib/model/decide";
 import { planCycle, projectArrivals } from "../../lib/model/engine";
-import { currentLiquidity } from "../../lib/model/liquidity";
-import { IncomeFacts, BucketFacts } from "./conversation-setup";
-import "./conversation-setup.css";
-import "./onboarding-conversation.css";
+import { DemoWalkthrough } from "./demo-walkthrough";
+import "./demo-walkthrough.css";
 
 const rowSchema = z.object({ label: z.string(), value: z.string() });
 const entrySchema = z.object({
@@ -55,6 +50,7 @@ type Entry = z.infer<typeof entrySchema>;
 const cacheSchema = z.object({
   session: sessionSchema,
   entries: z.array(entrySchema).max(120),
+  phase: z.number().int().min(0).max(9),
 });
 
 function planCard(session: PlanningSession): NonNullable<Entry["card"]> {
@@ -121,17 +117,13 @@ export function OnboardingConversation({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [storageError, setStorageError] = useState("");
-  const [edit, setEdit] = useState<"income" | "bills" | "spending" | null>(
-    null,
-  );
+  const [phase, setPhase] = useState(0);
+  const [history, setHistory] = useState<number | null>(null);
   const [failedText, setFailedText] = useState("");
   const controller = useRef<AbortController | null>(null),
-    requestId = useRef(0),
-    bottom = useRef<HTMLDivElement>(null),
-    follow = useRef(true);
+    requestId = useRef(0);
   const preview = sessionWorkspace(session),
-    plan = planCycle(preview, today),
-    liquidity = currentLiquidity(workspace, today);
+    plan = planCycle(preview, today);
   const stage =
     session.stage === "review"
       ? 3
@@ -155,6 +147,7 @@ export function OnboardingConversation({
           queueMicrotask(() => {
             setSession(result.data.session);
             setEntries(result.data.entries);
+            setPhase(result.data.phase);
           });
         } else
           queueMicrotask(() =>
@@ -183,7 +176,10 @@ export function OnboardingConversation({
   useEffect(() => {
     if (!loaded) return;
     try {
-      sessionStorage.setItem(key(), JSON.stringify({ session, entries }));
+      sessionStorage.setItem(
+        key(),
+        JSON.stringify({ session, entries, phase }),
+      );
     } catch {
       queueMicrotask(() =>
         setStorageError(
@@ -191,36 +187,21 @@ export function OnboardingConversation({
         ),
       );
     }
-  }, [session, entries, loaded]);
-  useEffect(() => {
-    const scroll = () => {
-      follow.current =
-        document.documentElement.scrollHeight -
-          (window.scrollY + window.innerHeight) <
-        240;
-    };
-    window.addEventListener("scroll", scroll, { passive: true });
-    return () => window.removeEventListener("scroll", scroll);
-  }, []);
-  useEffect(() => {
-    if (follow.current && entries.length > 1)
-      bottom.current?.scrollIntoView({ block: "end", behavior: "instant" });
-  }, [entries.length, busy]);
-
+  }, [session, entries, phase, loaded]);
   function looksRight() {
     try {
       const next = confirmPicture(session);
       const messages: ChatTurn[] = [
-        { role: "user", content: "Looks right" },
+        { role: "user", content: "Let’s talk goals" },
         {
           role: "assistant",
           content:
-            "What brought you here? What would you like to feel better about with your money?",
+            "Now, let’s talk about your goals. Why did you download Steward?",
         },
       ];
       setSession({ ...next, turns: [...next.turns, ...messages] });
       setEntries((e) => [...e, ...messages]);
-      follow.current = true;
+      setHistory(null);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -247,7 +228,7 @@ export function OnboardingConversation({
     setBusy(true);
     setError("");
     setFailedText("");
-    follow.current = true;
+    setHistory(null);
     controller.current = new AbortController();
     const id = ++requestId.current,
       timer = setTimeout(() => controller.current?.abort(), 45000);
@@ -290,7 +271,8 @@ export function OnboardingConversation({
         draft.responseKind !== "clarify" &&
         (changes.length ||
           draft.income !== before.draft.income ||
-          JSON.stringify(draft.timing ?? null) !== JSON.stringify(before.draft.timing ?? null))
+          JSON.stringify(draft.timing ?? null) !==
+            JSON.stringify(before.draft.timing ?? null))
       ) {
         reply.card = {
           kind: "correction",
@@ -321,20 +303,9 @@ export function OnboardingConversation({
         };
       }
       setSession(next);
-      setEntries((e) => [
-        ...e,
-        reply,
-        ...(next.draft.readyToReview && next.confirmed.length === 3
-          ? [
-              {
-                role: "assistant" as const,
-                content:
-                  "Here’s how your choices fit together. We can change anything before you use this plan.",
-                card: planCard(next),
-              },
-            ]
-          : []),
-      ]);
+      if (next.draft.readyToReview && next.confirmed.length === 3)
+        reply.card = planCard(next);
+      setEntries((e) => [...e, reply]);
     } catch (e) {
       if (id !== requestId.current) return;
       setError(
@@ -361,7 +332,7 @@ export function OnboardingConversation({
           card: planCard(next),
         },
       ]);
-      follow.current = true;
+      setHistory(null);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -379,363 +350,253 @@ export function OnboardingConversation({
       setError((e as Error).message);
     }
   }
-  function saveFacts(w: Workspace) {
-    const next: PlanningSession = {
-      ...session,
-      base: w,
-      draft: {
-        ...session.draft,
-        bucketEdits: [],
-        income: null,
-        timing: null,
-        questions: [],
-        readyToReview: false,
-      },
-      reviewKey: null,
-      assumptionsAccepted: false,
-      stage: session.confirmed.length === 3 ? "priorities" : "rhythm",
-    };
-    next.accepted = structuredClone(next.draft);
-    const content =
-      "I’ve updated the starting picture from your edits. Tell me what you would like to shape next.";
-    next.turns = [...next.turns, { role: "assistant", content }];
-    setSession(next);
-    setEntries((e) => [
-      ...e,
-      {
-        role: "assistant",
-        content,
-        card: {
-          kind: "picture",
-          title: "Your updated picture",
-          rows: pictureRows(next),
-          note: "Planning numbers for this session. Your plan still needs final approval.",
-        },
-      },
-    ]);
-    setEdit(null);
+
+  function advanceFinding() {
+    if (phase === 8) looksRight();
+    setPhase((p) => Math.min(9, p + 1));
   }
-  const comparison = session.comparison
-    ? comparePlans(session.comparison, preview, today).filter(
-        (c) => c.delta !== 0 || c.beforeDate !== c.afterDate,
-      )
-    : [];
+  if (phase < 9)
+    return (
+      <DemoWalkthrough
+        workspace={preview}
+        today={today}
+        phase={phase}
+        onNext={advanceFinding}
+        onBack={() => setPhase((p) => Math.max(0, p - 1))}
+      />
+    );
+  const assistantEntries = entries
+    .map((entry, index) => ({ entry, index }))
+    .filter((e) => e.entry.role === "assistant");
+  const position = Math.min(
+    history ?? assistantEntries.length - 1,
+    assistantEntries.length - 1,
+  );
+  const active = assistantEntries[position];
+  const latestUser = (
+    history === null ? entries : entries.slice(0, active.index)
+  ).findLast((e) => e.role === "user");
   return (
-    <main className="oc-shell">
-      <header className="oc-header">
-        <Link href="/" className="oc-brand">
-          <Sparkles size={19} /> steward
-        </Link>
-        <span className="oc-badge">
-          {manual
-            ? "Your planning session"
-            : `Sample data · ${today} · no bank connected`}
+    <main className="dc-shell">
+      <header className="dc-header">
+        <span className="dw-brand">
+          <Sparkles size={20} /> Steward
+        </span>
+        <span className="dw-demo">
+          Demo ·{" "}
+          {stage === 3 ? "Review" : stage === 2 ? "Your plan" : "Your goals"}
         </span>
       </header>
-      <nav aria-label="Planning progress" className="oc-progress">
-        {["Your picture", "Your goals", "Your plan", "Review"].map(
-          (label, i) => (
-            <span
-              key={label}
-              aria-current={stage === i ? "step" : undefined}
-              className={i <= stage ? "oc-reached" : ""}
-            >
-              <i>{i < stage ? <Check size={11} /> : i + 1}</i>
-              {label}
-            </span>
-          ),
-        )}
-      </nav>
-      <div className="oc-layout">
-        <section
-          className="oc-conversation"
-          aria-label="Conversation with Steward"
+      <div className="dc-history">
+        <button
+          disabled={position === 0 || busy}
+          onClick={() => setHistory(position - 1)}
+          aria-label="Previous message"
         >
-          <div className="oc-intro">
-            <span>MAKE ROOM FOR WHAT MATTERS</span>
-            <h1>A plan that starts with you.</h1>
-          </div>
-          <div
-            className="oc-messages"
-            role="log"
-            aria-label="Planning conversation"
-            aria-live="polite"
-            aria-relevant="additions"
-          >
-            {entries.map((entry, i) => (
-              <article key={i} className={`oc-message oc-${entry.role}`}>
-                <span className="oc-speaker">
-                  {entry.role === "assistant" ? (
-                    <>
-                      <Sparkles size={13} /> Steward
-                    </>
-                  ) : (
-                    "You"
-                  )}
-                </span>
-                <p>{entry.content.replace(/\*\*([^*]+)\*\*/g, "$1")}</p>
-                {entry.card && (
-                  <section
-                    className={`oc-card oc-card-${entry.card.kind}`}
-                    aria-label={entry.card.title}
-                  >
-                    <h2>{entry.card.title}</h2>
-                    <dl>
-                      {entry.card.rows.map((row, j) => (
-                        <div key={j}>
-                          <dt>{row.label}</dt>
-                          <dd>{row.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <p className="oc-note">{entry.card.note}</p>
-                    {i === 0 && stage === 0 && (
-                      <button
-                        className="oc-text"
-                        onClick={() => setEdit("income")}
-                        disabled={busy}
-                      >
-                        <Pencil size={13} /> Edit the numbers
-                      </button>
-                    )}
-                  </section>
-                )}
-              </article>
-            ))}
-          </div>
-          {!busy && stage === 0 && (
-            <div className="oc-quick">
-              <button onClick={looksRight} disabled={!loaded}>
-                <Check size={15} /> Looks right
-              </button>
-            </div>
-          )}
-          {!busy &&
-            stage === 1 &&
-            session.draft.goals.length === 0 &&
-            !session.draft.preferences?.length && (
-              <div className="oc-quick">
-                {[
-                  "Build a cushion",
-                  "Pay down debt",
-                  "Save for something",
-                  "Feel more in control",
-                ].map((text) => (
-                  <button key={text} onClick={() => send(text)}>
-                    {text}
-                  </button>
-                ))}
-              </div>
-            )}
-          {!!comparison.length && stage >= 2 && (
-            <details className="oc-comparison">
-              <summary>
-                What changed in this proposal <ChevronDown size={14} />
-              </summary>
-              {comparison.map((c) => (
-                <p key={c.id}>
-                  {c.name}: {money(c.before)} → {money(c.after)} per paycheck
-                  {!c.openEnded && c.beforeDate !== c.afterDate
-                    ? ` · projected completion ${c.beforeDate ?? "not reached"} → ${c.afterDate ?? "not reached"}`
-                    : ""}
-                </p>
-              ))}
-            </details>
-          )}
-          {!busy && stage === 2 && session.draft.readyToReview && (
-            <button
-              className="oc-primary"
-              onClick={review}
-              disabled={!!plan?.shortfall}
-            >
-              Review this plan
-            </button>
-          )}
-          {stage === 3 && (
-            <section className="oc-review" aria-label="Final plan approval">
-              <h2>Before you use this plan</h2>
-              <ul>
-                {assumptions(session).map((a) => (
-                  <li key={a}>{a}</li>
-                ))}
-              </ul>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={session.assumptionsAccepted}
-                  disabled={busy}
-                  onChange={(e) =>
-                    setSession((s) => ({
-                      ...s,
-                      assumptionsAccepted: e.target.checked,
-                    }))
-                  }
-                />{" "}
-                I understand these are planning estimates and earmarks.
-              </label>
-              <button
-                className="oc-primary"
-                disabled={busy || !session.assumptionsAccepted}
-                onClick={approve}
-              >
-                Use this plan
-              </button>
-              <p>
-                Want to change something? Tell Steward below. A change will need
-                a fresh review.
-              </p>
-            </section>
-          )}
-          {busy && (
-            <div role="status" className="oc-processing">
-              <Sparkles size={16} />
-              <span>Steward is thinking through your reply…</span>
-              <button onClick={() => controller.current?.abort()}>Stop</button>
-            </div>
-          )}
-          {error && (
-            <div role="alert" className="oc-error">
-              <p>{error}</p>
-              {failedText && (
-                <button onClick={() => send(failedText, true)} disabled={busy}>
-                  <RotateCcw size={14} /> Retry response
-                </button>
-              )}
-            </div>
-          )}
-          {storageError && (
-            <p role="status" className="oc-note">
-              {storageError}
-            </p>
-          )}
-          <form
-            className="oc-composer"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void send(input);
-            }}
-          >
-            <label className="oc-input-label" htmlFor="steward-reply">
-              Your reply to Steward
-            </label>
-            <div>
-              <textarea
-                id="steward-reply"
-                value={input}
-                maxLength={1200}
-                rows={2}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={
-                  stage === 0
-                    ? "Tell me what looks right, or what’s changing…"
-                    : "Tell me what matters, or change something…"
-                }
-                onKeyDown={(e) => {
-                  if (
-                    e.key === "Enter" &&
-                    !e.shiftKey &&
-                    !e.nativeEvent.isComposing
-                  ) {
-                    e.preventDefault();
-                    void send(input);
-                  }
-                }}
-              />
-              <button
-                type="submit"
-                aria-label="Send reply"
-                disabled={busy || !loaded || !input.trim()}
-              >
-                <ArrowUp size={21} />
-              </button>
-            </div>
-            <small>
-              Replies use OpenAI · calculations by Steward ·{" "}
-              {manual ? "your session" : "fictional sample accounts"}
-            </small>
-          </form>
-          <div ref={bottom} />
-        </section>
-        <aside className="oc-sidebar">
-          <span className="oc-eyebrow">YOUR PICTURE, IN VIEW</span>
-          <h2>
-            {session.confirmed.length === 3
-              ? "Starting picture confirmed"
-              : "Starting picture to confirm"}
-          </h2>
-          <p className="oc-side-amount">{money(preview.profile.takeHomePay)}</p>
-          <p>projected take-home each paycheck</p>
-          <hr />
-          <dl>
-            <div>
-              <dt>Cash today</dt>
-              <dd>{liquidity.known ? money(liquidity.cash) : "Unverified"}</dd>
-            </div>
-            <div>
-              <dt>Room for priorities</dt>
-              <dd>{money(plan?.freeCapacity ?? 0)}</dd>
-            </div>
-          </dl>
-          <p className="oc-note">
-            Paycheck capacity includes future income. Cash today is separate and
-            still needs to cover protected bills and reserves.
-          </p>
-          {!!session.draft.preferences?.length && (
-            <>
-              <h3>What matters to you</h3>
-              <ul>
-                {session.draft.preferences.map((p) => (
-                  <li key={p}>{p}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          <button
-            className="oc-text"
-            onClick={() => setEdit("income")}
-            disabled={busy}
-          >
-            <Pencil size={13} /> Open the numbers editor
-          </button>
-        </aside>
+          <ArrowLeft size={16} />
+        </button>
+        <span>
+          {history === null
+            ? "A little conversation. A clearer plan."
+            : `Message ${position + 1} of ${assistantEntries.length}`}
+        </span>
+        <button
+          disabled={position === assistantEntries.length - 1 || busy}
+          onClick={() => setHistory(position + 1)}
+          aria-label="Next message"
+        >
+          <ArrowRight size={16} />
+        </button>
       </div>
-      {edit && (
-        <div
-          className="oc-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Edit starting numbers"
-        >
-          <div className="oc-editor ps-shell">
-            <header>
-              <h2>Edit your starting numbers</h2>
-              <button aria-label="Close editor" onClick={() => setEdit(null)}>
-                <X size={20} />
-              </button>
-            </header>
-            <div className="oc-quick">
-              {(["income", "bills", "spending"] as const).map((group) => (
+      <section className="dc-stage" aria-label="Conversation with Steward">
+        {latestUser && (
+          <p className="dc-user" title={latestUser.content}>
+            <span>You</span>
+            {latestUser.content}
+          </p>
+        )}
+        <ChatDeck
+          key={`${active.index}:${stage}`}
+          entry={active.entry}
+          assumptionsText={stage === 3 ? assumptions(session) : []}
+          footer={
+            stage === 3 ? (
+              <div className="dc-approval">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={session.assumptionsAccepted}
+                    onChange={(e) =>
+                      setSession((s) => ({
+                        ...s,
+                        assumptionsAccepted: e.target.checked,
+                      }))
+                    }
+                  />{" "}
+                  I understand these are estimates and earmarks, not transfers.
+                </label>
                 <button
-                  key={group}
-                  aria-pressed={edit === group}
-                  onClick={() => setEdit(group)}
+                  className="dw-next"
+                  disabled={!session.assumptionsAccepted || busy}
+                  onClick={approve}
                 >
-                  {group}
+                  Use this plan <Check size={16} />
                 </button>
-              ))}
-            </div>
-            {edit === "income" ? (
-              <IncomeFacts workspace={preview} onSave={saveFacts} />
-            ) : (
-              <BucketFacts
-                workspace={preview}
-                group={edit}
-                onSave={saveFacts}
-              />
+              </div>
+            ) : null
+          }
+        />
+      </section>
+      <div className="dc-bottom">
+        {!busy && stage === 2 && session.draft.readyToReview && (
+          <button
+            className="dc-review"
+            disabled={!!plan?.shortfall}
+            onClick={review}
+          >
+            Review this plan <ArrowRight size={16} />
+          </button>
+        )}
+        {busy && (
+          <div className="dc-status" role="status">
+            <Sparkles size={15} /> Thinking through your reply…
+            <button onClick={() => controller.current?.abort()}>Stop</button>
+          </div>
+        )}
+        {error && (
+          <div className="dc-error" role="alert">
+            <span>{error}</span>
+            {failedText && (
+              <button onClick={() => send(failedText, true)} disabled={busy}>
+                <RotateCcw size={14} /> Retry
+              </button>
             )}
           </div>
+        )}
+        {storageError && <p className="dc-storage">{storageError}</p>}
+        <form
+          className="dc-composer"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send(input);
+          }}
+        >
+          <input
+            aria-label="Your reply to Steward"
+            id="steward-reply"
+            value={input}
+            maxLength={1200}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="What would you like to feel better about?"
+          />
+          <button
+            type="submit"
+            aria-label="Send reply"
+            disabled={busy || !loaded || !input.trim()}
+          >
+            <ArrowUp size={21} />
+          </button>
+        </form>
+        <p className="dc-footnote">
+          Live AI conversation · Sample accounts · No money moves
+        </p>
+      </div>
+    </main>
+  );
+}
+
+function splitText(text: string, max = 240) {
+  const words = text.replace(/\*\*([^*]+)\*\*/g, "$1").split(/\s+/),
+    pages: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if ((current + " " + word).length > max && current) {
+      pages.push(current);
+      current = "";
+    }
+    current += (current ? " " : "") + word;
+  }
+  if (current) pages.push(current);
+  return pages;
+}
+function ChatDeck({
+  entry,
+  assumptionsText,
+  footer,
+}: {
+  entry: Entry;
+  assumptionsText: string[];
+  footer: React.ReactNode;
+}) {
+  const pages: {
+    text?: string;
+    rows?: { label: string; value: string }[];
+    title?: string;
+  }[] = splitText(entry.content).map((text) => ({ text }));
+  if (entry.card) {
+    for (let i = 0; i < entry.card.rows.length; i += 2)
+      pages.push({
+        title: entry.card.title,
+        rows: entry.card.rows.slice(i, i + 2),
+      });
+    for (const text of splitText(entry.card.note))
+      pages.push({ title: "About this plan", text });
+  }
+  for (const assumption of assumptionsText)
+    for (const text of splitText(assumption))
+      pages.push({ title: "Before you use this plan", text });
+  const [page, setPage] = useState(0),
+    current = pages[Math.min(page, pages.length - 1)],
+    last = page === pages.length - 1;
+  return (
+    <div
+      className="dc-deck"
+      aria-live="polite"
+      role="log"
+      aria-label="Steward’s reply"
+    >
+      <div className="dc-speaker">
+        <span>
+          <Sparkles size={19} />
+        </span>
+        Steward
+      </div>
+      <div className="dc-answer" key={page}>
+        {current.title && <h2>{current.title}</h2>}
+        {current.text && <p>{current.text}</p>}
+        {current.rows && (
+          <dl>
+            {current.rows.map((row, i) => (
+              <div key={i}>
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+      {pages.length > 1 && (
+        <div className="dc-pages">
+          <button
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+            aria-label="Previous detail"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <span>
+            {page + 1} / {pages.length}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(p + 1, pages.length - 1))}
+            disabled={last}
+          >
+            {last ? "All caught up" : "Next"}
+            <ArrowRight size={16} />
+          </button>
         </div>
       )}
-    </main>
+      {last && footer}
+    </div>
   );
 }
