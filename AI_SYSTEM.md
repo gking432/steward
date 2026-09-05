@@ -1,6 +1,6 @@
 # How Steward’s AI works
 
-Steward’s primary experience is a staged planning session, backed by the live
+Steward’s onboarding is a persistent conversation with financial cards, backed by the live
 OpenAI Responses API. The model interprets priorities, extracts candidate facts,
 handles corrections and topic changes, asks about ambiguity, and selects narrowly
 scoped tools. The application owns stage transitions, financial arithmetic,
@@ -16,8 +16,7 @@ persistence, and approval.
 - Accepted intent, unresolved questions, and deterministic projection assumptions.
 - A previous scenario for comparison and the identity of the exact reviewed plan.
 
-The canvas progresses through starting point, financial rhythm, priorities,
-building, trade-offs, and review. Home continues with contextual priority,
+Onboarding keeps its transcript visible through Your picture, Your goals, Your plan, and Review. Clear facts update the session directly; exploration and ambiguity cannot introduce new allocations or uncertain fact changes. The initial synthetic findings are calculated locally, not presented as a live-model generation. Home continues with contextual priority,
 paycheck, and purchase sessions. Back retains completed work. A versioned,
 validated sessionStorage snapshot restores drafts in the same tab. Earlier fact
 edits invalidate confirmation/review and recalculate downstream results.
@@ -47,15 +46,14 @@ The model receives user messages and selected plan/account information. Raw
 transaction descriptions are excluded. Imported names and all transcript content
 remain untrusted data under the developer contract. Exact user evidence, known
 IDs, calendar dates, cents, and field allowlists are checked after generation.
-Evidence proves provenance, not semantic truth: the user sees and confirms the
-interpretation before final review. Financial numbers and dates in assistant prose
+Evidence proves provenance, not semantic truth: the user sees session updates and can correct them before final plan approval. Financial numbers and dates in assistant prose
 are suppressed; numerical explanations, affordability checks, allocations, and
 comparison cards come from the engine.
 
 ## Approval and financial ownership
 
 `planCycle`, `buildPaydayProposal`, `projectArrivals`, and `evaluatePurchase` own
-calculations. Projections assume unchanged future income and spending. Current
+calculations. Projections assume unchanged future income and spending, with scheduled bill changes applied to the first obligation on or after their effective date. Current
 cash remains separate from projected income and proposed/confirmed earmarks.
 
 Approval requires the exact reviewed candidate, confirmed financial groups,
@@ -69,7 +67,7 @@ A stale review cannot be applied. Model `readyToReview` is not authorization.
 The Vercel demo has server-only `OPENAI_API_KEY` and `STEWARD_AI_ENABLED=true`.
 `OPENAI_MODEL` is optional; the default is `gpt-5.6-sol`. Local AI requires those same
 server settings. Without them, the interface explicitly says AI is unavailable
-and offers retry plus manual facts, priorities, comparisons, and purchase checks.
+and offers retry. Onboarding also keeps optional fact editors; ongoing planning retains its manual priority, comparison, and purchase controls.
 Interrupted requests retain the prior candidate; late responses cannot overwrite a
 newer session. Manual actions are labeled manual, never live AI.
 

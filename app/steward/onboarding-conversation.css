@@ -541,3 +541,31 @@
     animation: none;
   }
 }
+
+/* Leave the opening findings and quick reply more room on short desktops. */
+@media (min-width: 851px) and (max-height: 800px) {
+  .oc-shell {
+    padding-top: 18px;
+  }
+  .oc-progress {
+    padding-top: 16px;
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+  }
+  .oc-intro {
+    margin-bottom: 18px;
+  }
+  .oc-intro h1 {
+    font-size: 26px;
+  }
+  .oc-message > p {
+    line-height: 1.55;
+    margin-bottom: 12px;
+  }
+  .oc-card {
+    padding: 15px 20px;
+  }
+  .oc-card dl > div {
+    padding: 7px 0;
+  }
+}

@@ -1,6 +1,6 @@
 # Steward
 
-Steward is a calm paycheck-planning assistant with staged AI sessions and an ongoing Home, Plan, and Activity workspace.
+Steward is a calm paycheck-planning assistant with conversational AI onboarding and an ongoing Home, Plan, and Activity workspace.
 Its financial calculations are deterministic. Planning and confirming allocations
 **earmark money only**; they never transfer funds, pay debt, or prove a bill was paid.
 
@@ -83,8 +83,7 @@ manual review. See the dated review checklist for remaining calendar limits.
 
 ## Conversational onboarding
 
-Start at `/demo` to talk with Steward about priorities and build a draft. Inspect
+Start at `/demo`: Steward presents derived sample findings immediately, then helps you shape a plan through one persistent conversation. Inspect
 statements at `/demo?statements=1`, or skip onboarding with `/fixture`. Review the
 calculated plan and catch-up amounts before confirming. Model calls are enabled
-on the Vercel deployment. See AI_SYSTEM.md for the actual nine-turn live evaluation
-and its limits. This is a working AI portfolio demo, not evidence of user adoption.
+on the Vercel deployment. See [conversational onboarding verification](docs/conversational-onboarding.md) for the six-turn live acceptance suite and public-browser checks, and AI_SYSTEM.md for the broader evaluation history and limits. This is a working AI portfolio demo, not evidence of user adoption.

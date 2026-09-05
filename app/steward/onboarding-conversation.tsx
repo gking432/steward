@@ -369,7 +369,11 @@ export function OnboardingConversation({
   function approve() {
     try {
       const next = approveSession(session, workspace, today);
-      try { sessionStorage.removeItem(key()); } catch { /* Saving the plan remains possible without draft storage. */ }
+      try {
+        sessionStorage.removeItem(key());
+      } catch {
+        /* Saving the plan remains possible without draft storage. */
+      }
       onDone(next);
     } catch (e) {
       setError((e as Error).message);
@@ -469,7 +473,7 @@ export function OnboardingConversation({
                     "You"
                   )}
                 </span>
-                <p>{entry.content}</p>
+                <p>{entry.content.replace(/\*\*([^*]+)\*\*/g, "$1")}</p>
                 {entry.card && (
                   <section
                     className={`oc-card oc-card-${entry.card.kind}`}
@@ -604,7 +608,6 @@ export function OnboardingConversation({
               {storageError}
             </p>
           )}
-          <div ref={bottom} />
           <form
             className="oc-composer"
             onSubmit={(e) => {
@@ -651,6 +654,7 @@ export function OnboardingConversation({
               {manual ? "your session" : "fictional sample accounts"}
             </small>
           </form>
+          <div ref={bottom} />
         </section>
         <aside className="oc-sidebar">
           <span className="oc-eyebrow">YOUR PICTURE, IN VIEW</span>

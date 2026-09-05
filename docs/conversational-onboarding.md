@@ -12,4 +12,10 @@ Failed or stopped AI requests preserve conversation and draft and offer retry. T
 
 Focused state/calculation tests cover derived opening values, preference preservation without allocation, ambiguous changes, effective-dated rent, validated persistence, multi-detail proposals, revisions, and exact final approval. Existing purchase and subscription regressions remain. `npm run test:build` passes 248 tests plus six HTTP checks; lint has no errors and two pre-existing warnings.
 
-Live acceptance and public-browser verification are recorded after deployment; `scripts/eval-onboarding-conversation.ts` exercises the actual server-side model with fictional data and keeps local evidence under ignored `outputs/evaluations/`.
+The deployed live-model suite passed **6/6 turns** on `80fcdf0`: future rent, security plus enjoyment, multi-detail cushion/camera planning, contribution revision, ambiguous income, and clarification. Provider response IDs and output are retained locally in `outputs/evaluations/conversational-onboarding.json`. These are focused synthetic acceptance cases, not a production reliability benchmark.
+
+Public-browser verification exercised fresh findings, future rent, Looks right → motivation, exploratory follow-up, the multi-detail proposal, a revision from $100 to $50, mobile reload with full history, review acknowledgment, and Use this plan → Home. The final plan earmarked $50 for the cushion and $325.26 for the camera, retained Dining at $75, and showed $843.74 available after protected amounts. The current rent remained $1,600; $1,750 starts with bills due from September 1 in the August 1 fixture.
+
+Local production-browser verification separately exercised an actual unavailable-AI response, retry without duplicate user turns, and reload preserving history and confirmed picture. Public production uses the configured live model; no outage was induced there. Browser inspection also identified and corrected the scroll anchor so new cards stay above the sticky composer. Screenshots and local notes are under ignored `outputs/steward-review-assets/`.
+
+`npx tsx scripts/eval-onboarding-conversation.ts <deployment-url>` reruns the focused live suite using the authenticated Vercel CLI.
