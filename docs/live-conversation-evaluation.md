@@ -71,6 +71,23 @@ and 320px viewport layouts were exercised without horizontal overflow. Stage
 headings receive focus; controls use native labels and keyboard semantics, and
 CSS disables motion under reduced-motion preferences.
 
+## Public production browser check
+
+The same runtime was verified at https://steward.gunnarneuman.com/demo after release.
+A real model request created an open-ended cushion with a 100-per-paycheck
+contribution and a separate 900 camera target. A natural-language request to save
+50 less changed the cushion to 50 and the camera allocation from 275.26 to 325.26.
+The engine comparison moved the projected camera completion from 2026-09-07 to
+2026-08-24. Reload retained the accepted scenario and history.
+
+The 375px mobile flow completed exact review, assumptions acknowledgment, and
+approval. Home showed the 50 cushion earmark and camera progress; Adjust a priority
+reopened with those saved goals and existing context. The public deployment also
+passed all six HTTP checks. Screenshots are in the local
+`outputs/steward-review-assets/staged-*.png` evidence files. Subsequent release copy
+explicitly labels comparison dates as projections and clarifies that declining
+extra debt repayment retains required minimums; no model or engine behavior changed.
+
 ## Limits
 
 This is a small synthetic functional suite, not a statistical accuracy estimate,

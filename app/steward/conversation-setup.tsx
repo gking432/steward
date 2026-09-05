@@ -639,7 +639,7 @@ export function ConversationSetup({
                             <p>
                               {c.openEnded
                                 ? "Open-ended savings · no completion date"
-                                : `${c.beforeDate ?? "No date projected"} → ${c.afterDate ?? "No date within projection"}`}
+                                : `Projected completion: ${c.beforeDate ?? "No date projected"} → ${c.afterDate ?? "No date within projection"}`}
                             </p>
                             <small>
                               {c.delta !== 0
@@ -943,8 +943,9 @@ export function ConversationSetup({
                   )
                   .map((c) => (
                     <p className="ps-muted" key={c.id}>
-                      {c.name}: removed from active funding; existing earmarks
-                      retained.
+                      {c.kind === "payoff"
+                        ? `Extra repayment toward ${c.name}: not included. Required minimums remain in bills.`
+                        : `${c.name}: removed from active funding; existing earmarks retained.`}
                     </p>
                   ))}
                 <h2>This paycheck’s earmarks</h2>
