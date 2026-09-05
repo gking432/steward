@@ -31,6 +31,7 @@ import {
 import { formatDate, formatMoney } from "../../lib/model/engine";
 import type { Workspace } from "../../lib/model/types";
 import "./ask.css";
+import { resolveFollowup, type PendingIntent } from "../../lib/model/conversation";
 
 type Message = {
   id: string;
@@ -40,6 +41,7 @@ type Message = {
   /** A claim this message is about, so "sooner?" has something to act on. */
   claimId?: string;
   options?: Acceleration;
+  proposal?: { claim: Workspace["claims"][number]; revision: number };
   debtChoices?: { id: string; name: string }[];
 };
 
@@ -72,6 +74,7 @@ export function AskScreen({
       text: "Tell me what you want and I'll show you how to get there. Or ask what this paycheck should do.",
     },
   ]);
+  const [pending, setPending] = useState<PendingIntent | null>(null);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [pendingDebtIds, setPendingDebtIds] = useState<string[]>([]);
@@ -85,19 +88,7 @@ export function AskScreen({
     setMessages((current) => [...current, { ...message, id: nextId() }]);
 
   /** Optional rewording. Never allowed to change or add a number. */
-  const humanize = async (headline: string, detail: string) => {
-    try {
-      const response = await fetch("/api/steward-ai", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "phrase", headline, verdict: headline, tradeoff: detail, checks: [] }),
-      });
-      const payload = await response.json();
-      return payload?.text ?? `${headline} ${detail}`;
-    } catch {
-      return `${headline} ${detail}`;
-    }
-  };
+  const humanize = async (headline: string, detail: string) => `${headline} ${detail}`;
 
   const answerPlan = async () => {
     const narrative = planNarrative(workspace, today);
@@ -123,7 +114,7 @@ export function AskScreen({
       say({ from: "steward", text: "I need your pay schedule before I can answer that." });
       return;
     }
-    const text = await humanize(verdict.headline, verdict.tradeoff);
+    const text = `${item} · ${formatMoney(price)}. ${await humanize(verdict.headline, verdict.tradeoff)}`;
     say({
       from: "steward",
       text,
@@ -134,23 +125,9 @@ export function AskScreen({
   const answerWant = (name: string, amount: number, wantBy?: string) => {
     const rank = workspace.claims.filter((claim) => claim.status === "active").length;
     const claim = claimFromPurchase({ item: name, price: amount, wantBy, rank });
-    update((current) => ({ ...current, claims: [...current.claims, claim] }));
-
-    // Project against the workspace as it will be, so the date quoted is real.
     const projected: Workspace = { ...workspace, claims: [...workspace.claims, claim] };
     const narrative = planNarrative(projected, today);
-    const line = narrative?.lines.find((entry) => entry.claimId === claim.id);
-
-    say({
-      from: "steward",
-      text: line
-        ? line.completes
-          ? `Done — ${formatMoney(amount)} covers ${name} out of this paycheck.`
-          : `Added. ${line.sentence}`
-        : `Added ${name} at ${formatMoney(amount)}. It waits for a later paycheck — everything ahead of it is already spoken for.`,
-      claimId: claim.id,
-      options: accelerate(projected, claim.id, today) ?? undefined,
-    });
+    say({ from: "steward", text: `Proposed goal: ${name}, ${formatMoney(amount)}. Review before adding it. No money will be transferred.`, lines: narrative ? [narrative.summary] : [], proposal: { claim, revision: workspace.revision ?? 0 } });
   };
 
   const answerKnownDebt = (claimId: string) => {
@@ -190,6 +167,9 @@ export function AskScreen({
 
     const lower = text.toLowerCase();
     try {
+      const followup = resolveFollowup(pending, text);
+      if (followup && 'cancelled' in followup) { setPending(null); setPendingDebtIds([]); setMessages(current => current.map(m => ({ ...m, proposal: undefined }))); say({from:"steward",text:"Cancelled. Your plan is unchanged."}); return; }
+      if (followup && 'amount' in followup) { if (followup.kind === 'purchase') await answerPurchase(followup.name, followup.amount); else answerWant(followup.name, followup.amount); return; }
       const isDebtIntent = /card|loan|debt|pay\s*off|paid off/.test(lower);
       if (pendingDebtIds.length) {
         const resolution = resolveDebtMention(workspace, text, pendingDebtIds);
@@ -220,16 +200,19 @@ export function AskScreen({
       } else if (/can i (buy|afford)/.test(lower)) {
         const draft = fallbackIntent(text, today);
         if (draft?.amount) await answerPurchase(draft.name, draft.amount);
-        else
+        else {
+          setPending({ kind: "purchase", name: text.replace(/^can i (buy|afford)\s*/i, "").replace(/[?]$/, ""), missing: "amount" });
           say({
             from: "steward",
             text: "How much is it? I need the price to answer properly — I won't guess at it.",
           });
+        }
       } else {
         const draft = fallbackIntent(text, today);
         if (draft?.amount) {
           answerWant(draft.name, draft.amount, draft.wantBy ?? undefined);
         } else if (draft) {
+          setPending({kind:"goal",name:draft.name,missing:"amount"});
           say({
             from: "steward",
             text: `How much is ${draft.name.toLowerCase()}? Give me a number and I'll work out when you can have it.`,
@@ -274,7 +257,7 @@ export function AskScreen({
     say({
       from: "steward",
       text: option.newArrival
-        ? `Done — ${option.name} drops to ${formatMoney(option.currentPerCycle - option.suggestedCut)} a paycheck and ${acceleration.claim.name} lands ${formatDate(option.newArrival)}.`
+        ? `Applied to this session — ${option.name} drops to ${formatMoney(option.currentPerCycle - option.suggestedCut)} a paycheck and ${acceleration.claim.name} lands ${formatDate(option.newArrival)}.`
         : `${option.name} drops to ${formatMoney(option.currentPerCycle - option.suggestedCut)} a paycheck.`,
     });
   };
@@ -282,6 +265,7 @@ export function AskScreen({
   return (
     <div className="ak-screen">
       <header className="ak-top">
+        <button onClick={() => {setMessages([]);setPending(null);setPendingDebtIds([]);}}>Clear conversation</button>
         <span className="ak-badge">
           <Sparkles size={14} /> Steward
         </span>
@@ -302,6 +286,16 @@ export function AskScreen({
               </ul>
             )}
 
+            {message.proposal && <div className="ak-debt-choices">
+              <button onClick={() => {
+                if (message.proposal!.revision !== (workspace.revision ?? 0)) { say({from:"steward",text:"Your plan changed. Ask again to review an updated proposal."}); return; }
+                update(current => ({...current, claims:[...current.claims,message.proposal!.claim]}));
+                setMessages(current => current.map(m => m.id === message.id ? {...m,proposal:undefined} : m));
+                say({from:"steward",text:`Added ${message.proposal!.claim.name} to this session's plan. See the save status for persistence.`});
+              }}>Apply goal</button>
+              <button onClick={() => { setInput(`I want ${message.proposal!.claim.name} for $${message.proposal!.claim.targetAmount}`); setMessages(current => current.map(m => m.id === message.id ? {...m,proposal:undefined} : m)); }}>Edit</button>
+              <button onClick={() => setMessages(current => current.map(m => m.id === message.id ? {...m,proposal:undefined} : m))}>Cancel</button>
+            </div>}
             {message.debtChoices && (
               <div className="ak-debt-choices">
                 {message.debtChoices.map((choice) => (

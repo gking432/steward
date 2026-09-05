@@ -31,7 +31,7 @@
 
 .bk-eyebrow {
   color: rgba(246, 248, 244, 0.62);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -66,7 +66,7 @@
 .bk-total small {
   display: block;
   color: rgba(246, 248, 244, 0.6);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -108,7 +108,7 @@
   display: block;
   margin-top: 2px;
   color: rgba(246, 248, 244, 0.58);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .bk-group-total {
   text-align: right;
@@ -142,7 +142,7 @@
 .bk-row-main small {
   display: block;
   color: rgba(246, 248, 244, 0.58);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -158,7 +158,7 @@
 .bk-row-amount small {
   display: block;
   color: rgba(246, 248, 244, 0.55);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .bk-icon {
@@ -260,7 +260,7 @@
 .bk-approve small {
   color: rgba(246, 248, 244, 0.55);
   text-align: center;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .bk-new {
@@ -292,7 +292,7 @@
   border: 1px solid rgba(246, 248, 244, 0.2);
   border-radius: 11px;
   color: rgba(246, 248, 244, 0.75);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 650;
 }
 .bk-kind button.active {
@@ -306,7 +306,7 @@
 }
 .bk-new label span {
   color: rgba(246, 248, 244, 0.68);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 650;
 }
 .bk-new input {

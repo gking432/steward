@@ -16,6 +16,8 @@ import { useState } from "react";
 import type { Workspace } from "../../lib/model/types";
 import type { PlaidStatus } from "./use-plaid";
 import "./settings.css";
+import { Modal } from "./dialog";
+import { csvCell } from "../../lib/model/export";
 
 export function SettingsSheet({
   workspace,
@@ -26,16 +28,21 @@ export function SettingsSheet({
   bankError,
   onConnectBank,
   onSyncBanks,
+  bankSupported = true,
 }: {
+  bankSupported?: boolean;
   workspace: Workspace;
   onClose: () => void;
   update: (next: (current: Workspace) => Workspace) => void;
-  onReset: () => void;
+  onReset: () => void | Promise<void>;
   bankStatus: PlaidStatus;
   bankError: string;
   onConnectBank: () => void;
   onSyncBanks: () => void;
 }) {
+  const [profileDraft,setProfileDraft] = useState(workspace.profile);
+  const [profileError,setProfileError] = useState("");
+  const [resetError,setResetError] = useState("");
   const [confirming, setConfirming] = useState(false);
 
   const download = (name: string, body: string, type: string) => {
@@ -68,13 +75,13 @@ export function SettingsSheet({
     ];
     download(
       "steward-transactions.csv",
-      rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n"),
+      rows.map((row) => row.map((cell) => csvCell(cell)).join(",")).join("\n"),
       "text/csv",
     );
   };
 
   const setProfile = (patch: Partial<Workspace["profile"]>) =>
-    update((current) => ({ ...current, profile: { ...current.profile, ...patch } }));
+    setProfileDraft(current => ({...current,...patch}));
 
   const connected = workspace.accounts.filter(
     (account) => account.source === "plaid" && !account.archived,
@@ -92,11 +99,11 @@ export function SettingsSheet({
   const bankBusy = bankStatus !== "idle";
 
   return (
-    <div className="st-backdrop" role="presentation" onMouseDown={onClose}>
+    <Modal className="st-backdrop" label="Settings" onClose={onClose}>
       <div
         className="st-sheet"
-        role="dialog"
-        aria-modal="true"
+
+
         aria-label="Settings"
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -108,7 +115,8 @@ export function SettingsSheet({
         </header>
 
         <section>
-          <h3>Connected banks</h3>
+          <h3>{bankSupported ? "Connected banks" : "Sample / manual accounts"}</h3>
+          {!bankSupported && <p>Bank linking and sync are unavailable in this isolated session.</p>}
           {connected.length ? (
             <div className="st-bank">
               <span className="st-bank-icon"><Landmark size={17} /></span>
@@ -122,11 +130,11 @@ export function SettingsSheet({
           )}
           {bankError && <p className="st-bank-error" role="status">{bankError}</p>}
           <div className="st-row">
-            <button onClick={onSyncBanks} disabled={!connected.length || bankBusy}>
+            <button onClick={onSyncBanks} disabled={!bankSupported || !connected.length || bankBusy}>
               <RefreshCw size={15} className={bankStatus === "syncing" ? "st-spin" : ""} />
               {bankStatus === "syncing" ? "Syncing…" : "Sync now"}
             </button>
-            <button onClick={onConnectBank} disabled={bankBusy}>
+            <button onClick={onConnectBank} disabled={!bankSupported || bankBusy}>
               <Plus size={15} /> Add a bank
             </button>
           </div>
@@ -138,14 +146,14 @@ export function SettingsSheet({
             <span>Take-home each paycheck</span>
             <input
               type="number"
-              defaultValue={workspace.profile.takeHomePay}
-              onBlur={(event) => setProfile({ takeHomePay: Number(event.target.value) })}
+              value={profileDraft.takeHomePay}
+              onChange={(event) => setProfile({ takeHomePay: Number(event.target.value) })}
             />
           </label>
           <label>
             <span>How often</span>
             <select
-              value={workspace.profile.payFrequency}
+              value={profileDraft.payFrequency}
               onChange={(event) =>
                 setProfile({ payFrequency: event.target.value as Workspace["profile"]["payFrequency"] })
               }
@@ -159,18 +167,21 @@ export function SettingsSheet({
             <span>Next payday</span>
             <input
               type="date"
-              defaultValue={workspace.profile.nextPayday}
-              onBlur={(event) => setProfile({ nextPayday: event.target.value })}
+              value={profileDraft.nextPayday}
+              onChange={(event) => setProfile({ nextPayday: event.target.value })}
             />
           </label>
           <label>
             <span>Cash you never want to dip below</span>
             <input
               type="number"
-              defaultValue={workspace.profile.bufferFloor}
-              onBlur={(event) => setProfile({ bufferFloor: Number(event.target.value) })}
+              value={profileDraft.bufferFloor}
+              onChange={(event) => setProfile({ bufferFloor: Number(event.target.value) })}
             />
           </label>
+          {profileError && <p role="alert">{profileError}</p>}
+          <button onClick={()=>{if(!Number.isFinite(profileDraft.takeHomePay)||profileDraft.takeHomePay<=0||!Number.isFinite(profileDraft.bufferFloor)||profileDraft.bufferFloor<0||!/^\d{4}-\d{2}-\d{2}$/.test(profileDraft.nextPayday)){setProfileError("Enter valid income, buffer and payday values.");return;}update(w=>({...w,profile:profileDraft}));setProfileError("Pay schedule applied. Check the save status after closing Settings.");}}>Save pay schedule</button>
+          <button onClick={()=>{setProfileDraft(workspace.profile);setProfileError("");}}>Cancel changes</button>
         </section>
 
         <section>
@@ -187,7 +198,7 @@ export function SettingsSheet({
         </section>
 
         <section className="st-danger">
-          <h3>Start over</h3>
+          <h3>Start over</h3>{resetError && <p role="alert">{resetError}</p>}
           {confirming ? (
             <>
               <p>
@@ -195,7 +206,7 @@ export function SettingsSheet({
               </p>
               <div className="st-row">
                 <button onClick={() => setConfirming(false)}>Cancel</button>
-                <button className="st-delete" onClick={onReset}>
+                <button className="st-delete" onClick={async () => {try {await onReset();} catch {setResetError("Deletion failed. Your data has not been cleared; retry when connected.");}}}>
                   <Trash2 size={15} /> Delete everything
                 </button>
               </div>
@@ -207,6 +218,6 @@ export function SettingsSheet({
           )}
         </section>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -28,12 +28,13 @@ export function ConnectScreen() {
       <div className="cx-copy">
         <h1>Let&apos;s see where your money actually goes.</h1>
         <p>
-          Connect once. Steward reads your last few months, works out what you spend and what
-          you owe, and builds the plan from there.
+          Explore synthetic statements or build a manual plan. Real bank connections are unavailable on this demo deployment.
         </p>
       </div>
 
       <footer className="cx-action">
+        <a className="cx-demo" href="/fixture">Explore a sample plan</a>
+        <a className="cx-demo cx-secondary" href="/manual">Build a manual plan</a>
         <button className="cx-bank-disabled" disabled>
           <Landmark size={18} />
           <span>Connect your bank <small>Coming soon</small></span>

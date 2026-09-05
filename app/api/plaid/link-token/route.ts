@@ -16,9 +16,9 @@ export async function POST() {
       { status: 503 },
     );
   }
-  const { email } = await currentUser();
-  const runtime = env as unknown as Record<string, string | undefined>;
   try {
+    const { email } = await currentUser();
+    const runtime = env as unknown as Record<string, string | undefined>;
     const result = await plaidRequest<{
       link_token: string;
       expiration: string;

@@ -174,7 +174,8 @@ test("a real subscription is raised with its yearly cost", () => {
   ]);
   const step = runStepFor(workspace, "spend:sub:");
   assert.match(step.prompt, /Netflix/);
-  assert.match(step.prompt, /\$186 a year/, "the yearly figure is what makes it real");
+  const annual = Number(step.prompt.match(/\$([\d.]+) a year/)?.[1]);
+  assert.equal(annual, Math.round(15.49 * 12 * 100) / 100, "yearly cost must preserve the actual cents, not round to a different amount");
   assert.ok(step.choices.includes("That's not mine"));
 });
 

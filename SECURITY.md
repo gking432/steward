@@ -2,15 +2,16 @@
 
 ## Implemented
 
-- Identity derived from trusted server headers
+- Private routes fail closed unless an explicit deployment identity adapter is configured
+- Sites forwarded identity is accepted only behind a verified trusted gateway
 - User-keyed durable state; client user IDs are ignored
-- Zod validation at write boundaries
+- Nested Zod validation and financial-reference invariants at workspace writes
 - D1 prepared statements
 - Plaid access tokens encrypted with AES-GCM
 - Plaid and OpenAI secrets remain server-side
 - OpenAI prompt-injection boundary for financial record text
 - `store: false` for OpenAI requests
-- Audit events for workspace creation and save
+- Conditional revisioned snapshot writes; audit coverage still needs production review
 - Confirmation before account-data deletion
 - Clear fallback errors without secret details
 - No financial tokens written to logs

@@ -1,3 +1,4 @@
+import { boundedJson, requestAllowed } from "../../../lib/request-limits";
 import { z } from "zod";
 import { explainFinancialDecision } from "../../../lib/openai-service";
 
@@ -50,7 +51,8 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const parsed = requestSchema.safeParse(await request.json());
+  if(!requestAllowed("advisor")) return Response.json({error:"Try again later"},{status:429});
+  const parsed = requestSchema.safeParse(await boundedJson(request,50000).catch(()=>null));
   if (!parsed.success) {
     return Response.json({ error: "Invalid advisor request." }, { status: 400 });
   }

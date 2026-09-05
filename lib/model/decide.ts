@@ -24,6 +24,7 @@ import {
   type Arrival,
   type DateChange,
 } from "./engine";
+import { currentLiquidity } from "./liquidity";
 import { defaultPolicy, type AllocationPolicy } from "./policy";
 import type { Claim, Workspace } from "./types";
 
@@ -69,7 +70,8 @@ export function evaluatePurchase(
   if (!plan || !cycle) return null;
 
   const price = round2(input.price);
-  const checks: VerdictCheck[] = [];
+  const liquidity = currentLiquidity(workspace, today);
+  const checks: VerdictCheck[] = [{ label: "Available today", status: liquidity.known && price <= liquidity.available ? "ok" : "warn", detail: liquidity.known ? `${formatMoney(liquidity.available)} after unpaid obligations, pending activity, earmarks and your buffer.` : "Balances are missing, stale or need attention. Refresh them before deciding to buy today." }];
 
   // 1 — obligations. These are never negotiable, so they are checked first.
   const nextBill = [...plan.reserves]
@@ -78,8 +80,8 @@ export function evaluatePurchase(
   checks.push({
     label: "Bills and minimums",
     detail: nextBill
-      ? `${formatMoney(plan.reservesTotal)} reserved this cycle. Next up: ${nextBill.bucket.name} on ${formatDate(nextBill.bucket.dueDate ?? null)}.`
-      : `${formatMoney(plan.reservesTotal)} reserved this cycle.`,
+      ? `${formatMoney(plan.reservesTotal)} planned this cycle (not proof of payment). Next up: ${nextBill.bucket.name} on ${formatDate(nextBill.bucket.dueDate ?? null)}.`
+      : `${formatMoney(plan.reservesTotal)} planned this cycle (not proof of payment).`,
     status: "ok",
   });
 
@@ -123,7 +125,7 @@ export function evaluatePurchase(
   const delayed = consequences.filter((change) => change.direction === "later");
 
   let answer: Verdict["answer"];
-  if (!fitsInFreeCapacity || plan.freeCapacity <= 0) answer = "wait";
+  if (!Number.isFinite(price) || price <= 0 || !liquidity.known || price > liquidity.available || !fitsInFreeCapacity || plan.freeCapacity <= 0) answer = "wait";
   else if (bucketOver || delayed.length > 0) answer = "yes-but";
   else answer = "yes";
 
@@ -136,7 +138,7 @@ export function evaluatePurchase(
       : answer === "yes-but"
         ? "Yes — with one tradeoff."
         : waitUntil
-          ? `Wait until ${formatDate(waitUntil)}.`
+          ? `Not verified for today. Projected saving date: ${formatDate(waitUntil)}.`
           : "Not this cycle.";
 
   const tradeoff = delayed.length
@@ -145,7 +147,7 @@ export function evaluatePurchase(
         .map((change) => `${change.name} moves to ${change.after ? formatDate(change.after) : "beyond a year"}`)
         .join(" · ")
     : answer === "wait"
-      ? `${formatMoney(price)} is more than the ${formatMoney(plan.freeCapacity)} free this cycle.`
+      ? `${formatMoney(liquidity.available)} is verified for spending today; ${formatMoney(plan.freeCapacity)} is expected paycheck capacity. Future dates assume income arrives and bills are accurate.`
       : "Nothing you're working toward moves.";
 
   return {
@@ -351,6 +353,7 @@ export function progressSummary(workspace: Workspace, today: string) {
 /* ---------------------------------------------------------------- payday */
 
 export type PaydayProposal = {
+  sourceRevision?: number;
   cycleId: string;
   cycleEnd: string;
   income: number;
@@ -380,11 +383,15 @@ export function buildPaydayProposal(
 ): PaydayProposal | null {
   const plan = planCycle(workspace, today);
   if (!plan) return null;
-  const result = allocate(workspace, plan.freeCapacity, today, policy);
+  const previous = new Map<string,number>();
+  for(const a of workspace.allocations) if(a.cycleId===plan.cycle.id && a.status==='confirmed' && a.targetType==='claim') previous.set(a.targetId,(previous.get(a.targetId)??0)+a.amount);
+  const basis={...workspace,claims:workspace.claims.map(c=>({...c,fundedAmount:round2(c.fundedAmount-(previous.get(c.id)??0))}))};
+  const result = allocate(basis, plan.freeCapacity, today, policy);
   const arrivals = projectArrivals(workspace, today, policy);
   const arrivalFor = (id: string) => arrivals.find((entry) => entry.claimId === id)?.arrivalDate ?? null;
 
   return {
+    sourceRevision: workspace.revision ?? 0,
     cycleId: plan.cycle.id,
     cycleEnd: plan.cycle.end,
     income: plan.income,
@@ -433,6 +440,13 @@ export function confirmProposal(
   proposal: PaydayProposal,
   now = new Date().toISOString(),
 ): Workspace {
+  if (proposal.sourceRevision !== undefined && proposal.sourceRevision !== (workspace.revision ?? 0)) throw new Error("This plan changed. Review the updated proposal before confirming.");
+  const ids = new Set<string>();
+  for (const line of proposal.lines) {
+    if (ids.has(line.claim.id) || !workspace.claims.some(c => c.id === line.claim.id) || !Number.isFinite(line.amount) || line.amount < 0) throw new Error("Invalid allocation target or amount.");
+    ids.add(line.claim.id);
+  }
+  if (round2(proposal.lines.reduce((sum, line) => sum + line.amount, 0)) > proposal.freeCapacity + .01) throw new Error("Allocations exceed capacity.");
   const kept = workspace.allocations.filter(
     (row) => row.status === "confirmed" && row.cycleId !== proposal.cycleId,
   );
@@ -443,7 +457,7 @@ export function confirmProposal(
     if (row.cycleId !== proposal.cycleId || row.status !== "confirmed") continue;
     alreadyThisCycle.set(row.targetId, (alreadyThisCycle.get(row.targetId) ?? 0) + row.amount);
   }
-  const delta = new Map<string, number>();
+  const delta = new Map<string, number>([...alreadyThisCycle].map(([id, amount]) => [id, -amount]));
   for (const line of proposal.lines) {
     delta.set(
       line.claim.id,
@@ -605,6 +619,7 @@ export function recategorize(
 
   return {
     ...workspace,
+    rules: remember ? [...workspace.rules.filter(rule => rule.merchantKey !== key), { id: `rule:${key}`, merchantKey: key, category, createdAt: target.date }] : workspace.rules,
     transactions: workspace.transactions.map((row) => {
       const matches =
         row.id === transactionId ||
@@ -743,7 +758,8 @@ export function accelerate(
 export function planNarrative(workspace: Workspace, today: string, policy: AllocationPolicy = defaultPolicy) {
   const plan = planCycle(workspace, today);
   if (!plan) return null;
-  const result = allocate(workspace, plan.freeCapacity, today, policy);
+  const proposal = buildPaydayProposal(workspace,today,policy)!;
+  const result = { allocations:proposal.lines, queued:proposal.queued };
   const arrivals = projectArrivals(workspace, today, policy);
 
   const lines = result.allocations.map((entry) => {
@@ -755,7 +771,7 @@ export function planNarrative(workspace: Workspace, today: string, policy: Alloc
       arrival: arrival?.arrivalDate ?? null,
       completes: entry.completes,
       sentence: entry.completes
-        ? `${formatMoney(entry.amount)} finishes ${entry.claim.name} — it's yours this paycheck.`
+        ? `${formatMoney(entry.amount)} finishes ${entry.claim.name} in the plan; no purchase or transfer has been made.`
         : arrival?.arrivalDate
           ? `${formatMoney(entry.amount)} to ${entry.claim.name}, which lands ${formatDate(arrival.arrivalDate)}.`
           : `${formatMoney(entry.amount)} to ${entry.claim.name}.`,
@@ -768,7 +784,7 @@ export function planNarrative(workspace: Workspace, today: string, policy: Alloc
     free: plan.freeCapacity,
     lines,
     queued: result.queued.map((entry) => entry.claim.name),
-    summary: `Your paycheck is ${formatMoney(plan.income)}. ${formatMoney(plan.reservesTotal)} covers bills and minimums, ${formatMoney(plan.spendTotal)} is everyday spending, which leaves ${formatMoney(plan.freeCapacity)}.`,
+    summary: `Your paycheck is ${formatMoney(plan.income)}. ${formatMoney(plan.reservesTotal)} is planned for bills and minimums, ${formatMoney(plan.spendTotal)} is everyday spending, which leaves ${formatMoney(plan.freeCapacity)}.`,
   };
 }
 

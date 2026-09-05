@@ -34,6 +34,8 @@ import type {
   Workspace,
 } from "./types";
 
+import { addCycle } from "./engine";
+
 const DERIVED = "derived:";
 
 const isDerived = (id: string) => id.startsWith(DERIVED);
@@ -192,16 +194,13 @@ function projectFrom(project: LegacyProject): Project {
 function derivedCurrentCycle(state: StewardState): Cycle[] {
   const { nextPayday, payFrequency, takeHomePay } = state.profile;
   if (!nextPayday) return [];
-  const end = new Date(`${nextPayday}T12:00:00`);
+  const end = new Date(`${nextPayday}T12:00:00Z`);
   if (Number.isNaN(end.getTime())) return [];
-  const start = new Date(end);
-  if (payFrequency === "Weekly") start.setDate(start.getDate() - 7);
-  else if (payFrequency === "Biweekly") start.setDate(start.getDate() - 14);
-  else start.setMonth(start.getMonth() - 1);
+  const start = addCycle(nextPayday, payFrequency, -1);
   return [
     {
       id: `${DERIVED}cycle:${nextPayday}`,
-      start: start.toISOString().slice(0, 10),
+      start,
       end: nextPayday,
       expectedIncome: takeHomePay,
       actualIncome: 0,
@@ -232,6 +231,7 @@ function derivedRules(state: StewardState): Rule[] {
 }
 
 export function toModel(state: StewardState): Workspace {
+  if (state.canonical) return structuredClone(state.canonical);
   const goalMeta: Record<string, unknown> = {};
   const wishlistMeta: Record<string, unknown> = {};
   const projectMeta: Record<string, unknown> = {};
@@ -457,7 +457,7 @@ export function toLegacy(workspace: Workspace): StewardState {
     })];
   });
 
-  const goals: Goal[] = legacy.order.goals.map((id) => {
+  const goals: Goal[] = legacy.order.goals.filter((id) => claimById.has(`claim:${id}`)).map((id) => {
     const claim = claimById.get(`claim:${id}`)!;
     const meta = (legacy.goalMeta[id] ?? {}) as {
       type?: string;
@@ -481,7 +481,7 @@ export function toLegacy(workspace: Workspace): StewardState {
     });
   });
 
-  const projects: LegacyProject[] = legacy.order.projects.map((id) => {
+  const projects: LegacyProject[] = legacy.order.projects.filter((id) => projectById.has(`project:${id}`)).map((id) => {
     const project = projectById.get(`project:${id}`)!;
     const meta = (legacy.projectMeta[id] ?? {}) as Record<string, unknown>;
     return compact({
@@ -525,7 +525,7 @@ export function toLegacy(workspace: Workspace): StewardState {
     );
   }
 
-  const wishlist: WishlistItem[] = legacy.order.wishlist.map((id) => {
+  const wishlist: WishlistItem[] = legacy.order.wishlist.filter((id) => claimById.has(`claim:${id}`)).map((id) => {
     const claim = claimById.get(`claim:${id}`)!;
     const meta = (legacy.wishlistMeta[id] ?? {}) as Record<string, unknown>;
     return compact({
@@ -627,7 +627,7 @@ export function toLegacy(workspace: Workspace): StewardState {
     }
   }
 
-  return {
+  const result: StewardState = {
     version: legacy.version,
     profile: {
       name: workspace.profile.name,
@@ -670,6 +670,10 @@ export function toLegacy(workspace: Workspace): StewardState {
         }
       : {}),
   };
+  // Compatibility exports include the canonical model whenever legacy fields
+  // cannot represent it. Import honors this explicit, versioned snapshot.
+  if (JSON.stringify(toModel(result)) !== JSON.stringify(workspace)) result.canonical = structuredClone(workspace);
+  return result;
 }
 
 /* --------------------------------------------------------------- helpers -- */

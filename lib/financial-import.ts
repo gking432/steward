@@ -24,6 +24,7 @@ export type PlaidAccount = {
 
 export type PlaidTransaction = {
   transaction_id: string;
+  pending_transaction_id?: string | null;
   account_id: string;
   name: string;
   merchant_name?: string | null;
@@ -89,7 +90,7 @@ export function mergePlaidAccounts(
         account.balances.available ?? account.balances.current ?? 0,
       creditLimit: account.balances.limit ?? undefined,
       source: "plaid",
-      status: "connected",
+      status: account.balances.available == null && accountType(account) === "Checking" ? "attention" : "connected",
       lastSynced: now,
       archived: false,
     };
@@ -213,10 +214,11 @@ function mapTransaction(
 
 function billFrequency(value?: string): Bill["frequency"] {
   const frequency = value?.toUpperCase() ?? "";
+  if (frequency.includes("SEMI_MONTHLY")) return "one-time";
   if (frequency.includes("WEEKLY") && !frequency.includes("BIWEEKLY")) {
     return "weekly";
   }
-  if (frequency.includes("BIWEEKLY") || frequency.includes("SEMI_MONTHLY")) {
+  if (frequency.includes("BIWEEKLY")) {
     return "biweekly";
   }
   if (frequency.includes("ANNUAL")) return "annual";
@@ -465,9 +467,16 @@ export function mergePlaidFinancialData(
     changes.removed.map((transaction) => transaction.transaction_id),
   );
   const learned = rememberedCategories(state.transactions);
-  const incoming = [...changes.added, ...changes.modified].map((transaction) =>
-    mapTransaction(transaction, learned),
-  );
+  const previous = new Map(state.transactions.filter(t=>t.plaidTransactionId).map(t => [t.plaidTransactionId, t]));
+  const unique = new Map([...changes.added, ...changes.modified].map(t => [t.transaction_id, t]));
+  for (const t of unique.values()) if (t.pending_transaction_id) removed.add(t.pending_transaction_id);
+  const incoming = [...unique.values()].map(transaction => {
+    const mapped = mapTransaction(transaction, learned);
+    const prior = previous.get(transaction.transaction_id) ?? previous.get(transaction.pending_transaction_id ?? undefined);
+    if (!prior) return mapped;
+    return {...mapped, ...(prior.categorySource === 'manual' ? {category:prior.category,categorySource:prior.categorySource,needsReview:false} : {}), excluded:prior.excluded,note:prior.note,tags:prior.tags,
+      ...(prior.split && Math.abs(prior.amount - mapped.amount) < .005 ? {split:prior.split} : prior.split ? {needsReview:true} : {})};
+  });
   const incomingIds = new Set(
     incoming.map((transaction) => transaction.plaidTransactionId),
   );
@@ -499,7 +508,7 @@ export function mergePlaidFinancialData(
       )
     : state.profile.takeHomePay;
   const nextPayday =
-    paycheck?.predicted_next_date ?? state.profile.nextPayday;
+    paycheck?.frequency?.toUpperCase().includes("SEMI_MONTHLY") ? "" : paycheck?.predicted_next_date ?? state.profile.nextPayday;
 
   const nextState: StewardState = {
     ...state,
@@ -507,7 +516,7 @@ export function mergePlaidFinancialData(
       ...state.profile,
       takeHomePay: payAmount,
       nextPayday,
-      payFrequency: paycheck
+      payFrequency: paycheck && !paycheck.frequency?.toUpperCase().includes("SEMI_MONTHLY")
         ? billFrequency(paycheck.frequency) === "weekly"
           ? "Weekly"
           : billFrequency(paycheck.frequency) === "monthly"

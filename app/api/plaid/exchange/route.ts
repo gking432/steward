@@ -1,3 +1,5 @@
+import { toLegacy, toModel } from "../../../../lib/model/convert";
+import { readSnapshot, saveCanonical } from "../../../../lib/server-workspace";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import {
@@ -11,7 +13,6 @@ import {
   loadWorkspace,
   plaidItemsSql,
   prepareWorkspace,
-  saveWorkspace,
 } from "../../../../lib/server-workspace";
 
 const bodySchema = z.object({
@@ -25,8 +26,8 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: "Invalid Plaid token." }, { status: 400 });
   }
-  const user = await currentUser();
   try {
+    const user = await currentUser();
     const exchanged = await plaidRequest<{
       access_token: string;
       item_id: string;
@@ -63,18 +64,23 @@ export async function POST(request: Request) {
       )
       .run();
 
-    const workspace = await loadWorkspace(user.email, user.name);
-    const state = mergePlaidAccounts(
-      workspace,
+    const row=await readSnapshot(user.email);
+    const stored=row ? JSON.parse(row.state_json) : null;
+    const workspace=toModel(await loadWorkspace(user.email,user.name));
+    const imported = mergePlaidAccounts(
+      toLegacy(workspace),
       accountsResult.accounts,
       parsed.data.institutionName ?? "Connected institution",
     );
-    await saveWorkspace(user.email, state);
+    const next={...workspace,accounts:imported.accounts,revision:(workspace.revision??0)+1};
+    const revision=await saveCanonical(user.email,next,stored?.storageRevision??0);
+    if(revision===null) return Response.json({error:'Workspace changed while connecting. Retry sync to import accounts.'},{status:409});
+    const state=toLegacy(next);
     await auditWorkspace(user.email, "bank_connected");
 
     return Response.json({
       itemId: exchanged.item_id,
-      state,
+      state, revision,
     });
   } catch {
     return Response.json(

@@ -26,6 +26,7 @@ export async function plaidRequest<T>(
   }
   const response = await fetch(`${plaidBaseUrl()}${path}`, {
     method: "POST",
+    signal: AbortSignal.timeout(15000),
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       client_id: config.PLAID_CLIENT_ID,
@@ -35,9 +36,10 @@ export async function plaidRequest<T>(
   });
   const payload = (await response.json()) as T & {
     error_message?: string;
+    error_code?: string;
   };
   if (!response.ok) {
-    throw new Error(payload.error_message ?? "Plaid request failed.");
+    throw new Error(`${payload.error_code ?? "PLAID_ERROR"}: ${payload.error_message ?? "Plaid request failed."}`);
   }
   return payload;
 }

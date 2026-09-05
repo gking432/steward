@@ -227,6 +227,7 @@ export type StoredAllocation = {
 };
 
 export type StewardState = {
+  canonical?: import("./model/types").Workspace;
   version: number;
   profile: {
     name: string;

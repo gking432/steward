@@ -10,7 +10,7 @@
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "tsx --test \"tests/*.test.ts\"",
-    "test:build": "npm run build && npm test && node --test tests/rendered-html.test.mjs",
+    "test:build": "VERCEL=1 next build --webpack && npm test && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

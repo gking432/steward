@@ -28,6 +28,7 @@ import {
 import { dailyInsights, progressSummary } from "../../lib/model/decide";
 import type { Bucket, Workspace } from "../../lib/model/types";
 import "./home.css";
+import { currentLiquidity } from "../../lib/model/liquidity";
 
 /**
  * Steward's read of the cycle. Deterministic: a small set of conditions over
@@ -42,7 +43,7 @@ function stewardsTake(workspace: Workspace, today: string) {
   const days = Math.max(0, daysBetween(today, cycle.end));
   const spend = workspace.buckets.filter((bucket) => bucket.kind === "spend");
   const activity = spend.map((bucket) => bucketActivity(workspace, bucket, cycle));
-  const left = activity.reduce((sum, entry) => sum + Math.max(0, entry.remaining), 0);
+  const left = activity.reduce((sum, entry) => sum + entry.remaining, 0);
   const over = activity.filter((entry) => entry.percent > 100);
   const hot = activity.filter((entry) => entry.hot && entry.percent <= 100);
 
@@ -58,7 +59,7 @@ function stewardsTake(workspace: Workspace, today: string) {
     return {
       tone: "watch" as const,
       line: `${worst.bucket.name} is over for this paycheck.`,
-      because: `${formatMoney(worst.spent)} against ${formatMoney(worst.planned)}, with ${days} ${days === 1 ? "day" : "days"} still to go. The rest of your plan is intact.`,
+      because: `${formatMoney(worst.spent)} against ${formatMoney(worst.planned)}, with ${days} ${days === 1 ? "day" : "days"} still to go. This overrun reduces your remaining allowance; review the categories below.`,
     };
   }
   if (hot.length) {
@@ -127,7 +128,7 @@ export function HomeScreen({
   // Every spend bucket, not the displayed ones. This was summing the slice, so
   // "Left to spend" silently changed with how many rows the list happened to
   // render — a headline figure that disagreed with the drilldown below it.
-  const left = allSpend.reduce((sum, entry) => sum + Math.max(0, entry.remaining), 0);
+  const left = allSpend.reduce((sum, entry) => sum + entry.remaining, 0);
 
   const spent = allSpend.reduce((sum, entry) => sum + entry.spent, 0);
   const activity = [...allSpend].sort((a, b) => b.percent - a.percent);
@@ -149,6 +150,7 @@ export function HomeScreen({
       </header>
 
       <div className="hm-scroll">
+        <p>As of {today} · {currentLiquidity(workspace,today).known ? `${formatMoney(currentLiquidity(workspace,today).available)} available today after protected amounts` : "Refresh balances to verify what you can spend today"}. Paycheck allowances below are projections.</p>
         <section className="hm-dashboard-head">
           <button className={`hm-take ${take.tone}`} onClick={onAsk}>
             <span className="hm-take-badge"><Sparkles size={13} /> Steward&apos;s take</span>
@@ -158,9 +160,9 @@ export function HomeScreen({
           </button>
 
           <div className="hm-figures">
-            <button onClick={onOpenBuckets}><small>Left to spend</small><strong>{formatMoney(left)}</strong><em>this paycheck</em></button>
+            <button onClick={onOpenBuckets}><small>Net spending allowance</small><strong>{formatMoney(left)}</strong><em>this paycheck</em></button>
             <button onClick={onOpenBuckets}><small>Spent so far</small><strong>{formatMoney(spent)}</strong><em>across every bucket</em></button>
-            <button onClick={onOpenBuckets}><small>Bills covered</small><strong>{formatMoney(plan.reservesTotal)}</strong><em>{plan.shortfall ? "needs attention" : "fully planned"}</em></button>
+            <button onClick={onOpenBuckets}><small>Bills planned</small><strong>{formatMoney(plan.reservesTotal)}</strong><em>{plan.shortfall ? "needs attention" : "fully planned"}</em></button>
             <button onClick={onOpenBuckets}><small>Next paycheck</small><strong>{days}d</strong><em>{formatMoney(plan.freeCapacity)} for goals</em></button>
           </div>
         </section>
@@ -195,7 +197,7 @@ export function HomeScreen({
 
             <section className="hm-panel hm-goals">
               <header><div><span className="hm-kicker">Your priorities</span><h2>Working toward</h2></div><button onClick={onOpenBuckets}>Plan</button></header>
-              {progress.map((entry) => <div className="hm-goal" key={entry.claim.id}><span><b>{entry.claim.name}</b><small>{entry.arrivalDate ? `On track for ${formatDate(entry.arrivalDate)}` : "Building momentum"}</small></span><strong>{Math.round(entry.percent)}%</strong><span className="hm-bucket-bar"><i className="good" style={{ width: `${Math.min(100, entry.percent)}%` }} /></span></div>)}
+              {progress.map((entry) => <div className="hm-goal" key={entry.claim.id}><span><b>{entry.claim.name}</b><small>{entry.arrivalDate ? `On track for ${formatDate(entry.arrivalDate)}` : entry.claim.openEnded ? "Earmarked · open-ended savings" : "Building momentum"}</small></span><strong>{entry.claim.openEnded ? formatMoney(entry.claim.fundedAmount) : `${Math.round(entry.percent)}%`}</strong><span className="hm-bucket-bar"><i className="good" style={{ width: `${Math.min(100, entry.percent)}%` }} /></span></div>)}
               {!progress.length && <p className="hm-muted">Your next free dollars will appear here as they are assigned.</p>}
             </section>
 

@@ -21,9 +21,11 @@
 
 import { Check, ChevronDown, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { formatDate, formatMoney, planCycle, allocate } from "../../lib/model/engine";
+import { formatDate, formatMoney, planCycle, allocate, steadyFreeCapacity } from "../../lib/model/engine";
 import type { Workspace } from "../../lib/model/types";
 import "./buckets.css";
+import { buildPaydayProposal } from "../../lib/model/decide";
+import { editPlanRow, reorderGoal } from "../../lib/model/commands";
 
 type Row = {
   id: string;
@@ -57,6 +59,15 @@ export function BucketsScreen({
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [amountDraft, setAmountDraft] = useState("");
+  const [targetDraft,setTargetDraft] = useState("");
+  const [goalDate,setGoalDate] = useState("");
+  const [goalStatus,setGoalStatus] = useState<Workspace["claims"][number]["status"]>("active");
+  const [dueDraft, setDueDraft] = useState("");
+  const [reservedDraft, setReservedDraft] = useState("");
+  const [frequencyDraft, setFrequencyDraft] = useState<Workspace["buckets"][number]["frequency"]>("monthly");
+  const [editError, setEditError] = useState("");
+  const [usual, setUsual] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newKind, setNewKind] = useState<"everyday" | "bill" | "goal" | "project">("everyday");
   const [newName, setNewName] = useState("");
@@ -66,9 +77,10 @@ export function BucketsScreen({
   const { rows, income } = useMemo(() => {
     const plan = planCycle(workspace, today);
     if (!plan) return { rows: [] as Row[], income: 0 };
-    const allocation = allocate(workspace, plan.freeCapacity, today);
+    const allocation = allocate(workspace, usual ? steadyFreeCapacity(workspace) : plan.freeCapacity, today);
+    const allocationLines = usual ? allocation.allocations : buildPaydayProposal(workspace,today)?.lines ?? [];
     const amountFor = (claimId: string) =>
-      allocation.allocations.find((entry) => entry.claim.id === claimId)?.amount ?? 0;
+      allocationLines.find((entry) => entry.claim.id === claimId)?.amount ?? 0;
 
     const result: Row[] = [];
 
@@ -77,7 +89,7 @@ export function BucketsScreen({
       result.push({
         id: entry.bucket.id,
         name: entry.bucket.name,
-        amount: entry.required,
+        amount: usual ? entry.steadyRate : entry.required,
         detail:
           entry.cyclesRemaining > 1
             ? `${formatMoney(entry.bucket.amountDue ?? 0)} due ${formatDate(entry.bucket.dueDate!)} · split over ${entry.cyclesRemaining} paychecks`
@@ -98,23 +110,25 @@ export function BucketsScreen({
       });
     }
 
-    for (const claim of workspace.claims.filter((c) => c.status === "active")) {
+    for (const claim of [...workspace.claims].sort((a,b)=>a.rank-b.rank)) {
       const amount = amountFor(claim.id);
       result.push({
         id: claim.id,
         name: claim.name,
         amount,
         detail:
-          amount > 0
-            ? `${formatMoney(claim.fundedAmount)} of ${formatMoney(claim.targetAmount)} so far`
+          claim.status !== "active" ? `${claim.status} · ${formatMoney(claim.fundedAmount)} earmarked · not receiving money` : claim.openEnded ? `${formatMoney(claim.fundedAmount)} earmarked · open-ended savings` : amount > 0
+            ? `${formatMoney(claim.fundedAmount)} of ${formatMoney(claim.targetAmount)} earmarked`
             : "starts a later paycheck",
         kind: claim.kind === "payoff" ? "debt" : claim.projectId ? "project" : "goal",
         editable: true,
       });
     }
 
+    if (!usual && plan.bufferTopUp > 0) result.push({id:"buffer",name:"Buffer top-up",amount:plan.bufferTopUp,detail:"Restore your cash floor",kind:"bill",editable:false});
+    for (const c of plan.commitments) { const row=result.find(r=>r.id===c.claim.id);if(row) row.amount=c.amount; }
     return { rows: result, income: plan.income };
-  }, [workspace, today]);
+  }, [workspace, today, usual]);
 
   /** A connected account is the only evidence Steward actually read anything. */
   const fromBank = workspace.accounts.length > 0;
@@ -122,29 +136,20 @@ export function BucketsScreen({
   const assigned = rows.reduce((sum, row) => sum + row.amount, 0);
   const share = (amount: number) => (income > 0 ? (amount / income) * 100 : 0);
 
-  const rename = (row: Row, name: string) => {
-    update((current) => ({
-      ...current,
-      buckets: current.buckets.map((b) => (b.id === row.id ? { ...b, name } : b)),
-      claims: current.claims.map((c) => (c.id === row.id ? { ...c, name } : c)),
-    }));
-  };
-
-  const resize = (row: Row, amount: number) => {
-    update((current) => ({
-      ...current,
-      buckets: current.buckets.map((b) =>
-        b.id === row.id
-          ? b.kind === "spend"
-            ? { ...b, perCycle: amount }
-            : { ...b, amountDue: amount }
-          : b,
-      ),
-      claims: current.claims.map((c) => (c.id === row.id ? { ...c, pinned: amount } : c)),
-    }));
+  const saveDraft = (row: Row) => {
+    try {
+      const bucket = workspace.buckets.find(b => b.id === row.id);
+      const next = editPlanRow(workspace, { id: row.id, name: draft, amount: Number(amountDraft), ...(bucket?.kind === "reserve" ? { dueDate: dueDraft, reserved: Number(reservedDraft), frequency: frequencyDraft } : {}) });
+      const target=Number(targetDraft);
+      if (!Number.isFinite(target) || target < 0) throw Error("Enter a valid goal target.");
+      update(() => ({...next,claims:next.claims.map(c=>c.id===row.id ? {...c,targetAmount:target,openEnded:target===0&&c.kind==='fund',wantBy:goalDate||undefined,status:goalStatus} : c)}));
+      setEditing(null);
+      setEditError("");
+    } catch (error) { setEditError((error as Error).message); }
   };
 
   const remove = (row: Row) => {
+    setEditing(null);
     update((current) => ({
       ...current,
       buckets: current.buckets.filter((b) => b.id !== row.id),
@@ -245,7 +250,7 @@ export function BucketsScreen({
               <span className="bk-eyebrow">From your last few months</span>
               <h1>Here&apos;s what Steward found.</h1>
               <p>
-                Every paycheck has to cover these. Change anything that looks wrong — this is a
+                This paycheck has to cover these. Change anything that looks wrong — this is a
                 starting point, not a verdict.
               </p>
             </>
@@ -254,14 +259,14 @@ export function BucketsScreen({
               <span className="bk-eyebrow">From what you told me</span>
               <h1>Here&apos;s your starting plan.</h1>
               <p>
-                Every paycheck has to cover these. Add anything that&apos;s missing — connecting a
+                This paycheck has to cover these. Add anything that&apos;s missing — connecting a
                 bank later fills in the rest from what you actually spend.
               </p>
             </>
           )
         ) : (
           <>
-            <span className="bk-eyebrow">Every paycheck</span>
+            <span className="bk-eyebrow">This paycheck</span>
             <h1>Your plan</h1>
           </>
         )}
@@ -283,6 +288,8 @@ export function BucketsScreen({
         </div>
       </header>
 
+      <div role="group" aria-label="Plan period"><button aria-pressed={!usual} onClick={() => setUsual(false)}>This paycheck</button><button aria-pressed={usual} onClick={() => setUsual(true)}>Usual plan</button></div>
+      <p>Amounts are planned contributions. Bills show the full obligation separately. Catch-up needs can exceed your usual contribution.</p>
       <div className="bk-groups">
         {GROUPS.map((group) => {
           const groupRows = rows.filter((row) => row.kind === group.key);
@@ -311,20 +318,34 @@ export function BucketsScreen({
                         aria-label={`Rename ${row.name}`}
                       />
                       <label>
-                        <span>$</span>
+                        <span>{workspace.buckets.find(b => b.id === row.id)?.kind === "reserve" ? "Full bill ($)" : "Contribution ($)"}</span>
                         <input
                           type="number"
-                          defaultValue={Math.round(row.amount)}
-                          onBlur={(event) => resize(row, Number(event.target.value))}
+                          min="0" step="0.01"
+                          value={amountDraft}
+                          onChange={(event) => setAmountDraft(event.target.value)}
                           aria-label={`Amount for ${row.name}`}
                         />
                       </label>
+                      {workspace.buckets.find(b => b.id === row.id)?.kind === "reserve" && <>
+                        <label>Due date<input type="date" value={dueDraft} onChange={e => setDueDraft(e.target.value)} /></label>
+                        <label>Already reserved<input type="number" min="0" step="0.01" value={reservedDraft} onChange={e => setReservedDraft(e.target.value)} /></label>
+                        <label>Frequency<select value={frequencyDraft} onChange={e => setFrequencyDraft(e.target.value as typeof frequencyDraft)}>{["monthly", "weekly", "biweekly", "annual", "one-time"].map(f => <option key={f}>{f}</option>)}</select></label>
+                        <p>Current contribution: {formatMoney(row.amount)}. Saving recalculates your plan; no payment is made.</p>
+                      </>}
+                      {workspace.claims.some(c=>c.id===row.id) && <>
+                        <label>Goal target (0 for open-ended savings)<input type="number" min="0" step="0.01" value={targetDraft} onChange={e=>setTargetDraft(e.target.value)}/></label>
+                        <label>Desired date<input type="date" value={goalDate} onChange={e=>setGoalDate(e.target.value)}/></label>
+                        <label>Status<select value={goalStatus} onChange={e=>setGoalStatus(e.target.value as typeof goalStatus)}>{["active","someday","paused","complete"].map(status=><option key={status}>{status}</option>)}</select></label>
+                      </>}
+                      {(() => {try { const next=editPlanRow(workspace,{id:row.id,name:draft,amount:Number(amountDraft),dueDate:dueDraft||undefined,reserved:Number(reservedDraft),frequency:frequencyDraft});const nextPlan=planCycle(next,today); const reserve=nextPlan?.reserves.find(r=>r.bucket.id===row.id);return <p>After Save: {reserve ? `${formatMoney(reserve.required)} this paycheck; ` : ''}{formatMoney(nextPlan?.freeCapacity??0)} available for goals.</p>;}catch{return null;}})()}
+                      {editError && <p role="alert">{editError}</p>}
                       <div className="bk-edit-actions">
+                        <button onClick={() => setEditing(null)}>Cancel</button>
                         <button
                           className="bk-icon confirm"
                           onClick={() => {
-                            if (draft.trim()) rename(row, draft.trim());
-                            setEditing(null);
+                            saveDraft(row);
                           }}
                           aria-label="Save"
                         >
@@ -351,6 +372,14 @@ export function BucketsScreen({
                           onClick={() => {
                             setEditing(row.id);
                             setDraft(row.name);
+                            const bucket = workspace.buckets.find(b => b.id === row.id);
+                            const claim = workspace.claims.find(c => c.id === row.id);
+                            setTargetDraft(String(claim?.targetAmount??0));setGoalDate(claim?.wantBy??"");setGoalStatus(claim?.status??"active");
+                            setAmountDraft(String(bucket?.kind === "reserve" ? bucket.amountDue ?? 0 : claim?.pinned ?? row.amount));
+                            setDueDraft(bucket?.dueDate ?? "");
+                            setReservedDraft(String(bucket?.reserved ?? 0));
+                            setFrequencyDraft(bucket?.frequency ?? "monthly");
+                            setEditError("");
                           }}
                           aria-label={`Edit ${row.name}`}
                         >
@@ -359,6 +388,7 @@ export function BucketsScreen({
                       )}
                     </>
                   )}
+                  {workspace.claims.some(c => c.id === row.id) && <div className="bk-edit-actions"><button onClick={() => update(w => reorderGoal(w, row.id, -1))} aria-label={`Raise priority of ${row.name}`}>↑ Priority</button><button onClick={() => update(w => reorderGoal(w, row.id, 1))} aria-label={`Lower priority of ${row.name}`}>↓ Priority</button></div>}
                   <div className="bk-bar">
                     <span style={{ width: `${Math.min(100, share(row.amount) * 2)}%` }} />
                   </div>

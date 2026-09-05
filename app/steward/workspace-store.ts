@@ -1,75 +1,61 @@
 "use client";
 
-/**
- * Workspace store — loads the stored legacy state, adapts it to the domain
- * model for reading, and writes it back through the converter.
- *
- * Stored data is never rewritten into a new shape (Phase 1 decision), so the
- * redesign stays reversible and `/legacy` keeps working against the same rows.
- */
-
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toLegacy, toModel } from "../../lib/model/convert";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Workspace } from "../../lib/model/types";
 import type { StewardState } from "../../lib/steward-types";
+import { migrateWorkspace, SaveQueue } from "../../lib/model/persistence";
 
-export type SaveState = "saved" | "saving" | "offline";
-
+export type SaveState = "saved" | "saving" | "offline" | "conflict";
 export function useWorkspace(initial: StewardState, sync = true) {
-  const [legacy, setLegacy] = useState(initial);
+  const [workspace, setWorkspace] = useState(() => migrateWorkspace(initial));
   const [loading, setLoading] = useState(sync);
   const [saveState, setSaveState] = useState<SaveState>(sync ? "saving" : "saved");
-  const loaded = useRef(!sync);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const revision = useRef(0);
+  const queue = useRef<SaveQueue<Workspace> | null>(null);
+  const dirty = useRef(false);
   useEffect(() => {
-    if (!sync) return;
-    fetch("/api/steward")
-      .then((response) => response.json())
-      .then((payload) => {
-        if (payload.state) setLegacy(payload.state);
-        setSaveState(payload.mode === "fallback" ? "offline" : "saved");
-      })
-      .catch(() => setSaveState("offline"))
-      .finally(() => {
-        loaded.current = true;
-        setLoading(false);
-      });
+    if (!sync) {
+      try { const saved = sessionStorage.getItem('steward-demo:' + location.pathname); if (saved) queueMicrotask(() => setWorkspace(migrateWorkspace(JSON.parse(saved)))); } catch { /* An unavailable demo cache never blocks exploration. */ }
+      return;
+    }
+    let cancelled = false;
+    queue.current = new SaveQueue(async value => {
+      const response = await fetch('/api/steward', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace: value, expectedRevision: revision.current }), signal: AbortSignal.timeout(12000) });
+      if (response.status === 409) throw new Error('conflict');
+      if (!response.ok) throw new Error('save failed');
+      const payload = await response.json();
+      revision.current = payload.revision;
+    }, state => { if (!cancelled) setSaveState(state); });
+    fetch('/api/steward', { signal: AbortSignal.timeout(12000) }).then(async response => {
+      if (!response.ok) throw new Error('unavailable');
+      const payload = await response.json();
+      if (cancelled) return;
+      if (payload.workspace || payload.state) setWorkspace(migrateWorkspace(payload.workspace ?? payload.state));
+      revision.current = payload.revision ?? 0;
+      setSaveState('saved');
+    }).catch(() => { if (!cancelled) setSaveState('offline'); }).finally(() => { if (!cancelled) setLoading(false); });
+    const retry = () => void queue.current?.flush();
+    window.addEventListener('online', retry);
+    return () => { cancelled = true; window.removeEventListener('online', retry); };
   }, [sync]);
-
   useEffect(() => {
-    if (!loaded.current || !sync) return;
-    setSaveState("saving");
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      fetch("/api/steward", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(legacy),
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error("save failed");
-          setSaveState("saved");
-        })
-        .catch(() => setSaveState("offline"));
-    }, 700);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [legacy, sync]);
-
-  const workspace = useMemo(() => toModel(legacy), [legacy]);
-
-  /** Mutate the domain model; the converter writes it back to stored shape. */
+    if (!dirty.current || loading) return;
+    if (!sync) { try { sessionStorage.setItem('steward-demo:' + location.pathname, JSON.stringify(workspace)); } catch { queueMicrotask(() => setSaveState('offline')); } return; }
+    queue.current?.enqueue(workspace);
+  }, [workspace, sync, loading]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (dirty.current && saveState !== 'saved') { event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [saveState]);
   const update = useCallback((next: (current: Workspace) => Workspace) => {
-    setLegacy((current) => toLegacy(next(toModel(current))));
+    dirty.current = true;
+    setWorkspace(current => ({ ...next(current), revision: (current.revision ?? 0) + 1 }));
   }, []);
-
-  /** Replace the whole workspace with one returned by the server (bank sync). */
-  const setWorkspaceFromServer = useCallback((next: StewardState) => {
-    loaded.current = true;
-    setLegacy(next);
+  const setWorkspaceFromServer = useCallback((next: StewardState, serverRevision?: number) => {
+    revision.current = serverRevision ?? revision.current;
+    dirty.current = false;
+    setWorkspace(migrateWorkspace(next));
   }, []);
-
-  return { workspace, update, loading, saveState, setWorkspaceFromServer };
+  return { workspace, update, loading, saveState, setWorkspaceFromServer, retrySave: () => queue.current?.flush() };
 }

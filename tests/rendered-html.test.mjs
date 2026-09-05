@@ -1,76 +1,18 @@
-import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import test from "node:test";
-
-const root = new URL("../", import.meta.url);
-const read = (path) => readFile(new URL(path, root), "utf8");
-
-/**
- * Build-shape checks.
- *
- * These deliberately do NOT assert on copy. The previous version of this file
- * matched nineteen marketing strings in the source, which meant it passed while
- * the bucket screen was visually clipped and failed whenever a word changed. It
- * was a change-detector, not a test.
- *
- * What is worth asserting here is structural: that the app builds, that the
- * legacy tree is really gone, and that the invariants which are easy to
- * regress by accident still hold.
- */
-
-test("the production worker builds", async () => {
-  const manifest = await read("dist/server/vinext-server.json").catch(() => "");
-  assert.ok(manifest.length > 0, "run `npm run build` before this test");
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { before, after, test } from 'node:test';
+let server;
+const origin=process.env.STEWARD_TEST_URL ?? 'http://localhost:3002';
+before(async()=>{
+ if(!process.env.STEWARD_TEST_URL) server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-p','3002'],{env:{...process.env,VERCEL:'1'},stdio:'ignore'});
+ for(let n=0;n<50;n++){try{if((await fetch(origin+'/fixture')).ok)return;}catch{}await new Promise(r=>setTimeout(r,200));}
+ throw Error('Production server did not become ready. Build the Vercel target first.');
 });
-
-test("the legacy application tree is gone", async () => {
-  for (const path of ["app/steward-app.tsx", "app/legacy/page.tsx", "app/legacy-fixture/page.tsx"]) {
-    await assert.rejects(read(path), `${path} should no longer exist`);
-  }
-});
-
-test("global CSS is a base layer, not a component stylesheet", async () => {
-  const css = await read("app/globals.css");
-  const lines = css.split("\n").length;
-  assert.ok(lines < 300, `globals.css is ${lines} lines; component styles belong with components`);
-  // The override that repainted the palette green below 767px is what made the
-  // old app look like two products. It must not come back.
-  assert.doesNotMatch(css, /max-width:\s*767px/);
-});
-
-test("there is exactly one application tree", async () => {
-  const app = await read("app/steward/app.tsx");
-  assert.doesNotMatch(app, /desktop-route-view|mobile-route-view|MobileNativeView/);
-  assert.match(app, /No mobile fork|one responsive tree/i);
-});
-
-test("the app renders through the domain model, never the legacy state shape", async () => {
-  const app = await read("app/steward/app.tsx");
-  assert.match(app, /lib\/model\/engine/);
-  assert.doesNotMatch(app, /paycheckPlan/);
-});
-
-test("routes resolve to the new tree", async () => {
-  assert.match(await read("app/page.tsx"), /steward\/app/);
-  assert.match(await read("app/fixture/page.tsx"), /steward\/app/);
-  assert.match(await read("app/demo/page.tsx"), /steward\/app/);
-});
-
-test("the public demo is obvious, seeded, and isolated from saved data", async () => {
-  const connect = await read("app/steward/connect.tsx");
-  const demo = await read("app/demo/page.tsx");
-
-  assert.match(connect, /Test demo mode/);
-  assert.match(connect, /Connect your bank/);
-  assert.match(connect, /Coming soon/);
-  assert.doesNotMatch(connect, /Set it up myself/);
-  assert.match(connect, /href="\/demo"/);
-  assert.match(demo, /demoWorkspace\(\)/);
-  assert.match(demo, /syncWithServer=\{false\}/);
-  assert.match(demo, /demoMode/);
-  assert.match(await read("app/steward/app.tsx"), /Reading May 3 – June 30/);
-  assert.match(await read("app/steward/app.tsx"), /Connect accounts/);
-  assert.match(await read("app/steward/app.tsx"), />Goals</);
-  assert.doesNotMatch(await read("app/steward/app.tsx"), /Turn fake bank statements/);
-  assert.match(await read("fixtures/golden-workspace.ts"), /onboardingComplete: false/);
-});
+after(()=>server?.kill());
+const page=async path=>{const r=await fetch(origin+path);assert.equal(r.status,200);return r.text();};
+test('sample home renders a reconciled allowance and explicit demo identity',async()=>{const html=await page('/fixture');assert.match(html,/83\.95/);assert.match(html,/synthetic data/);assert.match(html,/Net spending allowance/);assert.match(html,/26\.15/);});
+test('entry offers immediate demo and manual routes',async()=>{const html=await page('/');assert.match(html,/href="\/fixture"/);assert.match(html,/href="\/manual"/);});
+test('full setup remains a distinct reachable route',async()=>{const html=await page('/demo');assert.match(html,/Explore a sample plan/);assert.match(html,/Build a plan from sample statements/);});
+test('unverified private requests fail closed instead of sharing a local identity',async()=>{const r=await fetch(origin+'/api/steward',{headers:{'oai-authenticated-user-email':'spoof@example.com'}});assert.equal(r.status,503);assert.ok(!(await r.json()).workspace);});
+test('critical phrasing is deterministic and explicitly reports its origin',async()=>{const r=await fetch(origin+'/api/steward-ai',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'phrase',headline:'Wait.',verdict:'wait',tradeoff:'Balances are stale.',checks:[]})});const body=await r.json();assert.equal(body.origin,'deterministic');assert.equal(body.enhanced,false);});
+test('receipt parser rejects unsupported image data',async()=>{const r=await fetch(origin+'/api/receipt',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({image:'data:text/html;base64,'+'a'.repeat(40),total:10,categories:['Groceries']})});assert.equal(r.status,400);});

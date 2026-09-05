@@ -289,6 +289,7 @@ function withRecurringBudgets(
       id: `bucket:onboarding:${slug(stream.key)}`,
       kind: "spend" as const,
       name: stream.merchant,
+      merchantKey: stream.merchant.toLowerCase().replace(/[^a-z0-9]/g, ""),
       category: stream.category,
       essential: false,
       source: "derived" as const,
@@ -850,7 +851,7 @@ export function previewAIOnboarding(
       const reviewed = reviewedAmounts.get(categoryId);
       const cutAmount = cuts.length ? Math.min(...cuts.map((strategy) => strategy.toAmount)) : null;
       if (cutAmount !== null) return { ...bucket, perCycle: cutAmount };
-      return reviewed === undefined ? bucket : { ...bucket, perCycle: reviewed };
+      return reviewed === undefined || bucket.merchantKey ? bucket : { ...bucket, perCycle: reviewed };
     }),
   };
 
@@ -922,7 +923,8 @@ export function previewAIOnboarding(
       targetAmount: target,
       fundedAmount: 0,
       rank: index,
-      status: target > 0 ? "active" : "someday",
+      status: target > 0 || kind === "fund" ? "active" : "someday",
+      openEnded: target === 0 && kind === "fund",
       horizon: kind === "commitment" ? "commitment" : "arrival",
       divisible: kind !== "purchase",
       delayCost: goal.targetDate
@@ -944,7 +946,7 @@ export function previewAIOnboarding(
       ...next.claims.map((claim) => ({
         ...claim,
         rank: prioritizedExisting.get(claim.id) ?? fallbackRanks.get(claim.id) ?? claim.rank,
-        status: prioritizedExisting.has(claim.id) ? "active" as const : claim.status,
+        status: prioritizedExisting.has(claim.id) ? "active" as const : claim.kind === "payoff" ? "someday" as const : claim.status,
       })),
       ...added,
     ],

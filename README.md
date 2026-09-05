@@ -1,167 +1,80 @@
 # Steward
 
-Steward is an AI-native personal financial operating system. It connects
-balances, bills, debt, savings, goals, projects, and desired purchases to answer
-the practical question: **what should I do next?**
+Steward is a calm paycheck-planning assistant with Home, Plan, Activity, and Ask.
+Its financial calculations are deterministic. Planning and confirming allocations
+**earmark money only**; they never transfer funds, pay debt, or prove a bill was paid.
 
-The application starts with an empty, private workspace. A user connects a bank
-once; Steward imports balances and transaction history and derives the plan from
-that real activity. Critical arithmetic, paycheck planning, categorization
-rules, affordability checks, and recommendations are deterministic.
+## Try it
 
-## What works
+- `/fixture`: immediately explore the dated synthetic household.
+- `/demo`: review sample statements, correct amounts together, choose a priority,
+  inspect the actual paycheck proposal (including catch-up amounts), and confirm.
+- `/manual`: build a session-only plan without a bank connection.
+- `/`: load a private workspace when verified identity and storage are configured;
+  sample/manual entry stays available while loading.
 
-- Action-first daily financial briefing
-- Installable mobile-first PWA with dedicated bottom navigation and safe-area
-  support
-- Preserved desktop application shell and primary navigation
-- Paycheck allocation planner with live reconciliation
-- Personalized paycheck buckets spanning bills, spending, debt, goals,
-  projects, and the protected cash buffer
-- Safe-to-spend and affordability engine
-- Accounts, transactions, categories, bills, budgets, and goals
-- Projects with tasks, progress, cost context, and next actions
-- Wishlist timing and purchase recommendations
-- Deterministic advisor with an optional OpenAI explanation layer
-- Weekly and monthly review surfaces
-- Structured AI memory controls
-- Global search, in-app notifications, light/dark modes
-- JSON and CSV export plus account-data deletion
-- D1-backed per-user workspace persistence and audit records
-- Plaid Link, secure exchange, encrypted token storage, multi-item incremental
-  sync, account refresh, and real workspace ingestion
-- Derived bills, budgets, payday details, reviews, and recommendations from
-  connected activity
-- Onboarding that asks what belongs in the user’s plan before creating or
-  assigning discretionary buckets
+Sample and manual plans are stored in sessionStorage for this browser tab. Reload
+preserves changes; closing the tab can lose them. Export JSON/CSV in Settings.
+Private drafts remain in memory after a failed save; export before closing.
 
-## Stack
+## What is implemented
 
-- Vinext / Next.js App Router, React 19, TypeScript
-- Tailwind build pipeline plus product-specific CSS
-- Cloudflare Workers and D1
-- Drizzle schema and generated SQLite migration
-- Zod validation
-- OpenAI Responses API, isolated behind a server-only service
-- Plaid REST API, Link, Web Crypto AES-GCM token encryption
-- Node test runner with `tsx`
+- Distinct full bill amounts and current contributions; validated drafts and
+  explicit Save/Cancel; readable cents and priority/contribution controls.
+- Open-ended savings, optional extra debt repayment, current/usual plan views.
+- Net spending allowances include category overruns. Buying-today checks separately
+  protect current cash, unpaid obligations, pending activity, earmarks, and buffer.
+- Merchant-scoped recurring buckets, transaction categorization, splitting,
+  merchant/account/date filters, categorization undo, and formula-safe CSV export.
+- Canonical versioned workspace; one-way legacy import; goal properties retained
+  in JSON exports and compatibility exports.
+- Serialized/coalesced saves, compare-and-swap conflicts, bounded requests and
+  explicit retry/export recovery. Private endpoints fail closed by default.
+- Read-only bank sync implementation with pagination restart, deduplication,
+  preservation of user corrections, and atomic conditional transaction/cursor commit.
+- Native accessible dialogs and deterministic Ask follow-ups and goal proposals.
 
-Sites uses Vinext to produce a Cloudflare Worker-compatible deployment. This is
-the practical deployment target for the current repository. See
-[ARCHITECTURE.md](./ARCHITECTURE.md) for the decision and the future standalone
-Supabase path.
+## Run and verify
 
-## Local setup
+Node.js 22.13+ is required. Use the existing lockfile: `npm ci` if dependencies are
+missing. `npm run dev` starts the Sites/Vinext development server.
 
-Requirements: Node.js 22.13 or newer.
+- `npm test`: deterministic business and integration-unit regressions.
+- `npm run lint`: ESLint.
+- `npm run build`: Cloudflare Worker/Sites build.
+- `npm run test:build`: Vercel Next.js production build, tests, and HTTP checks
+  against a freshly started production server on port 3002.
+- Vercel preview: `VERCEL=1 npx next start -p 3001` after `test:build`.
 
-```bash
-npm install
-cp .env.example .env.local
-npm run dev
-```
+## Deployment capabilities and limits
 
-Open `http://localhost:3000`.
+Vercel is the public synthetic demo target. Its compatibility adapter provides
+process environment access, **not D1 or private identity**. Sites supplies the
+Worker/D1 runtime; configure `STEWARD_AUTH_ADAPTER=sites-gateway` only behind a
+trusted gateway that strips client-supplied identity headers. Production private
+use requires verification of that gateway contract. `local` is an explicit local
+adapter and is rejected when NODE_ENV is production.
 
-Local D1 state is managed by the Cloudflare development runtime declared in
-`.openai/hosting.json`. Bank connection requires a configured Plaid application.
+AI generation is off unless `STEWARD_AI_ENABLED=true` and an OpenAI key are both
+configured. Critical purchase verdict wording is deterministic. Optional generation
+has per-process request/concurrency/call/token limits; a shared gateway spend limit
+is still required before enabling it on a public multi-instance deployment.
+The main onboarding and Ask purchase journeys work without AI calls.
 
-## Environment variables
+Bank routes require verified identity, D1, Plaid credentials, and encryption setup.
+No real accounts were connected during the September review implementation. Live
+banking, token rotation/retention, and disaster recovery still require operator
+integration testing and policy decisions. Do not treat this release as certified
+for real-user banking. Check-in delivery is not implemented.
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `NEXT_PUBLIC_APP_URL` | No | Canonical application URL |
-| `OPENAI_API_KEY` | No | Enables personalized explanation rewriting |
-| `OPENAI_MODEL` | No | Defaults to `gpt-5.6-luna` |
-| `PLAID_CLIENT_ID` | For Plaid | Plaid application identifier |
-| `PLAID_SECRET` | For Plaid | Plaid environment secret |
-| `PLAID_ENV` | For Plaid | `sandbox`, `development`, or `production` |
-| `PLAID_WEBHOOK_URL` | For Plaid | Public transaction webhook URL |
-| `APP_ENCRYPTION_KEY` | For Plaid | Long random secret used to encrypt access tokens |
+Planning currently supports USD and Weekly/Biweekly/Monthly pay. Semimonthly bank
+income is not silently mapped to biweekly: automatic scheduling is withheld for
+manual review. See the dated review checklist for remaining calendar limits.
 
-Never expose `OPENAI_API_KEY`, `PLAID_SECRET`, or `APP_ENCRYPTION_KEY` to the
-client.
+## Evidence and architecture
 
-## Database
-
-The D1 binding is named `DB`. Schema definitions live in `db/schema.ts`;
-generated migrations live in `drizzle/`.
-
-```bash
-npm run db:generate
-```
-
-The current product writes a cohesive, user-owned workspace snapshot for atomic
-save behavior while also defining normalized entities for the next granular
-write migration. See [DATABASE.md](./DATABASE.md).
-
-## Authentication
-
-The deployed Sites application uses dispatch-owned Sign in with ChatGPT and
-authenticated identity headers. D1 rows are keyed server-side by the forwarded
-email; client-provided user IDs are ignored.
-
-This intentionally replaces the brief’s standalone email/password and social
-OAuth implementation because the selected hosting platform supplies identity
-and prohibits scaffolding a separate public auth system from the starter. A
-future public standalone deployment should use Supabase Auth.
-
-## Plaid
-
-1. Create a Plaid developer account and obtain Sandbox credentials.
-2. Set `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=sandbox`, and a strong
-   `APP_ENCRYPTION_KEY`.
-3. Restart the app and choose **Connect your bank**.
-4. Complete Plaid Link. Steward saves accounts immediately and imports available
-   transaction history.
-
-Access tokens are exchanged and encrypted on the server. They are never returned
-to the browser. See [PLAID_SETUP.md](./PLAID_SETUP.md).
-
-## OpenAI
-
-Set `OPENAI_API_KEY` to enable personalized advisor explanations. Steward sends
-only a bounded context object plus the deterministic answer. The model is told
-not to recalculate financial values and receives financial record text as
-untrusted data. Requests use structured output and `store: false`.
-
-Without the key, the advisor uses the deterministic fallback. See
-[AI_SYSTEM.md](./AI_SYSTEM.md).
-
-## Validation
-
-```bash
-npm test
-npm run test:build
-npm run lint
-```
-
-`test:build` creates the production Worker, runs calculation tests, and checks
-the server-rendered product surface.
-
-## Deployment
-
-The repository is configured for OpenAI Sites. Build with `npm run build`; Sites
-packages the generated Worker, applies D1 migrations, and deploys a saved
-version.
-
-For another Cloudflare target, provide a D1 database binding named `DB` and
-Worker runtime environment variables matching `.env.example`.
-
-## Security
-
-Read [SECURITY.md](./SECURITY.md) before enabling real financial data. The
-present release is appropriate for controlled private evaluation; it
-still needs a formal security review, rate-limiting service, verified Plaid
-webhook signatures, and production incident procedures before broad public use.
-
-## Project documentation
-
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [DATABASE.md](./DATABASE.md)
-- [AI_SYSTEM.md](./AI_SYSTEM.md)
-- [PLAID_SETUP.md](./PLAID_SETUP.md)
-- [SECURITY.md](./SECURITY.md)
-- [PROJECT_STATUS.md](./PROJECT_STATUS.md)
-- [ROADMAP.md](./ROADMAP.md)
-- [CHANGELOG.md](./CHANGELOG.md)
+- [Review checklist](docs/steward-review-checklist.md)
+- [Architecture](ARCHITECTURE.md)
+- [AI behavior](AI_SYSTEM.md)
+- [Verification report](outputs/steward-verification.md)
+- [Security](SECURITY.md)

@@ -18,6 +18,7 @@ export default function FixtureSteward() {
       initialState={goldenWorkspace()}
       syncWithServer={false}
       fixedToday={FIXTURE_TODAY}
+      demoMode
     />
   );
 }

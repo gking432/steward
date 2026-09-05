@@ -38,24 +38,27 @@ import { defaultPolicy, type AllocationPolicy } from "./policy";
 
 const DAY = 86_400_000;
 
-export const parseDate = (iso: string) => new Date(`${iso}T12:00:00`);
+export const parseDate = (iso: string) => new Date(`${iso}T12:00:00Z`);
 export const toISO = (date: Date) => date.toISOString().slice(0, 10);
 
-export function addCycle(
-  iso: string,
-  frequency: Workspace["profile"]["payFrequency"],
-  steps = 1,
-) {
+/** Calendar arithmetic from a stable anchor; month-end stays month-end. */
+export function addCycle(iso: string, frequency: Workspace["profile"]["payFrequency"], steps = 1) {
   const date = parseDate(iso);
-  if (frequency === "Weekly") date.setDate(date.getDate() + 7 * steps);
-  else if (frequency === "Biweekly") date.setDate(date.getDate() + 14 * steps);
-  else date.setMonth(date.getMonth() + steps);
+  if (frequency !== "Monthly") date.setUTCDate(date.getUTCDate() + (frequency === "Weekly" ? 7 : 14) * steps);
+  else {
+    const day = date.getUTCDate();
+    const last = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + steps);
+    const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(day === last ? end : Math.min(day, end));
+  }
   return toISO(date);
 }
 
 export function dayBefore(iso: string) {
   const date = parseDate(iso);
-  date.setDate(date.getDate() - 1);
+  date.setUTCDate(date.getUTCDate() - 1);
   return toISO(date);
 }
 
@@ -68,13 +71,15 @@ export function upcomingPaydays(workspace: Workspace, today: string, count: numb
   const { nextPayday, payFrequency } = workspace.profile;
   if (!nextPayday) return [];
   const result: string[] = [];
+  let step = 0;
   let cursor = nextPayday;
   // Walk forward past any payday that has already gone by.
   let guard = 0;
-  while (cursor <= today && guard++ < 500) cursor = addCycle(cursor, payFrequency);
+  while (addCycle(nextPayday,payFrequency,step-1) > today && guard++ < 500) cursor=addCycle(nextPayday,payFrequency,--step);
+  while (cursor <= today && guard++ < 500) cursor = addCycle(nextPayday, payFrequency, ++step);
   while (result.length < count && guard++ < 500) {
     result.push(cursor);
-    cursor = addCycle(cursor, payFrequency);
+    cursor = addCycle(nextPayday, payFrequency, ++step);
   }
   return result;
 }
@@ -83,7 +88,10 @@ export function upcomingPaydays(workspace: Workspace, today: string, count: numb
 export function currentCycle(workspace: Workspace, today: string): Cycle | null {
   const [next] = upcomingPaydays(workspace, today, 1);
   if (!next) return null;
-  const start = addCycle(next, workspace.profile.payFrequency, -1);
+  let offset = 0;
+  while (addCycle(workspace.profile.nextPayday,workspace.profile.payFrequency,offset) > next && offset > -500) offset--;
+  while (addCycle(workspace.profile.nextPayday, workspace.profile.payFrequency, offset) < next && offset < 500) offset++;
+  const start = addCycle(workspace.profile.nextPayday, workspace.profile.payFrequency, offset - 1);
   return {
     id: `cycle:${next}`,
     start,
@@ -188,9 +196,13 @@ export function amountForCategory(transaction: Transaction, category: string) {
 /** Spend recorded against a bucket this cycle, and the transactions behind it. */
 export function bucketActivity(workspace: Workspace, bucket: Bucket, cycle: Cycle) {
   const category = bucket.category ?? bucket.name;
+  const key = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const matches = (transaction: Transaction) => bucket.merchantKey
+    ? key(transaction.merchant) === bucket.merchantKey
+    : !workspace.buckets.some((other) => other.id !== bucket.id && other.merchantKey === key(transaction.merchant) && other.category === category);
   const rows = transactionsInCycle(workspace.transactions, cycle).filter(
     (transaction) =>
-      transaction.type === "expense" && amountForCategory(transaction, category) > 0,
+      transaction.type === "expense" && matches(transaction) && amountForCategory(transaction, category) !== 0,
   );
   const spent = round2(
     rows.reduce((sum, row) => sum + amountForCategory(row, category), 0),
@@ -214,7 +226,7 @@ export type CyclePlan = {
   cycle: Cycle;
   income: number;
   carryIn: number;
-  reserves: { bucket: Bucket; required: number; cyclesRemaining: number; outstanding: number }[];
+  reserves: { bucket: Bucket; required: number; cyclesRemaining: number; outstanding: number; steadyRate: number }[];
   reservesTotal: number;
   spend: { bucket: Bucket; amount: number }[];
   spendTotal: number;
@@ -231,7 +243,7 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 export function liquidCash(workspace: Workspace) {
   return workspace.accounts
     .filter((account) => ["Checking", "Cash"].includes(account.type) && !account.archived)
-    .reduce((sum, account) => sum + Math.max(0, account.available), 0);
+    .reduce((sum, account) => sum + account.available, 0);
 }
 
 export function planCycle(
@@ -346,7 +358,7 @@ function activeRanked(workspace: Workspace) {
     .sort((a, b) => a.rank - b.rank);
 }
 
-const needOf = (claim: Claim) => Math.max(0, round2(claim.targetAmount - claim.fundedAmount));
+const needOf = (claim: Claim) => claim.openEnded ? Number.MAX_SAFE_INTEGER : Math.max(0, round2(claim.targetAmount - claim.fundedAmount));
 
 /**
  * Distribute free capacity across ranked claims.
@@ -390,7 +402,7 @@ export function allocate(
   // 2 — deadlines: fund what a stated wantBy actually requires.
   for (const claim of claims) {
     const cost = claim.delayCost;
-    if (cost.type !== "deadline") continue;
+    if (cost.type !== "deadline" || claim.pinned !== undefined) continue;
     const paydaysBefore = upcomingPaydays(workspace, today, 60).filter(
       (payday) => payday <= cost.date,
     ).length;
@@ -411,6 +423,7 @@ export function allocate(
   // A claim with no ceiling of its own takes what is left, which is correct
   // for the last divisible claim standing.
   for (const claim of claims) {
+    if (claim.pinned !== undefined) continue;
     if (left <= 0) break;
     let ceiling = needOf(claim);
     let reason = "Next on your list.";
@@ -440,7 +453,7 @@ export function allocate(
   //     still use it, rather than sitting idle.
   if (left > 0) {
     const sink = claims.find(
-      (claim) => needOf(claim) > (taken.get(claim.id)?.amount ?? 0),
+      (claim) => claim.pinned === undefined && needOf(claim) > (taken.get(claim.id)?.amount ?? 0),
     );
     if (sink) give(sink, left, "Remainder from this paycheck.");
   }
@@ -559,7 +572,7 @@ export function projectArrivals(
     // from its own reserve count; landing the day before would never leave the
     // current cycle at all. Stepping a full cycle keeps every step "mid-cycle,
     // looking forward", which is exactly the situation the live app is in.
-    cursorToday = addCycle(cursorToday, simulated.profile.payFrequency);
+    cursorToday = addCycle(today, simulated.profile.payFrequency, step + 1);
     if (activeRanked(simulated).every((claim) => needOf(claim) <= 0.01)) break;
   }
 
@@ -575,13 +588,8 @@ export function projectArrivals(
 
 /** Advance a recurring obligation to its next occurrence. */
 export function nextDueDate(iso: string, frequency: Bucket["frequency"]) {
-  const date = parseDate(iso);
-  if (frequency === "weekly") date.setDate(date.getDate() + 7);
-  else if (frequency === "biweekly") date.setDate(date.getDate() + 14);
-  else if (frequency === "annual") date.setFullYear(date.getFullYear() + 1);
-  else if (frequency === "one-time") return iso;
-  else date.setMonth(date.getMonth() + 1);
-  return toISO(date);
+  if (frequency === "one-time") return iso;
+  return addCycle(iso, frequency === "weekly" ? "Weekly" : frequency === "biweekly" ? "Biweekly" : "Monthly", frequency === "annual" ? 12 : 1);
 }
 
 function cyclesPerYearFor(workspace: Workspace) {
@@ -627,7 +635,8 @@ export function formatMoney(value: number, currency = "USD") {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
-    maximumFractionDigits: Math.abs(value) < 100 && !Number.isInteger(value) ? 2 : 0,
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 

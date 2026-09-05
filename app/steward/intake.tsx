@@ -183,9 +183,10 @@ export function IntakeScreen({
         scanComplete,
       );
       let payload: OnboardingResponse | null = null;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
+      for (let attempt = 0; attempt < 1; attempt += 1) {
         const response = await fetch("/api/steward-ai", {
           method: "POST",
+          signal: AbortSignal.timeout(15000),
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             kind: "onboarding",
@@ -196,7 +197,7 @@ export function IntakeScreen({
         });
         if (!response.ok) continue;
         payload = await response.json() as OnboardingResponse;
-        if (payload.enhanced || attempt === 1) break;
+        break;
       }
       if (!payload?.message || !payload.state) throw new Error("Invalid onboarding response");
 
@@ -501,7 +502,7 @@ function MoneyMap({ plan, context, state, busy, compact = false }: { plan: PlanV
   const irregularRows = miscellaneous > 0
     ? [{ name: "Miscellaneous", amount: miscellaneous }]
     : [];
-  const bucketRows = [...spendingRows, ...recurringRows, ...irregularRows];
+  const bucketRows = plan?.buckets ?? [...spendingRows, ...recurringRows, ...irregularRows];
   const visibleProtectedTotal = bucketRows.reduce((sum, row) => sum + row.amount, 0);
   const goalRows = state.goals.map((goal) => plan?.claims.find((row) =>
     goal.linkedAccountId ? row.linkedAccountId === goal.linkedAccountId : row.name.toLowerCase() === goal.name.toLowerCase()));
@@ -513,9 +514,7 @@ function MoneyMap({ plan, context, state, busy, compact = false }: { plan: PlanV
     ? plan?.free ?? context.currentBudget.freePerPaycheck
     : 0;
   const free = Math.max(0, planAvailable - goalTotal);
-  const protectedTotal = plan
-    ? Math.max(0, income - planAvailable)
-    : visibleProtectedTotal;
+  const protectedTotal = visibleProtectedTotal;
   const totalDetected = context.monthlySpending.length + context.recurringCharges.length;
   const mappedCount = state.spendingReviews.filter((review) => review.allocationPerPaycheck !== null).length +
     (state.recurringReviewed ? context.recurringCharges.length : 0);
@@ -537,7 +536,7 @@ function MoneyMap({ plan, context, state, busy, compact = false }: { plan: PlanV
         ))}
         <span className="free"><i /><b>Unallocated</b><strong>{formatMoney(free)}</strong></span>
       </div>}
-      <p>{state.incomeConfirmed ? "Each confirmed answer adds or updates a paycheck bucket." : "Nothing is assumed just because it appeared in a statement."}</p>
+      <p>{state.incomeConfirmed ? "Detected amounts are shown for reconciliation; they remain proposals until you confirm." : "Nothing is assumed just because it appeared in a statement."}</p>
     </section>
   );
 }

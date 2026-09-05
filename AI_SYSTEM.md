@@ -1,50 +1,35 @@
-# AI system
+# Steward AI behavior — September 5, 2026
 
-Steward follows a strict calculation/explanation split.
+Arithmetic, verdicts, dates, target IDs, and state changes belong to deterministic
+code. The primary onboarding review and Ask purchase follow-ups require no model.
+Ask keeps pending purchase context; numeric replies and cancellation are resolved
+before generic intent extraction. A proposed new goal needs an explicit Apply.
+Critical affordability wording uses the structured verdict directly, including
+current-liquidity uncertainty. It is never entrusted to numeric-only prose guards.
 
-## Deterministic layer
+Optional intent interpretation and receipt classification remain behind the server
+AI routes. Legacy conversational onboarding is retained but is no longer the
+primary setup path. Successful deterministic fallbacks are not retried merely
+because they were not model-enhanced. Cross-host automatic AI forwarding was removed.
 
-`lib/engine.ts` owns:
+`STEWARD_AI_ENABLED=true` plus a server-only key is required for paid generation.
+Default behavior is deterministic/fallback. Request bodies, receipt media types,
+output categories, output tokens, concurrency and per-process daily calls are
+bounded. A shared gateway budget is an outstanding production dependency.
+Receipt output is a draft; split totals must reconcile before saving.
 
-- safe-to-spend
-- bills before payday
-- required debt coverage
-- paycheck reconciliation
-- risk classification
-- category aggregation
-- deterministic merchant rules
-- transaction split validation
+## Evaluation evidence
 
-These results work offline and are covered by automated tests.
+`tests/model-evaluation-cases.json` contains representative utterances, expected
+entities/amounts/allowed mutations, and forbidden claims, including malicious text
+inside merchant data. Deterministic conversation, liquidity, proposal and grounding
+checks run in the unit suite; HTTP checks verify the actual fallback route.
 
-## OpenAI layer
+**No live-model evaluation was run in this implementation.** Paid generation is
+operator-gated and remained disabled for verification. Do not report schema/unit
+or HTTP fallback tests as model-quality evaluations. A baseline comparison and
+human assessment of optional generated explanations remain required before
+turning public generation on. No claim is made about measured model accuracy.
 
-`lib/openai-service.ts` uses the Responses API only when `OPENAI_API_KEY` exists.
-It receives:
-
-- the user’s question
-- a deterministic answer that it may not contradict
-- a bounded financial context
-- structured goals and wishlist summaries
-
-It returns structured `answer`, `rationale`, and `assumptions` fields. Requests
-use `store: false`.
-
-Financial record strings are treated as untrusted data. The developer prompt
-explicitly prohibits following instructions embedded in merchant names, notes,
-or wishlist text.
-
-## Memory
-
-Memory is structured into preference, rule, priority, and context records. Users
-can view and delete individual memories. Conversation transcripts are not used
-as implicit long-term memory.
-
-## Future
-
-- Server-side advisor tools with explicit read/write authorization
-- Confirmation gates for any mutation proposed in chat
-- Evaluation sets for affordability, missing-data honesty, and tone
-- Rate limits, abuse monitoring, and safety identifiers
-- Optional embeddings only for durable semantic records that cannot be handled
-  with structured lookup
+Check-in preferences are not scheduled notifications. There is no email, push,
+SMS or periodic check-in delivery mechanism in this release.

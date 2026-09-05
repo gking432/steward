@@ -1338,3 +1338,39 @@
     margin: 8px 0;
   }
 }
+
+/* Review corrections: readable finance rows and native modal behavior. */
+:where(button,a,input,select):focus-visible { outline: 3px solid #b87909; outline-offset: 3px; }
+:where(button,input,select) { min-height: 40px; }
+:where(.bk-screen,.hm-screen,.setup-review) { font-variant-numeric: tabular-nums; }
+.bk-edit { flex-wrap: wrap; gap: 12px; }
+.bk-edit label { display: flex; flex-direction: column; min-width: 120px; max-width: 100%; }
+.bk-edit-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bk-edit-actions button { min-width: 44px; }
+.bk-row { background: rgba(255,255,255,.09); padding: 14px; border-radius: 10px; }
+.bk-screen > p { font-size: 14px; line-height: 1.5; padding: 12px 0; }
+.bk-screen > [role=group] { display: flex; gap: 12px; }
+.bk-screen > [role=group] button { padding: 8px 14px; border: 1px solid currentColor; border-radius: 8px; }
+.bk-screen button[aria-pressed=true] { background: white; color: #174c36; }
+dialog.st-backdrop { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; color: inherit; }
+dialog::backdrop { background: #06271888; }
+.setup-review { max-width: 980px; margin: auto; padding: 24px; color: #173c2c; background: #f4f8f5; min-height: 100dvh; }
+.setup-review header { margin-bottom: 24px; }
+.setup-review header a { float: right; }
+.setup-review h1 { font-size: clamp(25px,4vw,38px); margin: 20px 0 8px; }
+.setup-review p { line-height: 1.6; margin: 16px 0; }
+.setup-review label { display: grid; gap: 8px; margin: 14px 0; font-size: 15px; }
+.setup-review input,.setup-review select { color: #173c2c; border: 1px solid #8da99a; padding: 10px; border-radius: 8px; background: white; max-width: 100%; }
+.setup-review button { padding: 10px 16px; background: #185b3e; color: white; border-radius: 8px; margin: 6px; }
+.setup-review button:disabled { opacity: .5; }
+.setup-review .bk-screen { border-radius: 16px; }
+.review-ledger > div { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid #c3d6c9; }
+.review-ledger small { display: block; font-size: 14px; max-width: 620px; margin-top: 6px; }
+.review-ledger dd { white-space: nowrap; font-weight: 700; }
+@media (max-width: 420px) { .setup-review { padding: 14px; } .bk-edit { display: grid; grid-template-columns: minmax(0,1fr); } }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+dialog.sw-sheet-backdrop,dialog.sp-backdrop { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; color: inherit; }
+.activity-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.activity-filters label { display: grid; gap: 6px; font-size: 14px; }
+.activity-filters input,.activity-filters select { color: inherit; background: var(--sw-card,#fff); border: 1px solid #90a799; border-radius: 8px; padding: 8px; max-width: 100%; }
+dialog.ak-modal { width:100vw; height:100dvh; max-width:100vw; max-height:100dvh; margin:0; padding:0; border:0; }

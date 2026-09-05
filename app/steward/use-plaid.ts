@@ -33,7 +33,7 @@ const SCRIPT = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
 
 export type PlaidStatus = "idle" | "opening" | "importing" | "syncing";
 
-export function usePlaidConnect(onState: (state: StewardState) => void) {
+export function usePlaidConnect(onState: (state: StewardState, revision?: number) => void) {
   const [status, setStatus] = useState<PlaidStatus>("idle");
   const [error, setError] = useState("");
 
@@ -43,7 +43,7 @@ export function usePlaidConnect(onState: (state: StewardState) => void) {
     try {
       const response = await fetch("/api/plaid/sync", { method: "POST" });
       const payload = await response.json();
-      if (payload.state) onState(payload.state);
+      if (payload.state) onState(payload.state, payload.revision);
       if (!response.ok) {
         setError(payload.error ?? "Your transaction history is still arriving.");
         return false;
@@ -105,7 +105,7 @@ export function usePlaidConnect(onState: (state: StewardState) => void) {
             setStatus("idle");
             return;
           }
-          if (payload.state) onState(payload.state);
+          if (payload.state) onState(payload.state, payload.revision);
 
           await sync();
         },

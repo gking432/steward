@@ -1,4 +1,5 @@
 "use client";
+import { Modal } from "./dialog";
 
 /**
  * SPLIT — one purchase, several buckets.
@@ -113,11 +114,11 @@ export function SplitSheet({
   };
 
   return (
-    <div className="sp-backdrop" role="presentation" onMouseDown={onClose}>
+    <Modal className="sp-backdrop" label={`Split ${transaction.merchant}`} onClose={onClose}>
       <div
         className="sp-sheet"
-        role="dialog"
-        aria-modal="true"
+
+
         aria-label={`Split ${transaction.merchant}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -219,7 +220,7 @@ export function SplitSheet({
             </>
           ) : (
             <>
-              {difference > 0
+              {difference === 0 ? "Add a second category to create a split" : difference > 0
                 ? `${formatMoney(difference)} still to assign`
                 : `${formatMoney(-difference)} over the ${formatMoney(transaction.amount)} charge`}
             </>
@@ -230,6 +231,6 @@ export function SplitSheet({
           Save split
         </button>
       </div>
-    </div>
+    </Modal>
   );
 }

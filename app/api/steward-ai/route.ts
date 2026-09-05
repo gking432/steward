@@ -1,3 +1,4 @@
+import { boundedJson, requestAllowed, acquireGeneration } from "../../../lib/request-limits";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import {
@@ -22,7 +23,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const CANONICAL_AI_ENDPOINT = "https://steward-financial-os.vercel.app/api/steward-ai";
+
 
 const phraseSchema = z.object({
   kind: z.literal("phrase"),
@@ -202,8 +203,10 @@ async function callModel(
 ) {
   const runtime = env as unknown as Record<string, string | undefined>;
   const apiKey = runtime.OPENAI_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey || runtime.STEWARD_AI_ENABLED !== "true") return null;
 
+  const release = acquireGeneration(runtime.STEWARD_AI_ENABLED === "true");
+  if (!release) return null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
@@ -213,6 +216,7 @@ async function callModel(
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: runtime.OPENAI_MODEL ?? "gpt-5.6-sol",
+        max_output_tokens: 1800,
         reasoning: { effort: "low" },
         text: { verbosity: "low", format: { type: "json_schema", name: "steward", strict: true, schema } },
         input: [
@@ -238,6 +242,7 @@ async function callModel(
     console.error("OpenAI request failed", error instanceof Error ? error.name : "UnknownError");
     return null;
   } finally {
+    release();
     clearTimeout(timeout);
   }
 }
@@ -362,41 +367,12 @@ const ONBOARDING_PROMPT = [
 ].join("\n");
 
 export async function POST(request: Request) {
-  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  if (!requestAllowed("steward-ai")) return Response.json({error:"Please wait a minute before retrying."},{status:429});
+  const parsed = requestSchema.safeParse(await boundedJson(request, 150000).catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: "Invalid request." }, { status: 400 });
   }
   const input = parsed.data;
-
-  // Sites hosts the portfolio copy without duplicating the secret. Route its
-  // onboarding turns through the canonical Vercel function, where the key is
-  // server-owned. The canonical host never forwards to itself.
-  const runtime = env as unknown as Record<string, string | undefined>;
-  const requestHost = new URL(request.url).hostname;
-  if (
-    input.kind === "onboarding" &&
-    !runtime.OPENAI_API_KEY &&
-    requestHost !== "localhost" &&
-    requestHost !== "127.0.0.1" &&
-    new URL(request.url).host !== new URL(CANONICAL_AI_ENDPOINT).host
-  ) {
-    try {
-      const upstream = await fetch(CANONICAL_AI_ENDPOINT, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      if (upstream.ok) {
-        return new Response(upstream.body, {
-          status: upstream.status,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      console.error("Canonical onboarding request failed", upstream.status);
-    } catch (error) {
-      console.error("Canonical onboarding request failed", error instanceof Error ? error.name : "UnknownError");
-    }
-  }
 
   if (input.kind === "onboarding") {
     const context = input.context as AIOnboardingContext;
@@ -417,7 +393,8 @@ export async function POST(request: Request) {
     if (conversation.length === 0 && previous.incomeConfirmed !== true) {
       const merchant = context.paycheck.merchant ?? "your regular income";
       return Response.json({
-        enhanced: true,
+        enhanced: false,
+        origin: "deterministic",
         message: `I found ${formatCurrency(context.paycheck.amount)} ${payCadencePhrase(context.paycheck.cadence)} from ${merchant}. Is that your usual take-home pay?`,
         quickReplies: ["Yes, that’s right", "No, that’s not right"],
         selectionMode: "multiple",
@@ -436,7 +413,8 @@ export async function POST(request: Request) {
       /\badd another goal\b/.test(lastUserBeforeModel)
     ) {
       return Response.json({
-        enhanced: true,
+        enhanced: false,
+        origin: "deterministic",
         message: "What else are you trying to make happen?",
         quickReplies: ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
         selectionMode: "multiple",
@@ -699,7 +677,8 @@ export async function POST(request: Request) {
       turn.role === "assistant" && /what should your money help you accomplish/i.test(turn.content));
     if (preModelPhase === "goals" && previous.goals.length === 0 && !goalKickoffShown) {
       return Response.json({
-        enhanced: true,
+        enhanced: false,
+        origin: "deterministic",
         message: "Great—your baseline is mapped. What should your money help you accomplish?",
         quickReplies: ["Pay off debt", "Buy something", "Build savings", "More breathing room"],
         selectionMode: "multiple",
@@ -858,37 +837,8 @@ export async function POST(request: Request) {
   }
 
   if (input.kind === "phrase") {
-    const deterministic = fallbackPhrase(input);
-    const result = await callModel(
-      {
-        task: "Restate this verdict in at most two sentences.",
-        verdict: input.headline,
-        reasoning: input.checks,
-        tradeoff: input.tradeoff,
-      },
-      {
-        type: "object",
-        additionalProperties: false,
-        properties: { text: { type: "string" } },
-        required: ["text"],
-      },
-    );
-
-    const text = (result as { text?: string } | null)?.text;
-    if (!text) return Response.json({ enhanced: false, text: deterministic });
-
-    // Rule 2: any figure Steward did not compute discards the whole response.
-    const allowed = allowedNumerals([
-      input.headline,
-      input.tradeoff,
-      ...input.checks.map((check) => check.detail),
-    ]);
-    if (!outputIsGrounded(text, allowed)) {
-      return Response.json({ enhanced: false, text: deterministic, rejected: "ungrounded" });
-    }
-    return Response.json({ enhanced: true, text });
+    return Response.json({enhanced:false,origin:"deterministic",text:fallbackPhrase(input)});
   }
-
   if (input.kind === "choose") {
     const result = await callModel(
       {

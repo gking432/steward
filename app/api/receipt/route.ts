@@ -1,3 +1,4 @@
+import { boundedJson, requestAllowed, acquireGeneration } from "../../../lib/request-limits";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
@@ -22,7 +23,7 @@ export const dynamic = "force-dynamic";
 
 const requestSchema = z.object({
   /** Data URL. Bounded so a large photo can't be used to run up a bill. */
-  image: z.string().min(32).max(8_000_000),
+  image: z.string().min(32).max(8_000_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/),
   total: z.number().finite().positive(),
   categories: z.array(z.string().max(60)).min(1).max(40),
 });
@@ -40,20 +41,23 @@ const lineSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  if (!requestAllowed("receipt")) return Response.json({error:"Please wait before retrying."},{status:429});
+  const parsed = requestSchema.safeParse(await boundedJson(request, 8500000).catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: "Invalid request." }, { status: 400 });
   }
 
   const runtime = env as unknown as Record<string, string | undefined>;
   const apiKey = runtime.OPENAI_API_KEY;
-  if (!apiKey) {
+  if (!apiKey || runtime.STEWARD_AI_ENABLED !== "true") {
     return Response.json({
       read: false,
       reason: "Receipt reading isn't set up. You can still split this by hand.",
     });
   }
 
+  const release = acquireGeneration(runtime.STEWARD_AI_ENABLED === "true");
+  if (!release) return Response.json({read:false,reason:"Receipt reading is at its limit. Split by hand or try later."});
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
@@ -63,6 +67,7 @@ export async function POST(request: Request) {
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: runtime.OPENAI_VISION_MODEL ?? runtime.OPENAI_MODEL ?? "gpt-5.6-luna",
+        max_output_tokens: 1800,
         reasoning: { effort: "low" },
         text: {
           verbosity: "low",
@@ -131,13 +136,14 @@ export async function POST(request: Request) {
     }
 
     const draft = lineSchema.safeParse(JSON.parse(text));
-    if (!draft.success || !draft.data.lines.length) {
+    if (!draft.success || !draft.data.lines.length || draft.data.lines.some(line => !parsed.data.categories.includes(line.category))) {
       return Response.json({ read: false, reason: "Couldn't make out the line items." });
     }
     return Response.json({ read: true, lines: draft.data.lines });
   } catch {
     return Response.json({ read: false, reason: "Couldn't read that one." });
   } finally {
+    release();
     clearTimeout(timeout);
   }
 }

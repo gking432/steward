@@ -1,3 +1,4 @@
+import { acquireGeneration } from "./request-limits";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
@@ -34,16 +35,20 @@ type AdvisorInput = {
 export async function explainFinancialDecision(input: AdvisorInput) {
   const runtime = env as unknown as Record<string, string | undefined>;
   const apiKey = runtime.OPENAI_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey || runtime.STEWARD_AI_ENABLED !== "true") return null;
+  const release=acquireGeneration(true);if(!release)return null;
+  try {
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
+    signal: AbortSignal.timeout(12000),
     headers: {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
     },
     body: JSON.stringify({
       model: runtime.OPENAI_MODEL ?? "gpt-5.6-luna",
+      max_output_tokens: 1200,
       reasoning: { effort: "low" },
       text: {
         verbosity: "low",
@@ -98,4 +103,5 @@ export async function explainFinancialDecision(input: AdvisorInput) {
   if (!text) return null;
   const parsed = advisorOutput.safeParse(JSON.parse(text));
   return parsed.success ? parsed.data : null;
+  } finally {release();}
 }

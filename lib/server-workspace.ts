@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { headers } from "next/headers";
 import type { StewardState } from "./steward-types";
+import { toLegacy } from "./model/convert";
 import { createEmptyState } from "./initial-state";
 
 const snapshotSql = `
@@ -35,10 +36,15 @@ export const plaidItemsSql = `
 `;
 
 export async function currentUser() {
+  // Forwarded identity is accepted only on a deliberately configured, trusted
+  // gateway deployment. Public Vercel never treats arbitrary headers as auth.
+  const adapter = (env as unknown as Record<string, unknown>).STEWARD_AUTH_ADAPTER;
+  if (adapter !== "sites-gateway" && adapter !== "local") throw new Error("Verified private identity is unavailable on this deployment.");
+  if (adapter === "local" && (env as unknown as Record<string, unknown>).NODE_ENV === "production") throw new Error("Local identity is disabled in production.");
   const requestHeaders = await headers();
   const email =
-    requestHeaders.get("oai-authenticated-user-email") ??
-    "local@steward.app";
+    (adapter === "sites-gateway" ? requestHeaders.get("oai-authenticated-user-email") : "local@steward.app");
+  if (!email) throw new Error("Sign in to access your private workspace.");
   const encodedName = requestHeaders.get("oai-authenticated-user-full-name");
   const encoding = requestHeaders.get(
     "oai-authenticated-user-full-name-encoding",
@@ -72,9 +78,9 @@ export async function loadWorkspace(
   )
     .bind(email)
     .first<{ state_json: string }>();
-  return row?.state_json
-    ? (JSON.parse(row.state_json) as StewardState)
-    : createEmptyState(name, email);
+  if (!row?.state_json) return createEmptyState(name,email);
+  const saved = JSON.parse(row.state_json);
+  return saved.workspace ? toLegacy(saved.workspace) : saved;
 }
 
 /**
@@ -109,4 +115,20 @@ export async function auditWorkspace(email: string, action: string) {
   )
     .bind(crypto.randomUUID(), email, action, new Date().toISOString())
     .run();
+}
+
+/** CAS compares the exact stored snapshot token, avoiding schema migration races. */
+export async function readSnapshot(email: string) {
+  return env.DB.prepare("SELECT state_json FROM steward_snapshots WHERE user_id = ?").bind(email).first<{state_json:string}>();
+}
+export async function saveCanonical(email: string, workspace: import('./model/types').Workspace, expectedRevision: number) {
+  const row = await readSnapshot(email);
+  const parsed = row ? JSON.parse(row.state_json) : null;
+  const revision = parsed?.storageRevision ?? 0;
+  if (revision !== expectedRevision) return null;
+  const value = JSON.stringify({ workspace, storageRevision: revision + 1 });
+  const result = row
+    ? await env.DB.prepare("UPDATE steward_snapshots SET state_json = ?, updated_at = ? WHERE user_id = ? AND state_json = ?").bind(value,new Date().toISOString(),email,row.state_json).run()
+    : await env.DB.prepare("INSERT OR IGNORE INTO steward_snapshots (user_id,state_json,updated_at) VALUES (?,?,?)").bind(email,value,new Date().toISOString()).run();
+  return result.meta?.changes === 1 ? revision + 1 : null;
 }

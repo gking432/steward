@@ -54,6 +54,7 @@ export type Bucket = {
 
   /** Transaction category this bucket absorbs. Primarily for `spend`. */
   category?: string;
+  merchantKey?: string;
 
   /** `spend`: the amount assigned each cycle. */
   perCycle?: number;
@@ -113,6 +114,7 @@ export type Claim = {
 
   /** What completion costs. */
   targetAmount: number;
+  openEnded?: boolean;
   /** Sum of confirmed allocations, less withdrawals. Never changed by rank. */
   fundedAmount: number;
 
@@ -201,6 +203,7 @@ export type Profile = {
 
 export type Workspace = {
   modelVersion: 1;
+  revision?: number;
   profile: Profile;
   accounts: Account[];
   transactions: Transaction[];

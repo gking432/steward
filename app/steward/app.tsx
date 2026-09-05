@@ -34,7 +34,6 @@ import {
   formatDate,
   formatMoney,
   planCycle,
-  transactionsInCycle,
 } from "../../lib/model/engine";
 import {
   buildPaydayProposal,
@@ -53,7 +52,8 @@ import type { Bucket, Claim, Workspace } from "../../lib/model/types";
 import type { StewardState } from "../../lib/steward-types";
 import { BucketsScreen } from "./buckets";
 import { ConnectScreen } from "./connect";
-import { IntakeScreen } from "./intake";
+import { Modal } from "./dialog";
+import { ReviewSetup } from "./review-setup";
 import { AskScreen } from "./ask";
 import { HomeScreen } from "./home";
 import { SettingsSheet } from "./settings";
@@ -118,8 +118,9 @@ function DemoStatementImport({
           </div>
         </section>
         <footer className="dm-action dm-welcome-action">
-          <button onClick={() => setStage("plaid")}>Get started</button>
-          <small>You&apos;ll connect sample bank data next. Nothing is saved.</small>
+          <a className="bk-primary" href="/fixture">Explore a sample plan</a>
+          <button onClick={() => setStage("plaid")}>Build a plan from sample statements</button>
+          <small>You&apos;ll review synthetic bank data next. The finished plan stays in this tab.</small>
         </footer>
       </main>
     );
@@ -131,7 +132,7 @@ function DemoStatementImport({
         <section className="dm-plaid-card">
           <header><span className="dm-plaid-mark">P</span><strong>Plaid</strong><small>Demo connection</small></header>
           <div className="dm-plaid-copy">
-            <p className="dm-plaid-kicker">Steward uses Plaid to connect</p>
+            <p className="dm-plaid-kicker">Simulated connection · no bank request</p>
             <h1>First National</h1>
             <p>Your demo login is ready. Review the details, then connect the sample accounts.</p>
           </div>
@@ -182,7 +183,7 @@ function DemoStatementImport({
         <section className="dm-loading-card" aria-live="polite">
           <span className="dm-import-icon"><LoaderCircle size={26} className="cx-spin" /></span>
           <div className="dm-loading-copy">
-            <p className="dm-eyebrow">Importing with Plaid</p>
+            <p className="dm-eyebrow">Reading synthetic statements</p>
             <h1>{title}</h1>
           </div>
           <div className="dm-progress">
@@ -274,6 +275,11 @@ function LedgerScreen({
   onSplit: (transactionId: string) => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
+  const [search,setSearch] = useState("");
+  const [accountFilter,setAccountFilter] = useState("");
+  const [dateFrom,setDateFrom] = useState("");
+  const [dateTo,setDateTo] = useState("");
+  const [undoCategory,setUndoCategory] = useState<Workspace | null>(null);
   const [categoryDraft, setCategoryDraft] = useState("");
   const cycle = currentCycle(workspace, today);
   const plan = planCycle(workspace, today);
@@ -292,15 +298,16 @@ function LedgerScreen({
    * move at once and the correction is visibly worth making.
    */
   const correct = (transactionId: string, category: string, remember: boolean) => {
+    setUndoCategory(workspace);
     update((current) => recategorize(current, transactionId, category, remember));
     setEditing(null);
   };
 
   if (!cycle || !plan) return <Empty title="No cycle" body="Add your pay schedule first." />;
 
-  const rows = transactionsInCycle(workspace.transactions, cycle);
-  const income = rows.filter((row) => row.type === "income").reduce((sum, row) => sum + row.amount, 0);
-  const out = rows.filter((row) => row.type === "expense").reduce((sum, row) => sum + row.amount, 0);
+  const rows = workspace.transactions.filter(row => (!search || row.merchant.toLowerCase().includes(search.toLowerCase())) && (!accountFilter || row.accountId === accountFilter) && row.date >= (dateFrom || cycle.start) && (dateTo ? row.date <= dateTo : row.date < cycle.end));
+  const income = rows.filter((row) => !row.excluded && row.type === "income").reduce((sum, row) => sum + row.amount, 0);
+  const out = rows.filter((row) => !row.excluded && row.type === "expense").reduce((sum, row) => sum + row.amount, 0);
   const spendBuckets = workspace.buckets.filter((bucket) => bucket.kind === "spend");
 
   return (
@@ -402,6 +409,10 @@ function LedgerScreen({
 
       <section className="sw-block">
         <header className="sw-block-head"><h2>All activity</h2></header>
+        <div className="activity-filters"><label>Merchant<input value={search} onChange={e=>setSearch(e.target.value)}/></label><label>Account<select value={accountFilter} onChange={e=>setAccountFilter(e.target.value)}><option value="">All accounts</option>{workspace.accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>From<input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label>Through<input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label></div>
+        {undoCategory && <button onClick={()=>{update(current=>({...current,transactions:undoCategory.transactions,rules:undoCategory.rules}));setUndoCategory(null);}}>Undo last categorization</button>}
+        <p className="sw-muted">Remembering a merchant applies to matching history and future imports. Splits retain their category portions.</p>
+        {rows.length===0 && <p>No matching activity. Clear the merchant, account or dates to broaden your search.</p>}
         <div className="sw-tx-list">
           {[...rows].sort((a, b) => b.date.localeCompare(a.date)).map((row) => (
             <div key={row.id}>
@@ -419,7 +430,7 @@ function LedgerScreen({
                 <div>
                   <strong>{row.merchant}</strong>
                   <small>
-                    {row.category} · {formatDate(row.date)}
+                    {row.category} · {formatDate(row.date)} · {row.excluded ? "Excluded" : row.pending ? "Pending" : "Posted"} · {row.type}
                     {row.needsReview ? " · needs a category" : ""}
                   </small>
                 </div>
@@ -505,8 +516,8 @@ function BuySheet({
   };
 
   return (
-    <div className="sw-sheet-backdrop" role="presentation" onMouseDown={onClose}>
-      <div className="sw-sheet" role="dialog" aria-modal="true" aria-label="Can I buy this?" onMouseDown={(event) => event.stopPropagation()}>
+    <Modal className="sw-sheet-backdrop" label="Can I buy this?" onClose={onClose}>
+      <div className="sw-sheet"   aria-label="Can I buy this?" onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <h2>Can I buy this?</h2>
           <button onClick={onClose} aria-label="Close"><X size={18} /></button>
@@ -571,7 +582,7 @@ function BuySheet({
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -619,8 +630,8 @@ function DebtSheet({
       : 0;
 
   return (
-    <div className="sw-sheet-backdrop" role="presentation" onMouseDown={onClose}>
-      <div className="sw-sheet" role="dialog" aria-modal="true" aria-label={detail.claim.name}
+    <Modal className="sw-sheet-backdrop" label="Debt details" onClose={onClose}>
+      <div className="sw-sheet"   aria-label={detail.claim.name}
         onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <h2>{detail.claim.name}</h2>
@@ -686,7 +697,7 @@ function DebtSheet({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -762,8 +773,8 @@ function AddClaimSheet({
   };
 
   return (
-    <div className="sw-sheet-backdrop" role="presentation" onMouseDown={onClose}>
-      <div className="sw-sheet" role="dialog" aria-modal="true" aria-label="Add something"
+    <Modal className="sw-sheet-backdrop" label="Add something" onClose={onClose}>
+      <div className="sw-sheet"   aria-label="Add something"
         onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <h2>What do you want?</h2>
@@ -821,7 +832,7 @@ function AddClaimSheet({
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -871,8 +882,8 @@ function PaydayFlow({
   };
 
   return (
-    <div className="sw-sheet-backdrop" role="presentation">
-      <div className="sw-sheet sw-payday" role="dialog" aria-modal="true" aria-label="Payday">
+    <Modal className="sw-sheet-backdrop" label="Payday" onClose={onDismiss}>
+      <div className="sw-sheet sw-payday"   aria-label="Payday">
         <header>
           <h2>Payday</h2>
           <button onClick={onDismiss} aria-label="Close"><X size={18} /></button>
@@ -880,7 +891,7 @@ function PaydayFlow({
 
         {step === 0 && (
           <div className="sw-payday-step">
-            <span className="sw-eyebrow">Landed</span>
+            <span className="sw-eyebrow">Expected paycheck</span>
             <strong className="sw-huge">{formatMoney(proposal.income)}</strong>
             <p className="sw-sub">Let&apos;s put it to work.</p>
             <button className="sw-primary" onClick={() => setStep(1)}>Continue</button>
@@ -889,7 +900,7 @@ function PaydayFlow({
 
         {step === 1 && (
           <div className="sw-payday-step">
-            <span className="sw-eyebrow">Already taken care of</span>
+            <span className="sw-eyebrow">Planned obligations</span>
             <div className="sw-payday-group">
               <h3>Bills &amp; minimums · {formatMoney(proposal.reservesTotal)}</h3>
               {proposal.reserves.map((entry) => (
@@ -935,7 +946,7 @@ function PaydayFlow({
                   </div>
                   <div className="sw-payday-amount">
                     <b>{formatMoney(line.amount)}</b>
-                    <em>{line.completes ? "complete" : line.arrival ? formatDate(line.arrival) : "over a year"}</em>
+                    <em>{line.completes ? "complete" : line.claim.openEnded ? "open-ended" : line.arrival ? formatDate(line.arrival) : "date unavailable"}</em>
                   </div>
                   <div className="sw-claim-actions">
                     <button onClick={() => move(line.claim, -1)} aria-label={`Move ${line.claim.name} up`}>
@@ -959,13 +970,12 @@ function PaydayFlow({
             <button className="sw-primary" onClick={onConfirm}>Confirm this plan</button>
             <button className="sw-secondary" onClick={onDismiss}>Not now</button>
             <p className="sw-muted sw-fineprint">
-              Nothing is assigned to your goals until you confirm. Bills and minimums are
-              already reserved either way.
+              Nothing is assigned to your goals until you confirm. Bills and minimums are planned, not proof of payment. No bank transfer is made.
             </p>
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -977,13 +987,15 @@ export function StewardApp({
   syncWithServer = true,
   fixedToday,
   demoMode = false,
+  manualMode = false,
 }: {
   initialState: StewardState;
   syncWithServer?: boolean;
   fixedToday?: string;
   demoMode?: boolean;
+  manualMode?: boolean;
 }) {
-  const { workspace, update, loading, saveState, setWorkspaceFromServer } = useWorkspace(
+  const { workspace, update, loading, saveState, setWorkspaceFromServer, retrySave } = useWorkspace(
     initialState,
     syncWithServer,
   );
@@ -993,6 +1005,7 @@ export function StewardApp({
   const [splitting, setSplitting] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [focusBucket, setFocusBucket] = useState<Bucket | null>(null);
+  const [reviewRequested,setReviewRequested] = useState(false);
   const [paydayDismissed, setPaydayDismissed] = useState(demoMode);
   const [addOpen, setAddOpen] = useState(false);
   const [debtClaimId, setDebtClaimId] = useState<string | null>(null);
@@ -1007,7 +1020,7 @@ export function StewardApp({
   // Shown when a cycle has money to direct and has not been confirmed. Closing
   // it writes nothing; the plan stays pending until the next cycle supersedes it.
   const paydayDue =
-    !!proposal && !proposal.confirmed && proposal.freeCapacity > 0 && !paydayDismissed;
+    !!proposal && (reviewRequested || (!proposal.confirmed && proposal.freeCapacity > 0 && !paydayDismissed));
 
   // Apply the stored appearance. Without this the page inherits the OS
   // preference and renders the dark palette regardless of the user's choice.
@@ -1025,7 +1038,7 @@ export function StewardApp({
   const hasData = workspace.accounts.length > 0 || workspace.profile.takeHomePay > 0;
 
   if (loading) {
-    return <div className="sw-boot"><div className="sw-boot-mark" /><span>Steward</span></div>;
+    return <div className="sw-boot"><div className="sw-boot-mark" /><span role="status">Loading your private workspace…</span><a href="/fixture">Explore a sample plan</a><a href="/manual">Build a manual plan</a></div>;
   }
 
   // First run, in three states.
@@ -1035,7 +1048,7 @@ export function StewardApp({
   //   data, not yet approved  → the buckets Steward worked out, for review.
   //   approved                → the app.
   //
-  if (!hasData) {
+  if (!hasData && !manualMode) {
     return (
       <ConnectScreen />
     );
@@ -1056,12 +1069,7 @@ export function StewardApp({
   // rest of the app opens only once you agree to it.
   if (!workspace.profile.onboardingComplete) {
     return (
-      <IntakeScreen
-        workspace={workspace}
-        today={today}
-        scanComplete={plaid.status !== "importing" && plaid.status !== "syncing"}
-        demoMode={demoMode}
-        onDone={(next) => update(() => next)}
+      <ReviewSetup workspace={workspace} today={today} onDone={(next) => update(() => next)} manual={manualMode}
       />
     );
   }
@@ -1070,17 +1078,19 @@ export function StewardApp({
     <div className={`sw-app${demoMode ? " sw-demo-mode" : ""}`}>
       {demoMode && (
         <aside className="sw-demo-bar" aria-label="Demo mode">
-          <span><strong>Demo mode</strong></span>
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a href="/">Start over</a>
+          <span><strong>Demo · synthetic data · {today}</strong> · saved in this tab</span>
+          <a href="/demo" onClick={() => {sessionStorage.removeItem("steward-demo:/fixture");sessionStorage.removeItem("steward-demo:/demo");}}>Start over</a>
         </aside>
       )}
-      {saveState === "offline" && (
+      {(saveState === "offline" || saveState === "conflict") && (
         <p className="sw-offline" role="status">
-          Saving to this session only — changes won&apos;t persist until storage reconnects.
+          {saveState === "conflict" ? "Another session changed this workspace. Export your draft in Settings, then reload to resolve the conflict." : "Unsaved session. Export in Settings before closing, or retry saving."}
+          {saveState !== "conflict" && <button onClick={retrySave}>Retry save</button>}
         </p>
       )}
 
+      {manualMode && <p role="status">Manual plan · stored in this browser tab only. Export in Settings before closing.</p>}
+      {!demoMode && syncWithServer && <p role="status">{saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving…" : "Changes need attention"}</p>}
       <main className="sw-main-full">
         {tab === "home" && (
           <HomeScreen
@@ -1095,6 +1105,7 @@ export function StewardApp({
             onSettings={() => setSettingsOpen(true)}
           />
         )}
+        {tab === "plan" && <button className="sw-primary" onClick={()=>setReviewRequested(true)}>Review paycheck allocation</button>}
         {tab === "plan" && (
           <BucketsScreen workspace={workspace} today={today} mode="plan" update={update} />
         )}
@@ -1130,6 +1141,7 @@ export function StewardApp({
 
       {settingsOpen && (
         <SettingsSheet
+          bankSupported={syncWithServer}
           workspace={workspace}
           update={update}
           onClose={() => setSettingsOpen(false)}
@@ -1140,8 +1152,10 @@ export function StewardApp({
           onReset={async () => {
             // Clear the stored workspace, then return to first run. Without
             // this there is no way back to Connect once anything is saved.
-            await fetch("/api/steward", { method: "DELETE" }).catch(() => undefined);
-            window.location.reload();
+            if (!syncWithServer) {sessionStorage.removeItem('steward-demo:' + location.pathname);window.location.href=demoMode ? '/demo' : '/manual';return;}
+            const response=await fetch("/api/steward", { method: "DELETE" });
+            if(!response.ok) throw Error('Deletion failed');
+            window.location.href='/';
           }}
         />
       )}
@@ -1158,9 +1172,7 @@ export function StewardApp({
         ) : null;
       })()}
 
-      {askOpen && (
-        <AskScreen workspace={workspace} today={today} update={update} onClose={() => setAskOpen(false)} />
-      )}
+      <Modal open={askOpen} className="ak-modal" label="Ask Steward" onClose={()=>setAskOpen(false)}><AskScreen workspace={workspace} today={today} update={update} onClose={() => setAskOpen(false)} /></Modal>
 
       {buyOpen && (
         <BuySheet workspace={workspace} today={today} update={update} onClose={() => setBuyOpen(false)} />
@@ -1185,12 +1197,12 @@ export function StewardApp({
           workspace={workspace}
           proposal={proposal}
           update={update}
-          onDismiss={() => setPaydayDismissed(true)}
+          onDismiss={() => {setPaydayDismissed(true);setReviewRequested(false);}}
           onConfirm={() => {
             update((current) =>
               confirmProposal(supersedeStaleProposals(current, proposal.cycleId), proposal),
             );
-            setPaydayDismissed(true);
+            setPaydayDismissed(true);setReviewRequested(false);
           }}
         />
       )}
