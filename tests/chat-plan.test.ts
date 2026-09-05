@@ -30,3 +30,11 @@ test('correcting a draft preserves goal identity and never resets previously fun
  assert.equal(corrected.claims.find(c=>c.name==='Camera')!.targetAmount,250);
  assert.equal(corrected.claims.find(c=>c.name==='Camera')!.fundedAmount,50);
 });
+
+test('a contribution is distinct from an open-ended savings target',()=>{
+ const preview=workspaceFromChat(w(),FIXTURE_TODAY,{...draft,goals:[{...draft.goals[0],contribution:50},{id:'camera',name:'Camera',kind:'purchase',amount:250,date:null,accountId:null,evidence:'camera $250'}]});
+ const p=buildPaydayProposal(preview,FIXTURE_TODAY)!;
+ assert.equal(p.lines.find(l=>l.claim.name==='Emergency cushion')!.amount,50);
+ assert.equal(p.lines.find(l=>l.claim.name==='Camera')!.amount,250);
+ assert.equal(preview.claims.find(c=>c.name==='Emergency cushion')!.openEnded,true);
+});
