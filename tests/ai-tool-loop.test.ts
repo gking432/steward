@@ -143,3 +143,85 @@ test("tool loops have a hard round limit even if provider ignores tool_choice no
   );
   assert.equal(requests, 4);
 });
+
+test("invalid candidate returns a repair result and required tools remain required until successful", async () => {
+  let count = 0,
+    executions = 0;
+  const result = await runToolLoop(
+    {},
+    "contract",
+    tools,
+    () => {
+      if (++executions === 1) throw Error("Goal needs user evidence");
+      return { applied: false };
+    },
+    async (body) => {
+      count++;
+      if (count < 3) {
+        assert.deepEqual(body.tool_choice, {
+          type: "function",
+          name: "propose_update",
+        });
+        return {
+          status: "completed",
+          id: "r" + count,
+          model: "mock",
+          output: [
+            {
+              type: "function_call",
+              name: "propose_update",
+              arguments: "{}",
+              call_id: "c" + count,
+            },
+          ],
+        };
+      }
+      const history = body.input as { type: string; output?: string }[];
+      assert.ok(
+        history.some((x) => x.output?.includes("Goal needs user evidence")),
+      );
+      return {
+        status: "completed",
+        id: "r3",
+        model: "mock",
+        output: [
+          {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: "Please review the interpretation.",
+              },
+            ],
+          },
+        ],
+      };
+    },
+    ["propose_update"],
+  );
+  assert.deepEqual(result.trace, ["propose_update"]);
+  assert.deepEqual(result.rejectedTools, ["propose_update"]);
+});
+test("a final answer cannot substitute for a required tool", async () => {
+  await assert.rejects(
+    runToolLoop(
+      {},
+      "",
+      tools,
+      () => ({}),
+      async () => ({
+        status: "completed",
+        id: "x",
+        model: "mock",
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "Done." }],
+          },
+        ],
+      }),
+      ["propose_update"],
+    ),
+    /Required tool/,
+  );
+});

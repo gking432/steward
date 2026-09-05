@@ -205,3 +205,39 @@ test("invalid calendar dates, fractional cents and arbitrary model fields are re
     validateChatDraft({ ...EMPTY_CHAT_DRAFT, accounts: [] }, w(), turns),
   );
 });
+
+test("ongoing sessions reuse a saved goal ID when renaming and preserve earmarks", () => {
+  const base = w(),
+    claim = base.claims.find((c) => c.kind === "fund")!;
+  const s = createSession(base, FIXTURE_TODAY, "priority");
+  const changed = transition(s, {
+    type: "candidate",
+    origin: "manual",
+    draft: {
+      ...EMPTY_CHAT_DRAFT,
+      goals: [
+        {
+          id: claim.id,
+          name: "Renamed reserve",
+          kind: "fund",
+          amount: null,
+          contribution: 0,
+          date: null,
+          accountId: null,
+          evidence: "Rename my reserve and pause contributions.",
+        },
+      ],
+    },
+  });
+  const preview = sessionWorkspace(changed);
+  assert.equal(preview.claims.length, base.claims.length);
+  assert.equal(
+    preview.claims.find((c) => c.id === claim.id)?.name,
+    "Renamed reserve",
+  );
+  assert.equal(
+    preview.claims.find((c) => c.id === claim.id)?.fundedAmount,
+    claim.fundedAmount,
+  );
+  assert.equal(preview.claims.find((c) => c.id === claim.id)?.pinned, 0);
+});

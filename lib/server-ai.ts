@@ -75,6 +75,7 @@ export async function planningConversation(
   instructions: string,
   tools: import("./ai-tool-loop").FunctionTool[],
   execute: (name: string, args: unknown) => unknown,
+  requiredTools: string[] = ["propose_update"],
 ) {
   const runtime = env as unknown as Record<string, string | undefined>;
   if (runtime.STEWARD_AI_ENABLED !== "true" || !runtime.OPENAI_API_KEY)
@@ -109,6 +110,7 @@ export async function planningConversation(
         if (!response.ok) throw Error(`Provider status ${response.status}`);
         return response.json();
       },
+      requiredTools,
     );
   } catch (error) {
     console.warn(

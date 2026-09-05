@@ -26,6 +26,7 @@ export async function runToolLoop(
   tools: FunctionTool[],
   execute: (name: string, args: unknown) => unknown,
   request: (body: Record<string, unknown>) => Promise<ProviderResult>,
+  requiredTools: string[] = [],
 ) {
   const history: unknown[] = [
     { role: "developer", content: instructions },
@@ -33,14 +34,21 @@ export async function runToolLoop(
   ];
   const trace: string[] = [],
     responses: string[] = [];
+  const rejectedTools: string[] = [];
+  let attempts = 0;
   let inputTokens = 0,
     outputTokens = 0;
   for (let round = 0; round < 4; round++) {
+    const required = requiredTools.find((name) => !trace.includes(name));
     const result = await request({
       input: history,
       tools,
       parallel_tool_calls: false,
-      tool_choice: round === 3 ? "none" : "auto",
+      tool_choice: required
+        ? { type: "function", name: required }
+        : round === 3
+          ? "none"
+          : "auto",
     });
     if (result.status !== "completed")
       throw Error("Incomplete provider response");
@@ -50,6 +58,7 @@ export async function runToolLoop(
     history.push(...result.output);
     const calls = result.output.filter((o) => o.type === "function_call");
     if (!calls.length) {
+      if (required) throw Error("Required tool was not completed");
       const message =
         result.output
           .flatMap((o) => o.content ?? [])
@@ -57,6 +66,7 @@ export async function runToolLoop(
       return {
         message,
         trace,
+        rejectedTools,
         model: result.model,
         responseId: result.id,
         responseIds: responses,
@@ -67,11 +77,25 @@ export async function runToolLoop(
       if (
         !call.name ||
         !tools.some((t) => t.name === call.name) ||
-        trace.length >= 6
+        attempts >= 6
       )
         throw Error("Unsupported tool or call limit");
-      const output = execute(call.name, JSON.parse(call.arguments ?? "{}"));
-      trace.push(call.name);
+      attempts++;
+      let output: unknown;
+      try {
+        output = execute(call.name, JSON.parse(call.arguments ?? "{}"));
+        trace.push(call.name);
+      } catch (error) {
+        rejectedTools.push(call.name);
+        output = {
+          error:
+            "Candidate rejected. Correct the arguments and try again. " +
+            (error instanceof Error
+              ? error.message.slice(0, 350)
+              : "Invalid fields."),
+          applied: false,
+        };
+      }
       history.push({
         type: "function_call_output",
         call_id: call.call_id,
